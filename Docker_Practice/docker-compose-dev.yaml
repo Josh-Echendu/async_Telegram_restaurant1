@@ -1,0 +1,10 @@
+# Browser → Host port 8080 → Container port 80 → Nginx → Response
+
+services:
+    web:
+        container_name: dolfined
+        ports:
+            - "8080:80"
+        image: nginx
+
+

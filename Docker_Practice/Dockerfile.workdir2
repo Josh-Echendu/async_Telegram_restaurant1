@@ -1,0 +1,17 @@
+FROM ubuntu
+#✅ Set the current working directory inside the image to /app.
+# If /app doesn’t exist, Docker creates it automatically and moves into /app i.e cd /app.
+WORKDIR /app
+
+# Because WORKDIR is /app, this creates: /app/app.txt
+RUN echo "This is the /app directory" > app.txt
+
+# ✅ Now Docker switches working directory to /app/code.
+# If it doesn’t exist, Docker creates it(/app/code) and moves into /app i.e cd /app.
+WORKDIR /app/code
+
+# Because working directory is now /app/code, this creates: /app/code/app-code.txt
+RUN echo "this is the /app/code directory" > app-code.txt
+
+WORKDIR /app/database
+CMD ["ls"]

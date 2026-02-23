@@ -1,0 +1,9 @@
+docker compose -f docker-compose-dev.yaml up -d : To run a specific docker compose file using flag(-f) in detached mode
+docker compose -f docker-compose-dev.yaml ps : to check running containers created by docker compose
+docker compose -f docker-compose-dev.yaml ps -a : to check both running and exited containers created by docker compose
+docker compose -f docker-compose-dev.yaml start : to start a container created by docker compose 
+docker compose -f docker-compose-dev.yaml stop: used to stop the container
+docker compose -f docker-compose-dev.yaml down: used to stop the container, remove the network bridge
+
+docker network ls: To view all the network bridges created 
+docker ps : to check running containers created by docker compose and any other way

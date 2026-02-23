@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+  <title>SPARKLE MODE · dark/light duality</title>
+  <!-- Tailwind + dark/light support -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js (reactive core + theme toggle) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- Font Awesome 6 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    /* import elegant fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Quicksand:ital,wght@0,400;0,500;0,600;0,700;1,600;1,700&display=swap');
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    /* dark/light variables */
+    :root {
+      --bg-light: #ffffff;
+      --bg-dark: #0a0c12;
+      --text-light: #111827;
+      --text-dark: #f1f5f9;
+      --card-light: rgba(255, 255, 255, 0.85);
+      --card-dark: rgba(18, 22, 30, 0.85);
+      --border-light: rgba(255, 255, 255, 0.8);
+      --border-dark: rgba(255, 255, 255, 0.08);
+      --shadow-light: 0 25px 50px -18px rgba(0,0,0,0.15), 0 0 0 1px rgba(255,255,255,0.8) inset, 0 0 30px rgba(255,255,255,0.5);
+      --shadow-dark: 0 25px 50px -18px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.1) inset, 0 0 30px rgba(255,255,255,0.15);
+    }
+    
+    body {
+      font-family: 'Outfit', sans-serif;
+      transition: background-color 0.3s ease, color 0.2s ease;
+      min-height: 100vh;
+      position: relative;
+    }
+    
+    /* sparkling overlay for both modes */
+    .sparkle-overlay {
+      position: fixed;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at 70% 30%, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.1) 40%, transparent 70%),
+                  repeating-linear-gradient(45deg, rgba(255,255,240,0.1) 0px, rgba(255,255,240,0.1) 2px, rgba(255,255,255,0.2) 2px, rgba(255,255,255,0.2) 4px);
+      pointer-events: none;
+      z-index: 9999;
+      mix-blend-mode: overlay;
+      animation: sparkleDrift 20s infinite linear;
+      opacity: 0.3;
+    }
+    
+    @keyframes sparkleDrift {
+      0% { transform: rotate(0deg) scale(1); }
+      50% { transform: rotate(2deg) scale(1.05); }
+      100% { transform: rotate(0deg) scale(1); }
+    }
+    
+    /* theme-specific styles */
+    .theme-light {
+      background-color: var(--bg-light);
+      color: var(--text-light);
+    }
+    
+    .theme-dark {
+      background-color: var(--bg-dark);
+      color: var(--text-dark);
+    }
+    
+    /* card with dual personality */
+    .card-dual {
+      backdrop-filter: blur(16px) saturate(180%);
+      border-radius: 36px;
+      transition: all 0.25s cubic-bezier(0.2,0.9,0.3,1.1);
+    }
+    
+    .theme-light .card-dual {
+      background: var(--card-light);
+      border: 1px solid var(--border-light);
+      box-shadow: var(--shadow-light);
+    }
+    
+    .theme-dark .card-dual {
+      background: var(--card-dark);
+      border: 1px solid var(--border-dark);
+      box-shadow: var(--shadow-dark);
+    }
+    
+    .card-dual:hover {
+      transform: translateY(-6px) scale(1.01);
+    }
+    
+    .theme-light .card-dual:hover {
+      box-shadow: 0 35px 65px -20px rgba(0,20,40,0.25), 0 0 0 2px rgba(255,255,255,0.9) inset, 0 0 50px rgba(255,255,255,0.8);
+    }
+    
+    .theme-dark .card-dual:hover {
+      box-shadow: 0 35px 65px -20px #000000, 0 0 0 1px rgba(255,255,255,0.2) inset, 0 0 50px rgba(255,255,255,0.25);
+    }
+    
+    /* category pills adaptive */
+    .pill-adaptive {
+      backdrop-filter: blur(10px);
+      font-weight: 500;
+      padding: 0.75rem 1.8rem;
+      border-radius: 60px;
+      transition: 0.2s;
+      white-space: nowrap;
+    }
+    
+    .theme-light .pill-adaptive {
+      background: rgba(255, 255, 255, 0.6);
+      border: 1px solid rgba(255,255,255,0.9);
+      color: #1e293b;
+      box-shadow: 0 8px 20px -12px rgba(0,0,0,0.08), 0 0 0 1px rgba(255,255,255,0.5) inset;
+    }
+    
+    .theme-dark .pill-adaptive {
+      background: rgba(30, 35, 45, 0.7);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #e2e8f0;
+      box-shadow: 0 8px 20px -12px #000000, 0 0 0 1px rgba(255,255,255,0.05) inset;
+    }
+    
+    .pill-adaptive.active {
+      font-weight: 600;
+    }
+    
+    .theme-light .pill-adaptive.active {
+      background: #ffffff;
+      border-color: #ffffff;
+      color: #0b1120;
+      box-shadow: 0 15px 30px -15px #b0c4de, 0 0 0 2px #ffffff inset, 0 0 40px rgba(255,255,255,0.9);
+    }
+    
+    .theme-dark .pill-adaptive.active {
+      background: #1e293b;
+      border-color: rgba(255,255,255,0.25);
+      color: #ffffff;
+      box-shadow: 0 15px 30px -15px #000000, 0 0 0 1px rgba(255,255,255,0.2) inset, 0 0 40px rgba(255,255,255,0.2);
+    }
+    
+    /* header adaptive */
+    .header-adaptive {
+      backdrop-filter: blur(20px) saturate(200%);
+      border-bottom: 1px solid;
+    }
+    
+    .theme-light .header-adaptive {
+      background: rgba(255, 255, 255, 0.5);
+      border-bottom-color: rgba(255,255,255,0.8);
+      box-shadow: 0 10px 30px -20px #b0c4de;
+    }
+    
+    .theme-dark .header-adaptive {
+      background: rgba(10, 12, 18, 0.7);
+      border-bottom-color: rgba(255,255,255,0.08);
+      box-shadow: 0 10px 30px -20px #000000;
+    }
+    
+    /* quantity button */
+    .btn-dual {
+      width: 40px;
+      height: 40px;
+      border-radius: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      transition: 0.15s;
+    }
+    
+    .theme-light .btn-dual {
+      background: white;
+      border: 1px solid rgba(255,255,255,0.9);
+      color: #1e293b;
+      box-shadow: 0 5px 15px -8px #334155, 0 0 0 1px rgba(255,255,255,0.8) inset;
+    }
+    
+    .theme-dark .btn-dual {
+      background: #1e293b;
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #f1f5f9;
+      box-shadow: 0 5px 15px -8px #000000, 0 0 0 1px rgba(255,255,255,0.05) inset;
+    }
+    
+    .btn-dual:hover {
+      transform: scale(1.1);
+    }
+    
+    /* drawer */
+    .drawer-dual {
+      backdrop-filter: blur(30px);
+      border-left: 1px solid;
+    }
+    
+    .theme-light .drawer-dual {
+      background: rgba(255, 255, 255, 0.9);
+      border-left-color: rgba(255,255,255,0.9);
+      box-shadow: -30px 0 60px -30px rgba(0,0,0,0.08), 0 0 30px rgba(255,255,255,0.8);
+    }
+    
+    .theme-dark .drawer-dual {
+      background: rgba(18, 22, 30, 0.95);
+      border-left-color: rgba(255,255,255,0.08);
+      box-shadow: -30px 0 60px -30px #000000, 0 0 30px rgba(255,255,255,0.15);
+    }
+    
+    /* toast */
+    .toast-dual {
+      backdrop-filter: blur(20px);
+      border-radius: 60px;
+      transition: all 0.2s;
+    }
+    
+    .theme-light .toast-dual {
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(255,255,255,0.95);
+      box-shadow: 0 25px 45px -20px #64748b, 0 0 0 1px rgba(255,255,255,1) inset, 0 0 40px rgba(255,255,255,0.8);
+      color: #0f172a;
+    }
+    
+    .theme-dark .toast-dual {
+      background: rgba(20, 25, 35, 0.95);
+      border: 1px solid rgba(255,255,255,0.15);
+      box-shadow: 0 25px 45px -20px #000000, 0 0 0 1px rgba(255,255,255,0.1) inset, 0 0 40px rgba(255,255,255,0.15);
+      color: #f1f5f9;
+    }
+    
+    /* scrollbar */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #e2e8f0;
+    }
+    .theme-dark ::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #94a3b8;
+      border-radius: 20px;
+    }
+    .theme-dark ::-webkit-scrollbar-thumb {
+      background: #334155;
+    }
+    
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    
+    /* animation */
+    @keyframes gentlePulse {
+      0% { opacity: 0.7; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.05); }
+      100% { opacity: 0.7; transform: scale(1); }
+    }
+    
+    .pulse-gentle {
+      animation: gentlePulse 3s infinite;
+    }
+  </style>
+</head>
+<body x-data="{
+  darkMode: false,
+  cart: [],
+  activeCategory: 'all',
+  showCart: false,
+  showCheckoutModal: false,
+  toast: { visible: false, message: '' },
+  orderId: 'ORD-' + Math.floor(800000 + Math.random()*200000),
+  
+  // premium menu items
+  meals: [
+    { id: 1, name: 'Diamond Shrimp', desc: 'garlic butter, citrus foam, micro herbs', price: 16.90, category: 'starters', image: 'https://images.unsplash.com/photo-1625944230945-1b7a3c76e3d0?w=400&auto=format' },
+    { id: 2, name: 'Truffle Arancini', desc: 'parmesan, black truffle, gold leaf', price: 18.50, category: 'starters', image: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?w=400&auto=format' },
+    { id: 3, name: 'Lobster Tail', desc: 'champagne butter, asparagus, caviar', price: 45.00, category: 'main', image: 'https://images.unsplash.com/photo-1584277261846-865f3daeb22d?w=400&auto=format' },
+    { id: 4, name: 'Wagyu Striploin', desc: 'truffle demi, potato puree, broccolini', price: 65.90, category: 'main', image: 'https://images.unsplash.com/photo-1600891964092-4316c288032e?w=400&auto=format' },
+    { id: 5, name: 'Saffron Risotto', desc: 'lobster medallions, parsley oil', price: 32.50, category: 'main', image: 'https://images.unsplash.com/photo-1476124369491-e7addf5db371?w=400&auto=format' },
+    { id: 6, name: 'Crystal Martini', desc: 'grey goose, olive, diamond ice', price: 18.00, category: 'drinks', image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=400&auto=format' },
+    { id: 7, name: 'Sparkling Rosé', desc: 'french bubbles, strawberry', price: 15.00, category: 'drinks', image: 'https://images.unsplash.com/photo-1558642084-fd07fae5285b?w=400&auto=format' },
+    { id: 8, name: 'Molten Gold Cake', desc: 'chocolate lava, gold dust, berries', price: 14.90, category: 'desserts', image: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=400&auto=format' },
+    { id: 9, name: 'White Chocolate Mousse', desc: 'passion fruit gel, mirror glaze', price: 13.90, category: 'desserts', image: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=400&auto=format' }
+  ],
+  
+  categories: [
+    { id: 'all', name: 'All' },
+    { id: 'starters', name: 'Starters' },
+    { id: 'main', name: 'Mains' },
+    { id: 'drinks', name: 'Drinks' },
+    { id: 'desserts', name: 'Desserts' }
+  ],
+
+  get filteredMeals() {
+    if (this.activeCategory === 'all') return this.meals;
+    return this.meals.filter(m => m.category === this.activeCategory);
+  },
+  
+  get cartCount() {
+    return this.cart.reduce((acc, i) => acc + i.quantity, 0);
+  },
+  
+  get cartTotal() {
+    return this.cart.reduce((acc, i) => acc + (i.price * i.quantity), 0).toFixed(2);
+  },
+  
+  addToCart(meal) {
+    const found = this.cart.find(i => i.id === meal.id);
+    if (found) {
+      found.quantity++;
+    } else {
+      this.cart.push({ ...meal, quantity: 1 });
+    }
+  },
+  
+  removeOne(mealId) {
+    const idx = this.cart.findIndex(i => i.id === mealId);
+    if (idx !== -1) {
+      if (this.cart[idx].quantity > 1) {
+        this.cart[idx].quantity--;
+      } else {
+        this.cart.splice(idx, 1);
+      }
+    }
+  },
+  
+  clearCart() {
+    this.cart = [];
+  },
+  
+  placeOrder() {
+    if (this.cart.length === 0) {
+      this.toast = { visible: true, message: '✨ add some sparkle to your cart ✨' };
+      setTimeout(() => this.toast.visible = false, 2000);
+      return;
+    }
+    this.orderId = 'ORD-' + Math.floor(800000 + Math.random()*200000);
+    this.showCheckoutModal = true;
+  },
+  
+  confirmOrder() {
+    this.showCheckoutModal = false;
+    this.showCart = false;
+    this.clearCart();
+    this.toast = { visible: true, message: '🍽️ YOUR ORDER HAS BEEN SENT TO THE KITCHEN. PLEASE CHECK YOUR WHATSAPP FOR ORDER DETAILS.' };
+    setTimeout(() => this.toast.visible = false, 4000);
+  },
+  
+  toggleTheme() {
+    this.darkMode = !this.darkMode;
+    if (this.darkMode) {
+      document.body.classList.add('theme-dark');
+      document.body.classList.remove('theme-light');
+    } else {
+      document.body.classList.add('theme-light');
+      document.body.classList.remove('theme-dark');
+    }
+  }
+}"
+x-init="
+  document.body.classList.add('theme-light');
+  activeCategory = 'all';
+"
+class="transition-colors duration-300 relative"
+>
+
+<!-- sparkling overlay (same for both modes) -->
+<div class="sparkle-overlay"></div>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-8 pb-24 relative">
+  
+  <!-- ===== HEADER — DARK/LIGHT AWARE ===== -->
+  <header class="sticky top-0 z-50 header-adaptive py-4 flex items-center justify-between rounded-[3rem] px-5 mt-1 mb-5">
+    <div class="flex items-center gap-3">
+      <div class="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm shadow-xl flex items-center justify-center pulse-gentle border border-white/30">
+        <i class="fas fa-moon text-xl" :class="darkMode ? 'text-yellow-200' : 'text-slate-700'"></i>
+      </div>
+      <span class="text-3xl sm:text-4xl font-bold tracking-tight" style="font-family: 'Quicksand', sans-serif; font-weight: 700; font-style: italic;">sparkle</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <!-- theme toggle -->
+      <button @click="toggleTheme" class="p-3 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 shadow-lg">
+        <i class="fas" :class="darkMode ? 'fa-sun text-yellow-200' : 'fa-moon text-slate-700'"></i>
+      </button>
+      <button @click="showCart = true" class="relative p-3 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 shadow-lg group">
+        <i class="fas fa-bag-shopping text-2xl" :class="darkMode ? 'text-white' : 'text-slate-700'"></i>
+        <span x-show="cartCount > 0" x-cloak class="absolute -top-2 -right-2 bg-white text-slate-800 text-xs font-bold px-2 py-1 rounded-full min-w-[24px] text-center shadow-xl border border-white/90">{{ cartCount }}</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== CATEGORY PILLS ===== -->
+  <div class="my-5 flex flex-nowrap md:flex-wrap gap-2 overflow-x-auto pb-3 no-scrollbar md:justify-start">
+    <template x-for="cat in categories" :key="cat.id">
+      <button @click="activeCategory = cat.id"
+        :class="{ 'active': activeCategory === cat.id }"
+        class="pill-adaptive text-sm sm:text-base transition-all duration-300">
+        <span x-text="cat.name"></span>
+      </button>
+    </template>
+  </div>
+
+  <!-- ===== MEALS GRID ===== -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-7 mt-3">
+    <template x-for="meal in filteredMeals" :key="meal.id">
+      <div class="card-dual p-4 flex flex-col">
+        <!-- image wrapper -->
+        <div class="rounded-[28px] overflow-hidden bg-white/10 border border-white/20 shadow-inner">
+          <img :src="meal.image" :alt="meal.name" class="w-full h-48 object-cover transition duration-700 hover:scale-110">
+        </div>
+        
+        <div class="mt-4 flex-1">
+          <h3 class="text-2xl font-bold" :class="darkMode ? 'text-white' : 'text-slate-800'" x-text="meal.name"></h3>
+          <p class="text-sm mt-1.5 leading-relaxed" :class="darkMode ? 'text-slate-300' : 'text-slate-500'" x-text="meal.desc"></p>
+          
+          <div class="flex items-center justify-between mt-5">
+            <!-- quantity control if in cart -->
+            <template x-for="item in cart.filter(i => i.id === meal.id)" :key="item.id">
+              <div class="flex items-center space-x-1 rounded-full p-0.5" :class="darkMode ? 'bg-slate-800/50' : 'bg-white/70'" style="border: 1px solid rgba(255,255,255,0.2)">
+                <button @click="removeOne(meal.id)" class="btn-dual w-9 h-9 text-sm"><i class="fas fa-minus"></i></button>
+                <span class="font-bold w-8 text-center" :class="darkMode ? 'text-white' : 'text-slate-800'" x-text="item.quantity"></span>
+                <button @click="addToCart(meal)" class="btn-dual w-9 h-9 text-sm"><i class="fas fa-plus"></i></button>
+              </div>
+            </template>
+            
+            <button x-show="!cart.some(i => i.id === meal.id)" @click="addToCart(meal)" 
+              class="px-6 py-3 rounded-full text-sm font-semibold shadow-xl flex items-center gap-2 transition-all border"
+              :class="darkMode ? 'bg-slate-800 hover:bg-slate-700 text-white border-white/20' : 'bg-white hover:bg-slate-50 text-slate-800 border-white/80'">
+              <i class="fas fa-sparkles"></i> <span>ADD</span>
+            </button>
+            
+            <span x-show="!cart.some(i => i.id === meal.id)" class="text-xl font-bold" :class="darkMode ? 'text-white' : 'text-slate-800'">$<span x-text="meal.price.toFixed(2)"></span></span>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- ===== CART DRAWER ===== -->
+  <div x-show="showCart" class="fixed inset-0 z-[100] flex justify-end" @keydown.escape.window="showCart = false">
+    <div class="absolute inset-0 bg-black/20 backdrop-blur-[3px]" @click="showCart = false"></div>
+    
+    <div class="relative w-full max-w-md drawer-dual h-full shadow-2xl flex flex-col"
+         x-show="showCart" x-transition:enter="transition ease-out duration-400" x-transition:enter-start="translate-x-full opacity-0" x-transition:enter-end="translate-x-0 opacity-100" x-transition:leave="transition ease-in duration-300" x-transition:leave-start="translate-x-0 opacity-100" x-transition:leave-end="translate-x-full opacity-0">
+      
+      <div class="flex items-center justify-between p-6 border-b" :class="darkMode ? 'border-white/10' : 'border-white/80'">
+        <h2 class="text-3xl font-bold italic flex items-center gap-2" :class="darkMode ? 'text-white' : 'text-slate-800'"><i class="fas fa-shopping-bag"></i> your sparkle</h2>
+        <button @click="showCart = false" class="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 hover:rotate-90 transition"><i class="fas fa-times" :class="darkMode ? 'text-white' : 'text-slate-700'"></i></button>
+      </div>
+      
+      <div class="flex-1 overflow-y-auto p-6 space-y-5">
+        <template x-for="item in cart" :key="item.id">
+          <div class="flex items-center gap-4 p-3 rounded-3xl shadow-lg border" 
+                :class="darkMode ? 'bg-slate-800/50 border-white/10' : 'bg-white/70 border-white/90'">
+            <img :src="item.image" class="w-20 h-20 rounded-2xl object-cover border-2" :class="darkMode ? 'border-white/20' : 'border-white'">
+            <div class="flex-1">
+              <h4 class="font-extrabold" :class="darkMode ? 'text-white' : 'text-slate-800'" x-text="item.name"></h4>
+              <div class="flex items-center justify-between mt-3">
+                <div class="flex items-center rounded-full" :class="darkMode ? 'bg-slate-700/50 border border-white/10' : 'bg-white/80 border border-white/90'">
+                  <button @click="removeOne(item.id)" class="px-4 py-2 font-bold text-lg" :class="darkMode ? 'text-white' : 'text-slate-700'">−</button>
+                  <span class="px-4 py-2 font-bold" :class="darkMode ? 'text-white' : 'text-slate-800'" x-text="item.quantity"></span>
+                  <button @click="addToCart(item)" class="px-4 py-2 font-bold text-lg" :class="darkMode ? 'text-white' : 'text-slate-700'">+</button>
+                </div>
+                <span class="font-black text-xl" :class="darkMode ? 'text-white' : 'text-slate-800'" x-text="'$' + (item.price * item.quantity).toFixed(2)"></span>
+              </div>
+            </div>
+          </div>
+        </template>
+        <div x-show="cart.length === 0" class="text-center py-16 flex flex-col items-center" :class="darkMode ? 'text-slate-400' : 'text-slate-400'">
+          <i class="fas fa-sparkles text-6xl mb-4 opacity-40"></i>
+          <p class="text-xl" :class="darkMode ? 'text-slate-300' : 'text-slate-500'">your cart is quiet</p>
+          <p class="text-sm">add some brilliance</p>
+        </div>
+      </div>
+      
+      <div class="border-t p-6" :class="darkMode ? 'border-white/10 bg-slate-900/30' : 'border-white/80 bg-white/60'">
+        <div class="flex justify-between items-center text-2xl font-black mb-5">
+          <span>TOTAL</span>
+          <span class="text-3xl" :class="darkMode ? 'text-white' : 'text-slate-800'" x-text="'$' + cartTotal"></span>
+        </div>
+        <button @click="placeOrder()" class="w-full font-black py-5 rounded-2xl text-xl shadow-2xl flex items-center justify-center gap-4 border transition-all"
+                :class="darkMode ? 'bg-slate-800 hover:bg-slate-700 text-white border-white/20' : 'bg-white hover:bg-slate-50 text-slate-800 border-white'">
+          <i class="fas fa-feather"></i> CHECKOUT
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== CHECKOUT MODAL ===== -->
+  <div x-show="showCheckoutModal" class="fixed inset-0 z-[110] flex items-center justify-center p-4" @keydown.escape.window="showCheckoutModal = false">
+    <div class="absolute inset-0 bg-black/20 backdrop-blur-md" @click="showCheckoutModal = false"></div>
+    <div class="relative max-w-lg w-full rounded-[3rem] p-8 shadow-2xl border"
+         :class="darkMode ? 'bg-slate-900/90 border-white/10' : 'bg-white/80 border-white/90'"
+         x-show="showCheckoutModal" x-transition>
+      <div class="flex items-center gap-3 mb-3">
+        <i class="fas fa-scroll text-4xl" :class="darkMode ? 'text-white' : 'text-slate-700'"></i>
+        <h3 class="text-3xl font-bold italic" :class="darkMode ? 'text-white' : 'text-slate-800'">sparkle summary</h3>
+      </div>
+      <p class="text-sm font-mono tracking-widest" :class="darkMode ? 'text-slate-400' : 'text-slate-500'">ref: <span x-text="orderId"></span></p>
+      
+      <div class="my-6 max-h-60 overflow-y-auto space-y-4 pr-2">
+        <template x-for="item in cart" :key="item.id">
+          <div class="flex justify-between items-center border-b pb-3" :class="darkMode ? 'border-white/10' : 'border-white/80'">
+            <span class="font-medium"><span class="font-black" :class="darkMode ? 'text-white' : 'text-slate-800'" x-text="item.quantity"></span> x <span class="font-semibold" x-text="item.name"></span></span>
+            <span class="font-black" :class="darkMode ? 'text-white' : 'text-slate-800'" x-text="'$' + (item.price * item.quantity).toFixed(2)"></span>
+          </div>
+        </template>
+      </div>
+      
+      <div class="flex justify-between text-3xl font-black border-t-2 pt-4" :class="darkMode ? 'border-white/10' : 'border-white/90'">
+        <span>∑</span>
+        <span :class="darkMode ? 'text-white' : 'text-slate-800'" x-text="'$' + cartTotal"></span>
+      </div>
+      
+      <div class="flex gap-4 mt-8">
+        <button @click="showCheckoutModal = false" class="flex-1 py-4 border-2 rounded-2xl font-black text-lg hover:bg-white/10 transition"
+                :class="darkMode ? 'border-white/20 text-white' : 'border-white/90 text-slate-700'">back</button>
+        <button @click="confirmOrder()" class="flex-1 font-black py-4 rounded-2xl text-lg shadow-xl flex items-center justify-center gap-2 border transition"
+                :class="darkMode ? 'bg-slate-800 text-white border-white/20 hover:bg-slate-700' : 'bg-white text-slate-800 border-white hover:bg-slate-50'">
+          <i class="fab fa-whatsapp text-2xl"></i> SEND
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TOAST ===== -->
+  <div x-show="toast.visible" x-cloak class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] w-full max-w-md px-4">
+    <div class="toast-dual px-5 py-4 flex items-center gap-3"
+         x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-90" x-transition:enter-end="opacity-100 scale-100"
+         x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-90">
+      <i class="fas fa-check-circle text-xl" :class="darkMode ? 'text-white' : 'text-slate-700'"></i>
+      <span class="flex-1 text-sm font-medium" :class="darkMode ? 'text-white' : 'text-slate-800'" x-text="toast.message"></span>
+      <button @click="toast.visible = false" class="opacity-50 hover:opacity-100"><i class="fas fa-times" :class="darkMode ? 'text-white' : 'text-slate-700'"></i></button>
+    </div>
+  </div>
+
+</div>
+
+<style>
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  [x-cloak] { display: none !important; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+</style>
+
+</body>
+</html>

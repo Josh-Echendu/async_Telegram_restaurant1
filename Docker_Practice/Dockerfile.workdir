@@ -1,0 +1,21 @@
+FROM ubuntu
+
+# Docker automatically creates /app, Moves into /app i.e it would automaticaly cd /app
+WORKDIR /app
+
+# Copies test.txt into /app , "." means:👉 “Copy into the current working directory”
+# And the current working directory is whatever WORKDIR is set to
+COPY test.txt .
+
+CMD ["cat", "test.txt"]
+
+ 
+# Now:
+
+# Docker automatically creates /app
+
+# Moves into /app
+
+# Copies test.txt into /app
+
+# Runs commands from /app

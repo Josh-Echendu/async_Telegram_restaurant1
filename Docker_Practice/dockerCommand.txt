@@ -1,0 +1,158 @@
+docker pull
+examples:
+    " docker pull ubuntu " : "This would pull the latest version of the ubuntu image" 
+    " docker pull ubuntu:20.4 " : "This would pull vserion 20.04 of the ubuntu image"
+    " docker pull --all-tags ubuntu " : "This pulls all available versions of the ubuntu image"
+
+docker images: To list out the docker images i have which includes images we downloaded from docker hub and images we have locally
+examples:
+    " docker images " : list out all images 
+    " docker images -q " : list all available image IDs
+
+docker ps: To list only the running containers
+examples:
+    " docker ps ": list only the running containers, if no running containers it shows blank
+    " docker ps -a ": list both the running and stopped(exited) containers
+
+docker create: This creates a container from an image in a stopped state(does not start it). if image not available locally it would download it from docker hub
+examples:
+    " docker create --name my-container nginx " : This creates a container where its name is "my-container" from nginx image
+    " docker create --name my-container ubuntu:20.04 " :  This creates a container where its name is "my-container" and its image is nginx
+
+Container: A running (or stopped) instance of that image.
+examples:
+    " docker run -it ubuntu " : pull + create + start the container
+
+
+docker start: starts an already created container
+examples: 
+    " docker start my-container " : To start the specified container (by name)
+    " docker start abc123 ": To start the specifed container by (by Id)
+    " docker start container1 container2 " : To start multiple containers
+
+docker stop: stop a running container gracefully
+examples:
+    " docker stop 12345 " : To stop the specifed container using Id
+    " docker stop my-container ": To stop the the specified container (by name)
+
+docker rm: To delete a stopped container
+examples:
+    " docker rm cont1 " : To delete a container with it name
+    " docker rm 12345 " : To delete a container with it ID
+    " docker rm 12345 54321 " : To delete multiple conatiner using it ID
+    " docker rm 12a er5 " : To remove containers based on thier first 3 letters of thier IDs
+    " docker rm -f cont1 " : to force remove a running container using the container name
+    " docker rm -f 12345 " : to force remove a running container using the container IDs
+    " docker rm -f 12345 54321 " : to force remove multiple running containers using the container IDs
+    " docker rm -f 123 543 " : to force remove multiple running containers using the container first 3 CHARACTER of the IDs
+
+
+docker rmi: To delete an image
+example:
+    " docker rmi hello-world " : To delete an image
+    " docker rmi hello-world ubuntu" : To delete multiple image
+    " docker rmi -f  hello-world " : To force delete an image which has a running container
+    " docker rmi -f hello-world ubuntu nginx " : To force delete multiple images which has running containers in them
+
+docker exec: used to execute a command inside an already running Docker container. e.g “Enter this running container and execute something inside it.”
+examples: it is used to interact with a container's file system, process and environment
+    " docker exec cont2 cat /etc/hostname " : we executed the cat command inside a running container To view the text inside hostname file in etc directory inside running cont2 container of nginx image
+    " docker exec cont2 cat /etc/hosts " : we executed the cat command inside a running container to view the text inside hosts file in etc directory inside a running cont2 container of nginx image
+    " docker exec -t cont2 ls etc " it list all the files and drectory in etc directory in a well arranged format
+    " docker exec cont2 ls etc " it list all the files and drectory in etc directory in a straight line i.e not well arranged
+    " docker exec -t cont2 ls "
+    " docker exec -it cont2 login " : to interact with the container and also see result of a terminal shell, you use -it
+    " docker exec -it cont2 /bin/bash ": Opens a real shell, You can type commands, You stay inside until you exit
+    " docker exec cont2 ls " : Runs command, Exits immediately, No interactive shell
+    " TTY = gives you a live terminal session for conversations "
+
+/var/lib/postgresql/data
+
+| Name       | Meaning         | What it is                                    |
+| ---------- | --------------- | --------------------------------------------- |
+| **STDIN**  | Standard Input  | Where input comes from (keyboard, pipe, file) |
+| **STDOUT** | Standard Output | Normal output (prints to screen)              |
+| **STDERR** | Standard Error  | Error messages                                |
+example:
+    * echo hello *
+
+* hello goes to STDOUT
+* If you type in a program, your keyboard goes to STDIN
+
+docker run: 
+    docker pull ubuntu
+    docker create ubuntu
+    docker start <container_id>
+
+docker run -it ubuntu bash
+docker run -it nginx: "we create a container from the nginx images with iteractive session shell(-it) without giving the container a name. docker could give it any name 'boring_name' or 'elsatic_boring' "
+docker run --name cont1 nginx: 
+docker exec -it cont1 bash 
+
+
+docker run nginx: creates a container with a random name but after you exit, the conatiner stops running(exited)
+docker run --name cont1 nginx: creates a container with a specific name(cont1), but after you exit, the container stops running
+
+docker run -d nginx : creates a container with a random name but detached(-d) i.e conatiner wont stop running(exited)
+docker run -d --name cont3 nginx: creates a container with a specific name(cont3) but detached(-d) i.e conatiner wont stop running(exited)
+
+docker run -d --name cont1 nginx
+docker exec -it cont1 bash
+
+docker run -it --name cont3 nginx bash
+docker run -itd --name cont3 nginx cat bash
+
+docker run -it --rm --name py2 python /bin/bash
+
+docker run --rm ubuntu echo "this will self-destruct"
+docker run --rm --name 'josh' ubuntu echo "this will self-destruct"
+this would create and run an ubuntu container, echo the sentence "this would self destruct", then delete the container
+
+
+
+✅ Why we usually use -it together: 
+Because:
+
+-i lets you type
+
+-t lets you see a shell screen or gives you a real shell screen
+
+Together = interactive terminal session
+
+docker history: This is used to check the history of an image
+    examples: 
+        "docker history image_name " : this is used to check the history of an image i.e to see all the instruction that has being executed in an image
+
+
+docker inspect: It is used to retrieve detailed, low-level information about containers, images, volumes or networks in json format.
+    examples: 
+    " docker inspect my-container " : returns detailed information about the container(name, ID, Network, config)
+    " docker inspect nginx " : returns info about images named nginx with latest tags e.g image ID, creation time etc.
+    " docker inspect 01f1bc9cd6e9 " : inspect by IDs
+
+docker --help: it helps you to find commands 
+    examples: 
+    " docker start --help "
+    " docker inspect --help "
+    " docker run --help "
+
+docker build: this is used to build a custom image
+examples:
+    " docker build -t image1 . " : build a custom docker image, -t == --tag It means: “Give this image a name (and optionally a version/tag).”
+    " docker build -f Dockerfile.dev -t my-ubuntu-image-dev . " : build a custom docker image, --f = --file which means 👉 Build an image using Dockerfile.dev instead of default Dockerfile
+
+EXPOSE 80: we use EXPOSE 80 as a manual so that “Any container created from this image will probably use port 80.” It does not open anything. It does not allow access. It is just documentation / metadata.
+examples:
+    # docker run -p  HOST_PORT : CONTAINER_PORT image_name
+    " docker run -p 80:80 imageport " : this actually connects container to host(laptop). HOST_PORT : CONTAINER_PORT
+
+
+
+# 1. Change Dockerfile
+docker build -t app:v1
+
+# 2. Tag for registry
+docker tag app:v2  echendu1234/app1:v2
+
+# 3. Push
+docker push echendu1234/app1:v2

@@ -1,0 +1,49 @@
+A Dockerfile is a text file that tells Docker how to build an image automatically instead of you typing commands manually in the terminal
+
+✅ Instead of doing this manually:
+docker run -it ubuntu
+apt update
+apt install python
+pip install django
+copy project files
+
+✅ Everything inside a Dockerfile is something you could type manually
+✅ But instead, Docker runs it automatically when building the image
+✅ You write a Dockerfile, and Docker does all that for you automatically every time.
+
+FROM ubuntu  : Start building this image using the Ubuntu image as the base.
+MAINTAINER John Doe : This line says who maintains this image.
+RUN apt-get update  : Run this command while building the image, not when the container runs.
+CMD ['echo', 'hello from Josh']
+
+FROM ubuntu means: Start my custom image using Ubuntu as the base.
+MAINTAINER John Doe : This line says who maintains this image.
+RUN means: execute at build time, Do this while building the image. it is used to install apps, add layers to images
+CMD means: Do this when the container starts.
+
+| Concept    | Meaning                            |
+| ---------- | ---------------------------------- |
+| Image      | Blueprint                          |
+| Container  | Running instance of image          |
+| Dockerfile | Instructions to build a custom image        |
+| FROM       | Starting image                     |
+| RUN        | Change the image                   |
+| CMD        | What container does when it starts |
+
+FROM ubuntu
+RUN apt-get install python3
+CMD ["python3"]
+
+What happens:
+
+During build:
+
+Python gets installed
+
+When container runs:
+
+Python shell opens
+
+
+Each Dockerfile instruction maps to a layer. 
+If I change one layer and rebuild, Docker reuses the unchanged layers and rebuilds only the modified layer

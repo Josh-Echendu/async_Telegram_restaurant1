@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    {% load static %}
+    <meta charset="utf-8">
+    <title>Login</title>
+    <link rel="stylesheet" href="{% static 'style.css' %}">
+  </head>
+  <body>
+    <div class="center">
+      <h1>Login</h1>
+
+      {% if messages %}
+          {% for message in messages %}
+              {% if message.tags == 'error' %}
+                  <center><h4 style="color: firebrick;">{{message}}</h4></center>
+              {% else %}
+                  <center><h4 style="color: dodgerblue;">{{message}}</h4></center>
+              {% endif %}
+          {% endfor %}
+      {% endif %}
+        
+      <form method="POST" action="{% url 'userauths:admin_login' %}">
+
+        {% csrf_token %}
+
+        <div class="txt_field">
+          <input type="text" required name="email">
+          <span></span>
+          <label>Email</label>
+        </div>
+
+        <div class="txt_field">
+          <input type="password" required name="password">
+          <span></span>
+          <label>Password</label>
+        </div>
+
+        <input type="submit" value="Login">
+      </form>
+    </div>
+
+  </body>
+</html>

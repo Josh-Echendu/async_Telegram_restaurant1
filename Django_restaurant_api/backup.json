@@ -1,0 +1,28 @@
+[
+  {"model": "contenttypes.contenttype", "fields": {"app_label": "orders", "model": "category"}},
+  {"model": "contenttypes.contenttype", "fields": {"app_label": "orders", "model": "product"}},
+  {"model": "contenttypes.contenttype", "fields": {"app_label": "orders", "model": "productimages"}},
+  {"model": "contenttypes.contenttype", "fields": {"app_label": "orders", "model": "cart"}},
+  {"model": "contenttypes.contenttype", "fields": {"app_label": "orders", "model": "orderbatch"}},
+  {"model": "contenttypes.contenttype", "fields": {"app_label": "orders", "model": "orderbatchitem"}},
+
+  {"model": "orders.category", "pk": 1, "fields": {"cid": "h5cf541hca", "title": "affordable_meal", "image": "category/ChickenRepublic_BannerIcon1.png"}},
+  {"model": "orders.category", "pk": 2, "fields": {"cid": "5g23h2ff4e", "title": "Soulfully Spiced Chicken", "image": "category/ChickenRepublic_BannerIcon2-1.png"}},
+  {"model": "orders.category", "pk": 3, "fields": {"cid": "cha31a4232", "title": "Delicious Rotiserrie", "image": "category/ChickenRepublic_BannerIcon3-1.png"}},
+  {"model": "orders.category", "pk": 4, "fields": {"cid": "22dbadg11g", "title": "Flamed Grilled Chicken", "image": "category/ChickenRepublic_BannerIcon4-1.png"}},
+  {"model": "orders.category", "pk": 5, "fields": {"cid": "hgh2hh543b", "title": "Burger, Wraps & ChickWizz", "image": "category/ChickenRepublic_BannerIcon5-1.png"}},
+  {"model": "orders.category", "pk": 6, "fields": {"cid": "gh31dd3ah2", "title": "Tasty Sides", "image": "category/ChickenRepublic_BannerIcon6-1.png"}},
+  {"model": "orders.category", "pk": 7, "fields": {"cid": "34a22a25ae", "title": "Sweet Treats & beverages", "image": "category/ChickenRepublic_BannerIcon7-3.png"}},
+
+  {"model": "orders.product", "pk": 2, "fields": {"pid": "4e5cgb13a5", "category": 1, "title": "REFUEL-FRIED-RICE-MEAL", "image": "products/Affordable meals/2-REFUEL-FRIED-RICE-MEAL.jpg", "description": "This is the product", "price": "2300.00", "in_stock": true, "date": "2026-01-20T10:22:34.521Z"}},
+  {"model": "orders.product", "pk": 3, "fields": {"pid": "ebeca3he4a", "category": 1, "title": "REFUEL-SPICY-RICE-MEAL", "image": "products/Affordable meals/3-REFUEL-SPICY-RICE-MEAL.jpg", "description": "This is the product", "price": "2300.00", "in_stock": true, "date": "2026-01-20T10:24:58.493Z"}},
+  {"model": "orders.product", "pk": 4, "fields": {"pid": "4g1a2e5c4g", "category": 1, "title": "REFUEL-MAX-FRIED-RICE-MEAL", "image": "products/Affordable meals/7-REFUEL-MAX-FRIED-RICE-MEAL.jpg", "description": "This is the product", "price": "3600.00", "in_stock": true, "date": "2026-01-20T10:26:54.585Z"}},
+  {"model": "orders.product", "pk": 5, "fields": {"pid": "h43ccchddc", "category": 1, "title": "REFUEL-MAX-JollofRice-MEAL", "image": "products/Affordable meals/8-REFUEL-MAX-SPAGHETTI-MEAL.jpg", "description": "This is the product", "price": "3600.00", "in_stock": true, "date": "2026-01-20T10:30:33.743Z"}},
+  {"model": "orders.product", "pk": 6, "fields": {"pid": "c4aeb1dfdc", "category": 1, "title": "REFUEL-DODO-MAX-MEAL", "image": "products/Affordable meals/ChickenRepublic_RefuelDodoMaxMeal.jpg", "description": "This is the product", "price": "3600.00", "in_stock": false, "date": "2026-01-20T10:31:44.754Z"}},
+
+  {"model": "orders.cart", "pk": 31, "fields": {"product": 2, "quantity": 9, "date_added": "2026-01-24T21:16:48.362Z"}},
+  {"model": "orders.cart", "pk": 32, "fields": {"product": 6, "quantity": 5, "date_added": "2026-01-25T00:52:51.785Z"}},
+  {"model": "orders.cart", "pk": 33, "fields": {"product": 5, "quantity": 18, "date_added": "2026-01-25T00:52:57.347Z"}},
+  {"model": "orders.cart", "pk": 34, "fields": {"product": 4, "quantity": 17, "date_added": "2026-01-25T00:52:59.784Z"}},
+  {"model": "orders.cart", "pk": 35, "fields": {"product": 3, "quantity": 7, "date_added": "2026-01-25T09:19:20.513Z"}}
+]

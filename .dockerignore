@@ -1,0 +1,12 @@
+.env
+Django_restaurant_api/venv/
+Dockerfile
+Dockerfile.bot
+docker-compose
+Django_restaurant_api/migrations/
+Django_restaurant_api/__pycache__/
+Django_restaurant_api/db.sqlite3
+*.pyc
+.git
+.gitignore
+TELEGRAM_BOT_API/__pycache__/

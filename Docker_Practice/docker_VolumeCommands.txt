@@ -1,0 +1,31 @@
+VOLUMES: are stored in the host filesystem in docker internal storage area, which is managed by docker
+here is the internal storage file system: /var/lib/docker/volumes/<volume-name>/_data
+
+-c " echo joshua Echendu " : This means treat anything between this string as a command  
+
+A docker volume is:
+    isolated from container layers
+    persist independently of containers
+    mounted into containers at runtime
+    allows data to survive container restarts, deletion and image rebuild
+    
+
+docker volume create <volume-name>:
+    docker volume create volume2: used to create a new named volume called volume2
+
+docker volume ls: used to list existing docker volumes
+
+docker volume inspect <volume-name>:
+    docker volume inspect volum2: used to show detailed info about a volume called volume2
+
+docker volume rm <volume-name>: 
+    docker volume rm volume2: used to delete a docker volume called volume2
+
+
+HOW to launch  a container with a volume attached
+Example:
+    docker volume create volume2 : create a volume called volume2 
+    docker run -v -it volume2:/folder1 ubuntu bash : create a container mounted on volume2 with ability to read, write and manipulate data mounted on volume2, with a folder known as folder1
+    docker run -v -it volume2:/folder2 ubuntu bash : create a container mounted on volume2 with ability to read, write and manipulate data mounted on volume2, with a folder known as folder2
+    docker run -v -it volume2:/folder3:ro ubuntu bash : create a container mounted on volume2 with ability for read only purpose i.e you cant manipulate any data mounted in volume2  with a folder known as folder2
+    docker inspect 123456: to inspect a container mounted upon on a volume to view it Mounts attributes

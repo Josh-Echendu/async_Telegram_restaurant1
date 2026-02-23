@@ -1,0 +1,2052 @@
+[
+{
+  "model": "admin.logentry",
+  "pk": 1, 
+  "fields": {
+    "action_time": "2026-01-30T18:07:43.914Z",
+    "user": 1,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 2,
+  "fields": {
+    "action_time": "2026-01-30T18:08:11.403Z",
+    "user": 1,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 3,
+  "fields": {
+    "action_time": "2026-01-30T18:09:53.359Z",
+    "user": 1,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 4,
+  "fields": {
+    "action_time": "2026-01-30T18:10:36.313Z",
+    "user": 1,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 5,
+  "fields": {
+    "action_time": "2026-01-30T18:11:08.775Z",
+    "user": 1,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 6,
+  "fields": {
+    "action_time": "2026-01-30T18:12:03.445Z",
+    "user": 1,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 7,
+  "fields": {
+    "action_time": "2026-01-30T18:12:08.893Z",
+    "user": 1,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 8,
+  "fields": {
+    "action_time": "2026-01-30T18:12:43.261Z",
+    "user": 1,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 9,
+  "fields": {
+    "action_time": "2026-01-30T18:44:25.739Z",
+    "user": 1,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 10,
+  "fields": {
+    "action_time": "2026-01-30T19:58:12.187Z",
+    "user": 1,
+    "content_type": 6,
+    "object_id": "35",
+    "object_repr": "None | REFUEL-SPICY-RICE-MEAL | 7",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 11,
+  "fields": {
+    "action_time": "2026-01-30T19:58:12.187Z",
+    "user": 1,
+    "content_type": 6,
+    "object_id": "34",
+    "object_repr": "None | REFUEL-MAX-FRIED-RICE-MEAL | 17",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 12,
+  "fields": {
+    "action_time": "2026-01-30T19:58:12.187Z",
+    "user": 1,
+    "content_type": 6,
+    "object_id": "33",
+    "object_repr": "None | REFUEL-MAX-JollofRice-MEAL | 18",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 13,
+  "fields": {
+    "action_time": "2026-01-30T19:58:12.187Z",
+    "user": 1,
+    "content_type": 6,
+    "object_id": "32",
+    "object_repr": "None | REFUEL-DODO-MAX-MEAL | 5",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 14,
+  "fields": {
+    "action_time": "2026-01-30T19:58:12.187Z",
+    "user": 1,
+    "content_type": 6,
+    "object_id": "31",
+    "object_repr": "None | REFUEL-FRIED-RICE-MEAL | 9",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 15,
+  "fields": {
+    "action_time": "2026-01-31T12:45:02.755Z",
+    "user": 1,
+    "content_type": 6,
+    "object_id": "66",
+    "object_repr": "5680916028 | REFUEL-FRIED-RICE-MEAL | 0",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Quantity\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 16,
+  "fields": {
+    "action_time": "2026-01-31T12:52:13.630Z",
+    "user": 1,
+    "content_type": 6,
+    "object_id": "66",
+    "object_repr": "5680916028 | REFUEL-FRIED-RICE-MEAL | 3",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 17,
+  "fields": {
+    "action_time": "2026-01-31T12:52:13.632Z",
+    "user": 1,
+    "content_type": 6,
+    "object_id": "64",
+    "object_repr": "8499580673 | REFUEL-MAX-FRIED-RICE-MEAL | 2",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 18,
+  "fields": {
+    "action_time": "2026-01-31T12:53:04.769Z",
+    "user": 1,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 19,
+  "fields": {
+    "action_time": "2026-01-31T12:53:11.814Z",
+    "user": 1,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 20,
+  "fields": {
+    "action_time": "2026-01-31T13:36:38.432Z",
+    "user": 1,
+    "content_type": 6,
+    "object_id": "85",
+    "object_repr": "8499580673 | REFUEL-DODO-MAX-MEAL | 2",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 21,
+  "fields": {
+    "action_time": "2026-01-31T18:57:34.121Z",
+    "user": 1,
+    "content_type": 8,
+    "object_id": "7",
+    "object_repr": "rfcqWB5VQq - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 22,
+  "fields": {
+    "action_time": "2026-01-31T18:57:34.121Z",
+    "user": 1,
+    "content_type": 8,
+    "object_id": "6",
+    "object_repr": "nYs66z7Ebk - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 23,
+  "fields": {
+    "action_time": "2026-01-31T18:57:34.121Z",
+    "user": 1,
+    "content_type": 8,
+    "object_id": "5",
+    "object_repr": "Ar5iZrhus9 - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 24,
+  "fields": {
+    "action_time": "2026-01-31T18:57:34.121Z",
+    "user": 1,
+    "content_type": 8,
+    "object_id": "4",
+    "object_repr": "fyUyWiXpgf - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 25,
+  "fields": {
+    "action_time": "2026-01-31T18:57:34.121Z",
+    "user": 1,
+    "content_type": 8,
+    "object_id": "3",
+    "object_repr": "VMJ2xFjBg8 - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 26,
+  "fields": {
+    "action_time": "2026-01-31T18:57:34.121Z",
+    "user": 1,
+    "content_type": 8,
+    "object_id": "2",
+    "object_repr": "eczSHZri4E - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 27,
+  "fields": {
+    "action_time": "2026-01-31T18:57:34.121Z",
+    "user": 1,
+    "content_type": 8,
+    "object_id": "1",
+    "object_repr": "SLgvtAU4qx - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 28,
+  "fields": {
+    "action_time": "2026-02-01T19:19:58.969Z",
+    "user": 2,
+    "content_type": 8,
+    "object_id": "16",
+    "object_repr": "q2L6oEfoAJ - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 29,
+  "fields": {
+    "action_time": "2026-02-01T19:19:58.969Z",
+    "user": 2,
+    "content_type": 8,
+    "object_id": "15",
+    "object_repr": "TwHPN5WusM - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 30,
+  "fields": {
+    "action_time": "2026-02-01T19:19:58.971Z",
+    "user": 2,
+    "content_type": 8,
+    "object_id": "14",
+    "object_repr": "SGxtrh8GFd - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 31,
+  "fields": {
+    "action_time": "2026-02-01T19:19:58.971Z",
+    "user": 2,
+    "content_type": 8,
+    "object_id": "13",
+    "object_repr": "ytgrsyb78a - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 32,
+  "fields": {
+    "action_time": "2026-02-01T19:19:58.971Z",
+    "user": 2,
+    "content_type": 8,
+    "object_id": "12",
+    "object_repr": "LXPUGFGPPR - 8499580673",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 33,
+  "fields": {
+    "action_time": "2026-02-01T19:19:58.971Z",
+    "user": 2,
+    "content_type": 8,
+    "object_id": "11",
+    "object_repr": "KECiUXbyfB - 8499580673",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 34,
+  "fields": {
+    "action_time": "2026-02-01T19:19:58.971Z",
+    "user": 2,
+    "content_type": 8,
+    "object_id": "10",
+    "object_repr": "RiYb4Zptdk - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 35,
+  "fields": {
+    "action_time": "2026-02-01T19:19:58.971Z",
+    "user": 2,
+    "content_type": 8,
+    "object_id": "9",
+    "object_repr": "LLNriyPabZ - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 36,
+  "fields": {
+    "action_time": "2026-02-01T19:19:58.971Z",
+    "user": 2,
+    "content_type": 8,
+    "object_id": "8",
+    "object_repr": "5uASjQ2qwr - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 37,
+  "fields": {
+    "action_time": "2026-02-01T19:23:54.590Z",
+    "user": 2,
+    "content_type": 8,
+    "object_id": "17",
+    "object_repr": "7udXpdEZpU - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 38,
+  "fields": {
+    "action_time": "2026-02-01T19:26:24.355Z",
+    "user": 2,
+    "content_type": 8,
+    "object_id": "18",
+    "object_repr": "ApscAAgqCw - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 39,
+  "fields": {
+    "action_time": "2026-02-01T19:28:56.966Z",
+    "user": 2,
+    "content_type": 8,
+    "object_id": "19",
+    "object_repr": "MdVJVM3H7W - 5680916028",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 40,
+  "fields": {
+    "action_time": "2026-02-02T11:05:36.843Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 41,
+  "fields": {
+    "action_time": "2026-02-02T11:14:58.606Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 42,
+  "fields": {
+    "action_time": "2026-02-02T11:16:00.237Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 43,
+  "fields": {
+    "action_time": "2026-02-02T11:16:09.889Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 44,
+  "fields": {
+    "action_time": "2026-02-02T11:16:54.318Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 45,
+  "fields": {
+    "action_time": "2026-02-02T11:33:55.301Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 46,
+  "fields": {
+    "action_time": "2026-02-02T11:35:06.329Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 47,
+  "fields": {
+    "action_time": "2026-02-02T11:35:13.532Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 48,
+  "fields": {
+    "action_time": "2026-02-02T11:38:10.210Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 49,
+  "fields": {
+    "action_time": "2026-02-02T11:38:15.489Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 50,
+  "fields": {
+    "action_time": "2026-02-02T11:40:25.541Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 51,
+  "fields": {
+    "action_time": "2026-02-02T11:40:36.001Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 52,
+  "fields": {
+    "action_time": "2026-02-02T12:00:11.169Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 53,
+  "fields": {
+    "action_time": "2026-02-02T12:00:17.712Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 54,
+  "fields": {
+    "action_time": "2026-02-02T12:01:22.848Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 55,
+  "fields": {
+    "action_time": "2026-02-02T12:01:30.677Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 56,
+  "fields": {
+    "action_time": "2026-02-02T12:03:23.847Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 57,
+  "fields": {
+    "action_time": "2026-02-02T12:03:30.858Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 58,
+  "fields": {
+    "action_time": "2026-02-02T12:04:49.332Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 59,
+  "fields": {
+    "action_time": "2026-02-02T12:04:59.092Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 60,
+  "fields": {
+    "action_time": "2026-02-02T12:06:41.330Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 61,
+  "fields": {
+    "action_time": "2026-02-02T12:06:47.781Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 62,
+  "fields": {
+    "action_time": "2026-02-02T12:10:14.208Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 63,
+  "fields": {
+    "action_time": "2026-02-02T12:10:20.928Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 64,
+  "fields": {
+    "action_time": "2026-02-02T12:10:28.508Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "4",
+    "object_repr": "REFUEL-MAX-FRIED-RICE-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 65,
+  "fields": {
+    "action_time": "2026-02-02T12:14:03.964Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 66,
+  "fields": {
+    "action_time": "2026-02-02T12:14:10.402Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 67,
+  "fields": {
+    "action_time": "2026-02-02T12:14:17.438Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "4",
+    "object_repr": "REFUEL-MAX-FRIED-RICE-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 68,
+  "fields": {
+    "action_time": "2026-02-02T12:15:29.072Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 69,
+  "fields": {
+    "action_time": "2026-02-02T12:15:34.919Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 70,
+  "fields": {
+    "action_time": "2026-02-02T12:20:11.621Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 71,
+  "fields": {
+    "action_time": "2026-02-02T12:20:18.727Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 72,
+  "fields": {
+    "action_time": "2026-02-02T12:21:11.993Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 73,
+  "fields": {
+    "action_time": "2026-02-02T12:21:18.773Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 74,
+  "fields": {
+    "action_time": "2026-02-02T12:45:49.702Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 75,
+  "fields": {
+    "action_time": "2026-02-02T12:45:58.373Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 76,
+  "fields": {
+    "action_time": "2026-02-02T12:52:26.477Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 77,
+  "fields": {
+    "action_time": "2026-02-02T12:52:33.914Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 78,
+  "fields": {
+    "action_time": "2026-02-02T13:06:07.710Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 79,
+  "fields": {
+    "action_time": "2026-02-02T13:06:15.430Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 80,
+  "fields": {
+    "action_time": "2026-02-02T13:09:59.492Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 81,
+  "fields": {
+    "action_time": "2026-02-02T13:10:11.003Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 82,
+  "fields": {
+    "action_time": "2026-02-02T13:22:02.872Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 83,
+  "fields": {
+    "action_time": "2026-02-02T13:23:21.038Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 84,
+  "fields": {
+    "action_time": "2026-02-02T13:25:43.468Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "6",
+    "object_repr": "REFUEL-DODO-MAX-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 85,
+  "fields": {
+    "action_time": "2026-02-02T13:25:50.081Z",
+    "user": 2,
+    "content_type": 10,
+    "object_id": "5",
+    "object_repr": "REFUEL-MAX-JollofRice-MEAL",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"In stock\"]}}]"
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "h0n5blj1gqaias7mjcw9kimsd97ujar9",
+  "fields": {
+    "session_data": ".eJxVjDsOwjAQRO_iGln-rjElPWewdu0VDiBbipMKcXcSKQUU08x7M2-RcF1qWgfPaSriIow4_XaE-cltB-WB7d5l7m2ZJ5K7Ig865K0Xfl0P9--g4qjbOiosW8BrjJELaBO9D4YRHQQLZ-cIQSOootkSBKezpahMBCTP2YvPF8fINz0:1vmcw3:dV26zvj5nr-DpBopRl4bLzvDQVvHrRdNIeso91-8jDM",
+    "expire_date": "2026-02-15T19:16:39.597Z"
+  }
+},
+{
+  "model": "sessions.session",
+  "pk": "pr7aqfpmau77ugvqh4mrmszefaizipoi",
+  "fields": {
+    "session_data": ".eJxVjDsOwjAQBe_iGlnrz_pDSZ8zWPZ6wQGUSHFSIe4OkVJA-2bmvUTK29rS1nlJYxVnocTpdyuZHjztoN7zdJslzdO6jEXuijxol8Nc-Xk53L-Dlnv71q4YYxDRBfBZeXLsXIkhZENkbVTgAcHyNcTKGAi8RixaAxBUDRzE-wOtjzaA:1vls4a:Wi3-7-Agb9_w9tvRx9Xf1yKDkcfrvctoN2wp2WbLib0",
+    "expire_date": "2026-02-13T17:14:20.773Z"
+  }
+},
+{
+  "model": "orders.category",
+  "pk": 1,
+  "fields": {
+    "telegram_user": null,
+    "cid": "h5cf541hca",
+    "title": "affordable_meal",
+    "image": "category/ChickenRepublic_BannerIcon1.png"
+  }
+},
+{
+  "model": "orders.category",
+  "pk": 2,
+  "fields": {
+    "telegram_user": null,
+    "cid": "5g23h2ff4e",
+    "title": "Soulfully Spiced Chicken",
+    "image": "category/ChickenRepublic_BannerIcon2-1.png"
+  }
+},
+{
+  "model": "orders.category",
+  "pk": 3,
+  "fields": {
+    "telegram_user": null,
+    "cid": "cha31a4232",
+    "title": "Delicious Rotiserrie",
+    "image": "category/ChickenRepublic_BannerIcon3-1.png"
+  }
+},
+{
+  "model": "orders.category",
+  "pk": 4,
+  "fields": {
+    "telegram_user": null,
+    "cid": "22dbadg11g",
+    "title": "Flamed Grilled Chicken",
+    "image": "category/ChickenRepublic_BannerIcon4-1.png"
+  }
+},
+{
+  "model": "orders.category",
+  "pk": 5,
+  "fields": {
+    "telegram_user": null,
+    "cid": "hgh2hh543b",
+    "title": "Burger, Wraps & ChickWizz",
+    "image": "category/ChickenRepublic_BannerIcon5-1.png"
+  }
+},
+{
+  "model": "orders.category",
+  "pk": 6,
+  "fields": {
+    "telegram_user": null,
+    "cid": "gh31dd3ah2",
+    "title": "Tasty Sides",
+    "image": "category/ChickenRepublic_BannerIcon6-1.png"
+  }
+},
+{
+  "model": "orders.category",
+  "pk": 7,
+  "fields": {
+    "telegram_user": null,
+    "cid": "34a22a25ae",
+    "title": "Sweet Treats & beverages",
+    "image": "category/ChickenRepublic_BannerIcon7-3.png"
+  }
+},
+{
+  "model": "orders.product",
+  "pk": 2,
+  "fields": {
+    "pid": "4e5cgb13a5",
+    "category": 1,
+    "title": "REFUEL-FRIED-RICE-MEAL",
+    "image": "products/Affordable meals/2-REFUEL-FRIED-RICE-MEAL.jpg",
+    "description": "This is the product",
+    "price": "2300.00",
+    "in_stock": true,
+    "date": "2026-01-20T10:22:34.521Z"
+  }
+},
+{
+  "model": "orders.product",
+  "pk": 3,
+  "fields": {
+    "pid": "ebeca3he4a",
+    "category": 1,
+    "title": "REFUEL-SPICY-RICE-MEAL",
+    "image": "products/Affordable meals/3-REFUEL-SPICY-RICE-MEAL.jpg",
+    "description": "This is the product",
+    "price": "2300.00",
+    "in_stock": true,
+    "date": "2026-01-20T10:24:58.493Z"
+  }
+},
+{
+  "model": "orders.product",
+  "pk": 4,
+  "fields": {
+    "pid": "4g1a2e5c4g",
+    "category": 1,
+    "title": "REFUEL-MAX-FRIED-RICE-MEAL",
+    "image": "products/Affordable meals/7-REFUEL-MAX-FRIED-RICE-MEAL.jpg",
+    "description": "This is the product",
+    "price": "3600.00",
+    "in_stock": true,
+    "date": "2026-01-20T10:26:54.585Z"
+  }
+},
+{
+  "model": "orders.product",
+  "pk": 5,
+  "fields": {
+    "pid": "h43ccchddc",
+    "category": 1,
+    "title": "REFUEL-MAX-JollofRice-MEAL",
+    "image": "products/Affordable meals/8-REFUEL-MAX-SPAGHETTI-MEAL.jpg",
+    "description": "This is the product",
+    "price": "3600.00",
+    "in_stock": false,
+    "date": "2026-01-20T10:30:33.743Z"
+  }
+},
+{
+  "model": "orders.product",
+  "pk": 6,
+  "fields": {
+    "pid": "c4aeb1dfdc",
+    "category": 1,
+    "title": "REFUEL-DODO-MAX-MEAL",
+    "image": "products/Affordable meals/ChickenRepublic_RefuelDodoMaxMeal.jpg",
+    "description": "This is the product",
+    "price": "3600.00",
+    "in_stock": false,
+    "date": "2026-01-20T10:31:44.754Z"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 20,
+  "fields": {
+    "bid": "BhZGVFxdxQ",
+    "telegram_user": 1,
+    "total_price": "7200.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-01T19:47:23.329Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "k3vCDUZdfVbRsE3RMZ2zKd"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 21,
+  "fields": {
+    "bid": "Pd2r5LWqaP",
+    "telegram_user": 1,
+    "total_price": "7200.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-01T20:17:33.366Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "nL6GrR8Y5zYpmBY48iv8Pe"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 22,
+  "fields": {
+    "bid": "hv2c2sWT5o",
+    "telegram_user": 1,
+    "total_price": "7200.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-01T21:09:10.936Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "Di4PxJyoqthPehUJP4BMNe"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 23,
+  "fields": {
+    "bid": "rEZychWVkw",
+    "telegram_user": 1,
+    "total_price": "10800.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-01T21:56:43.205Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "EUssmTdCgpevBf7iENWDRC"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 24,
+  "fields": {
+    "bid": "Spvs9WUpoT",
+    "telegram_user": 1,
+    "total_price": "21600.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T11:04:05.223Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "YdQ7CKXQiM4eW24kYeLFqK"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 25,
+  "fields": {
+    "bid": "fqkNY59mv8",
+    "telegram_user": 1,
+    "total_price": "14400.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T11:17:02.141Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "DV3YiGjHunkhSxGeVfKR9e"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 26,
+  "fields": {
+    "bid": "SkiGTfK3CW",
+    "telegram_user": 1,
+    "total_price": "7200.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T11:35:20.743Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "4JwukKjbWMS4kUjwDENK6P"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 27,
+  "fields": {
+    "bid": "dq3MEVTGZy",
+    "telegram_user": 1,
+    "total_price": "7200.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T11:40:43.900Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "jZi3x4NB42zVMj6Ra5Gteg"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 28,
+  "fields": {
+    "bid": "CLjbz4k53B",
+    "telegram_user": 1,
+    "total_price": "16400.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T12:01:45.938Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "Uik7m7HBVfXiv6wg8dbh8t"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 29,
+  "fields": {
+    "bid": "qLDSFCjNMk",
+    "telegram_user": 1,
+    "total_price": "18700.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T12:05:42.654Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "XeV9M5kZ25uMW7RwDvKAFr"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 30,
+  "fields": {
+    "bid": "HdJG5jwn7M",
+    "telegram_user": 1,
+    "total_price": "9200.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T12:10:49.136Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "6de62ymoTcx3QYgqURdBb5"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 31,
+  "fields": {
+    "bid": "eL3XE8nqYC",
+    "telegram_user": 1,
+    "total_price": "16400.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T12:15:54.533Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "NLJZANiHZ5gRJFfgBtWAYi"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 32,
+  "fields": {
+    "bid": "g6y7vSoQV2",
+    "telegram_user": 1,
+    "total_price": "16400.00",
+    "status": "processing",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T12:21:30.215Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "n5VgBDGqY4TBQuWMNQRXBm"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 33,
+  "fields": {
+    "bid": "ALNFAY8h2d",
+    "telegram_user": 1,
+    "total_price": "21600.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T12:47:43.957Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "NJaoJY9tqUstsmqSkX4AVF"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 34,
+  "fields": {
+    "bid": "PwBDCJWCn4",
+    "telegram_user": 1,
+    "total_price": "16400.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T12:52:46.499Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "hTQCsGJtb4ipMMNGhpPRzR"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 35,
+  "fields": {
+    "bid": "CVd75jjX3N",
+    "telegram_user": 1,
+    "total_price": "30800.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T13:07:40.148Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "azETNwEjhGMbF6rmH7nkWP"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 36,
+  "fields": {
+    "bid": "r55vEqmtRu",
+    "telegram_user": 1,
+    "total_price": "18700.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T13:10:25.239Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "Q6s4ofEHvGtvpwaa5pGnRZ"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 37,
+  "fields": {
+    "bid": "aURvMjcjE9",
+    "telegram_user": 1,
+    "total_price": "20000.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T13:20:43.823Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "HcZxizL5uj3uCcJNJBQhRd"
+  }
+},
+{
+  "model": "orders.orderbatch",
+  "pk": 38,
+  "fields": {
+    "bid": "nwdrRpfqLW",
+    "telegram_user": 1,
+    "total_price": "20000.00",
+    "status": "pending",
+    "payment_status": "unpaid",
+    "date_created": "2026-02-02T13:25:59.720Z",
+    "notified_kitchen": false,
+    "notified_user": false,
+    "idempotency_key": "7yjmFoRB5kQwfFG2ZYvUSm"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 40,
+  "fields": {
+    "batch": 20,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 41,
+  "fields": {
+    "batch": 21,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 42,
+  "fields": {
+    "batch": 22,
+    "product": 5,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 43,
+  "fields": {
+    "batch": 23,
+    "product": 4,
+    "quantity": 3,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 44,
+  "fields": {
+    "batch": 24,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 45,
+  "fields": {
+    "batch": 24,
+    "product": 6,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 46,
+  "fields": {
+    "batch": 24,
+    "product": 5,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 47,
+  "fields": {
+    "batch": 25,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 48,
+  "fields": {
+    "batch": 25,
+    "product": 5,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 49,
+  "fields": {
+    "batch": 26,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 50,
+  "fields": {
+    "batch": 27,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 51,
+  "fields": {
+    "batch": 28,
+    "product": 2,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 52,
+  "fields": {
+    "batch": 28,
+    "product": 3,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 53,
+  "fields": {
+    "batch": 28,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 54,
+  "fields": {
+    "batch": 29,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 55,
+  "fields": {
+    "batch": 29,
+    "product": 3,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 56,
+  "fields": {
+    "batch": 29,
+    "product": 2,
+    "quantity": 3,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 57,
+  "fields": {
+    "batch": 30,
+    "product": 2,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 58,
+  "fields": {
+    "batch": 30,
+    "product": 3,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 59,
+  "fields": {
+    "batch": 31,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 60,
+  "fields": {
+    "batch": 31,
+    "product": 2,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 61,
+  "fields": {
+    "batch": 31,
+    "product": 3,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 62,
+  "fields": {
+    "batch": 32,
+    "product": 2,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 63,
+  "fields": {
+    "batch": 32,
+    "product": 3,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 64,
+  "fields": {
+    "batch": 32,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 65,
+  "fields": {
+    "batch": 33,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 66,
+  "fields": {
+    "batch": 33,
+    "product": 5,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 67,
+  "fields": {
+    "batch": 33,
+    "product": 6,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 68,
+  "fields": {
+    "batch": 34,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 69,
+  "fields": {
+    "batch": 34,
+    "product": 2,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 70,
+  "fields": {
+    "batch": 34,
+    "product": 3,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 71,
+  "fields": {
+    "batch": 35,
+    "product": 2,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 72,
+  "fields": {
+    "batch": 35,
+    "product": 3,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 73,
+  "fields": {
+    "batch": 35,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 74,
+  "fields": {
+    "batch": 35,
+    "product": 5,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 75,
+  "fields": {
+    "batch": 35,
+    "product": 6,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 76,
+  "fields": {
+    "batch": 36,
+    "product": 4,
+    "quantity": 2,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 77,
+  "fields": {
+    "batch": 36,
+    "product": 2,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 78,
+  "fields": {
+    "batch": 36,
+    "product": 3,
+    "quantity": 3,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 79,
+  "fields": {
+    "batch": 37,
+    "product": 2,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 80,
+  "fields": {
+    "batch": 37,
+    "product": 3,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 81,
+  "fields": {
+    "batch": 37,
+    "product": 4,
+    "quantity": 3,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 82,
+  "fields": {
+    "batch": 38,
+    "product": 2,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 83,
+  "fields": {
+    "batch": 38,
+    "product": 3,
+    "quantity": 2,
+    "price": "2300.00"
+  }
+},
+{
+  "model": "orders.orderbatchitem",
+  "pk": 84,
+  "fields": {
+    "batch": 38,
+    "product": 4,
+    "quantity": 3,
+    "price": "3600.00"
+  }
+},
+{
+  "model": "userAuths.adminuser",
+  "pk": 1,
+  "fields": {
+    "password": "pbkdf2_sha256$1000000$1DZxe4dS4QjQJvQgvjou6b$kMFsyZMsoOOoQgpsNomEJV55yGqAak8abi64Mkhh6B8=",
+    "email": "e@gmail.com",
+    "is_staff": true,
+    "is_active": true,
+    "is_superuser": true,
+    "date_created": "2026-01-30T17:12:53.370Z",
+    "last_login": "2026-01-30T17:14:20.768Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "userAuths.adminuser",
+  "pk": 2,
+  "fields": {
+    "password": "pbkdf2_sha256$1000000$uXIrJ7xkQfq3QahFjH4QvH$U0eDetvIUf4D6QHy/GT6XM/7bcVJCuX0LWtTmJCNNMQ=",
+    "email": "a@gmail.com",
+    "is_staff": true,
+    "is_active": true,
+    "is_superuser": true,
+    "date_created": "2026-02-01T19:16:20.406Z",
+    "last_login": "2026-02-01T19:16:39.584Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "userAuths.telegramuser",
+  "pk": 1,
+  "fields": {
+    "telegram_id": 5680916028,
+    "first_name": "Baddest guy",
+    "username": "Danshanu55",
+    "is_active": true,
+    "date_created": "2026-01-30T17:13:38.325Z",
+    "updated_at": "2026-02-02T13:05:34.476Z"
+  }
+},
+{
+  "model": "userAuths.telegramuser",
+  "pk": 2,
+  "fields": {
+    "telegram_id": 8499580673,
+    "first_name": "Darkseid",
+    "username": "Darkseid_21_01",
+    "is_active": true,
+    "date_created": "2026-01-30T17:16:08.884Z",
+    "updated_at": "2026-01-31T19:01:41.357Z"
+  }
+}
+]

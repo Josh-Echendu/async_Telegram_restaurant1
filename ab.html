@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+  <title>FORK & CO. · premium eats</title>
+  <!-- Tailwind via CDN + custom layer -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js (lightweight magic) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- Font Awesome 6 (free icons) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <!-- smooth animations with tiny gsap? we use pure css but add a touch of class -->
+  <style>
+    /* import modern bright fonts: inter + italic luxury accent */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Quicksand:wght@300..700&display=swap');
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #ffffff;  /* bright clean base like Temu/Shopify */
+      color: #1a1e2b;
+    }
+    
+    /* elegant white-italic headings */
+    .brand-italic {
+      font-family: 'Quicksand', sans-serif;
+      font-weight: 600;
+      font-style: italic;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #2d3648 0%, #121725 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    /* card design : bright, airy, shadows soft */
+    .meal-card {
+      background: #ffffff;
+      border-radius: 28px;
+      box-shadow: 0 12px 30px -8px rgba(0, 20, 30, 0.08), 0 4px 8px -2px rgba(0, 0, 0, 0.02);
+      transition: all 0.25s ease;
+      border: 1px solid rgba(230, 240, 255, 0.5);
+    }
+    
+    .meal-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 24px 40px -12px rgba(0, 100, 150, 0.18);
+      border-color: rgba(180, 210, 255, 0.5);
+    }
+    
+    /* category pills (bright, modern) */
+    .cat-pill {
+      background: #ffffff;
+      border: 1px solid #eef2f8;
+      color: #334155;
+      font-weight: 500;
+      padding: 0.65rem 1.5rem;
+      border-radius: 60px;
+      box-shadow: 0 4px 12px -6px rgba(0,0,0,0.02);
+      transition: 0.15s;
+      white-space: nowrap;
+      backdrop-filter: blur(4px);
+    }
+    
+    .cat-pill.active {
+      background: #1f2a3f;
+      border-color: #1f2a3f;
+      color: white;
+      font-weight: 500;
+      box-shadow: 0 10px 20px -10px #1f2a3f80;
+    }
+    
+    /* sticky header clean */
+    .sticky-bright {
+      backdrop-filter: blur(18px) saturate(180%);
+      background: rgba(255, 255, 255, 0.75);
+      border-bottom: 1px solid rgba(220, 230, 245, 0.7);
+    }
+    
+    /* quantity button modern */
+    .qty-btn {
+      background: white;
+      border: 1px solid #dee7f2;
+      color: #1f2a3f;
+      width: 36px;
+      height: 36px;
+      border-radius: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      transition: 0.15s;
+    }
+    
+    .qty-btn:hover {
+      background: #1f2a3f;
+      border-color: #1f2a3f;
+      color: white;
+    }
+    
+    /* cart drawer (right side bright) */
+    .cart-drawer-bright {
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(14px);
+      border-left: 1px solid #e2eaf5;
+      box-shadow: -25px 0 50px -20px rgba(0,0,0,0.15);
+    }
+    
+    /* toast */
+    .toast-shop {
+      background: #1f2a3f;
+      color: #ffffff;
+      border-radius: 60px;
+      box-shadow: 0 30px 45px -25px #1f2a3fcc, 0 0 0 1px rgba(255,255,255,0.1) inset;
+      font-weight: 500;
+      border: 1px solid #ffffff40;
+    }
+    
+    /* floating micro-animation */
+    @keyframes gentle-pulse {
+      0% { opacity: 0.9; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.02); }
+      100% { opacity: 0.9; transform: scale(1); }
+    }
+    
+    .badge-pulse {
+      animation: gentle-pulse 2s infinite;
+    }
+    
+    /* scroll hidden for categories */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    
+    /* image wrapper */
+    .img-wrapper {
+      border-radius: 24px 24px 12px 12px;
+      overflow: hidden;
+      background: #f7f9fc;
+    }
+    
+    .img-wrapper img {
+      transition: transform 0.4s ease;
+    }
+    .meal-card:hover .img-wrapper img {
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body class="antialiased">
+
+<!-- ALPINE STORE (frontend mock) -->
+<div x-data="{
+  cart: [],
+  activeCategory: 'all',
+  showCart: false,
+  showCheckoutModal: false,
+  toast: { visible: false, message: '' },
+  orderId: 'ORD-' + Math.floor(800000 + Math.random()*200000),
+  
+  // bright, aspirational menu (like Shopify frontpage)
+  meals: [
+    { id: 1, name: 'Truffle Fries', desc: 'parmesan, rosemary, garlic aioli', price: 8.90, category: 'starters', image: 'https://images.unsplash.com/photo-1585109649138-1d2a89562c9b?w=400&auto=format' },
+    { id: 2, name: 'Crispy Calamari', desc: 'lemon, smoked paprika, spicy marinara', price: 12.50, category: 'starters', image: 'https://images.unsplash.com/photo-1599487488171-3d4b4b4b4b4b?w=400&auto=format' },
+    { id: 3, name: 'Grilled Salmon', desc: 'herb butter, asparagus, lemon zest', price: 24.90, category: 'main', image: 'https://images.unsplash.com/photo-1485921325833-c88f3706cf2d?w=400&auto=format' },
+    { id: 4, name: 'Ribeye Steak', desc: 'garlic confit, thyme, red wine jus', price: 34.50, category: 'main', image: 'https://images.unsplash.com/photo-1558030006-450675393462?w=400&auto=format' },
+    { id: 5, name: 'Mushroom Risotto', desc: 'wild mushrooms, truffle oil, parmesan', price: 18.90, category: 'main', image: 'https://images.unsplash.com/photo-1476124369491-e7addf5db371?w=400&auto=format' },
+    { id: 6, name: 'Berry Spritzer', desc: 'fresh mint, lime, sparkling soda', price: 6.90, category: 'drinks', image: 'https://images.unsplash.com/photo-1546173159-315724a616ac?w=400&auto=format' },
+    { id: 7, name: 'Cold Brew Coffee', desc: 'vanilla cream, caramel drizzle', price: 5.90, category: 'drinks', image: 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=400&auto=format' },
+    { id: 8, name: 'Molten Lava Cake', desc: 'warm chocolate, vanilla ice cream', price: 9.90, category: 'desserts', image: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=400&auto=format' },
+    { id: 9, name: 'Tiramisu', desc: 'mascarpone, espresso, cocoa', price: 8.90, category: 'desserts', image: 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=400&auto=format' }
+  ],
+  
+  categories: [],
+
+  
+
+  get filteredMeals() {
+    if (this.activeCategory === 'all') return this.meals;
+    return this.meals.filter(m => m.category === this.activeCategory);
+  },
+  
+  get cartCount() {
+    return this.cart.reduce((acc, i) => acc + i.quantity, 0);
+  },
+  
+  get cartTotal() {
+    return this.cart.reduce((acc, i) => acc + (i.price * i.quantity), 0).toFixed(2);
+  },
+
+  saveCart() {
+  localStorage.setItem('fork_cart', JSON.stringify(this.cart));
+  },
+  
+  addToCart(meal) {
+    const found = this.cart.find(i => i.id === meal.id);
+
+    if (found) {
+        found.quantity++;
+    } else {
+        this.cart.push({ ...meal, quantity: 1 });
+    }
+
+    this.saveCart();
+    },
+  
+  removeOne(mealId) {
+    const idx = this.cart.findIndex(i => i.id === mealId);
+
+    if (idx !== -1) {
+        if (this.cart[idx].quantity > 1) {
+            this.cart[idx].quantity--;
+        } else {
+            this.cart.splice(idx, 1);
+        }
+    }
+
+    this.saveCart();
+  },
+  
+  clearCart() {
+    this.cart = [];
+    localStorage.removeItem('fork_cart');
+  },
+  
+  placeOrder() {
+    if (this.cart.length === 0) {
+      this.toast = { visible: true, message: '✨ Your cart is empty — add some delicious items!' };
+      setTimeout(() => this.toast.visible = false, 2200);
+      return;
+    }
+    this.orderId = 'ORD-' + Math.floor(800000 + Math.random()*200000);
+    this.showCheckoutModal = true;
+  },
+  
+  confirmOrder() {
+    this.showCheckoutModal = false;
+    this.showCart = false;
+    this.clearCart();
+    this.toast = { visible: true, message: '🍽️ YOUR ORDER HAS BEEN SENT TO THE KITCHEN. PLEASE CHECK YOUR WHATSAPP FOR ORDER DETAILS.' };
+    setTimeout(() => this.toast.visible = false, 4200);
+  }
+}"
+
+x-init="
+  activeCategory = 'all';
+
+  const saved = localStorage.getItem('fork_cart');
+
+  if (saved) {
+    this.cart = JSON.parse(saved);
+  }
+"
+class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
+>
+
+<!-- ===== HEADER (sticky, bright) ===== -->
+<header class="sticky top-0 z-40 sticky-bright py-3 sm:py-4 flex items-center justify-between rounded-2xl px-3">
+  <div class="flex items-center gap-2">
+    <i class="fas fa-utensils text-3xl text-[#1f2a3f]"></i>
+    <span class="text-2xl sm:text-3xl brand-italic font-bold">fork & co.</span>
+  </div>
+  <button @click="showCart = true" class="relative p-2.5 rounded-full bg-white shadow-sm border border-[#e9ecf2]">
+    <i class="fas fa-bag-shopping text-xl text-[#1f2a3f]"></i>
+    <span x-show="cartCount > 0" x-cloak class="absolute -top-1 -right-1 bg-[#1f2a3f] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">{{ cartCount }}</span>
+  </button>
+</header>
+
+<!-- ===== CATEGORY PILLS (horizontal scroll) ===== -->
+<div class="my-4 flex flex-nowrap md:flex-wrap gap-2 overflow-x-auto pb-3 no-scrollbar md:justify-start">
+  <template x-for="cat in categories" :key="cat.id">
+    <button @click="activeCategory = cat.id"
+      :class="{ 'active': activeCategory === cat.id }"
+      class="cat-pill text-sm sm:text-base transition-all duration-200">
+      <span x-text="cat.name"></span>
+    </button>
+  </template>
+</div>
+
+<!-- ===== MEALS GRID (beautiful cards) ===== -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+  <template x-for="meal in filteredMeals" :key="meal.id">
+    <div class="meal-card p-4 flex flex-col">
+      <!-- image container -->
+      <div class="img-wrapper w-full h-44 sm:h-48 bg-[#f5f7fb] rounded-2xl">
+        <img :src="meal.image" :alt="meal.name" class="w-full h-full object-cover">
+      </div>
+      
+      <!-- text -->
+      <div class="mt-3 flex-1">
+        <h3 class="text-xl font-semibold text-[#1a1e2b]" x-text="meal.name"></h3>
+        <p class="text-sm text-[#4b5565] mt-0.5 line-clamp-2" x-text="meal.desc"></p>
+        
+        <!-- price and action row -->
+        <div class="flex items-center justify-between mt-4">
+          <!-- dynamic if in cart -->
+          <template x-for="item in cart.filter(i => i.id === meal.id)" :key="item.id">
+            <div class="flex items-center space-x-1 bg-[#f2f6fd] rounded-full border border-[#dee7f2] p-0.5">
+              <button @click="removeOne(meal.id)" class="qty-btn w-8 h-8 text-sm"><i class="fas fa-minus"></i></button>
+              <span class="font-semibold w-6 text-center" x-text="item.quantity"></span>
+              <button @click="addToCart(meal)" class="qty-btn w-8 h-8 text-sm"><i class="fas fa-plus"></i></button>
+            </div>
+          </template>
+          
+          <button x-show="!cart.some(i => i.id === meal.id)" @click="addToCart(meal)" 
+            class="bg-[#1f2a3f] hover:bg-[#2b384f] text-white px-5 py-2.5 rounded-full text-sm font-medium shadow-md flex items-center gap-1 transition-all">
+            <i class="fas fa-cart-plus"></i> <span>Add</span>
+          </button>
+          
+          <span class="text-lg font-bold text-[#1f2a3f]" x-show="!cart.some(i => i.id === meal.id)">$<span x-text="meal.price.toFixed(2)"></span></span>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>
+
+<!-- ===== CART DRAWER (bright, modal right) ===== -->
+<div x-show="showCart" class="fixed inset-0 z-50 flex justify-end" @keydown.escape.window="showCart = false">
+  <!-- backdrop -->
+  <div class="absolute inset-0 bg-black/5 backdrop-blur-[2px]" @click="showCart = false"></div>
+  
+  <!-- drawer -->
+  <div class="relative w-full max-w-md cart-drawer-bright h-full shadow-xl flex flex-col"
+       x-show="showCart" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-x-full opacity-0" x-transition:enter-end="translate-x-0 opacity-100" x-transition:leave="transition ease-in duration-200" x-transition:leave-start="translate-x-0 opacity-100" x-transition:leave-end="translate-x-full opacity-0">
+    
+    <div class="flex items-center justify-between p-5 border-b border-[#eef2f8]">
+      <h2 class="text-2xl brand-italic font-bold"><i class="fas fa-shopping-bag mr-2"></i>your cart</h2>
+      <button @click="showCart = false" class="w-9 h-9 rounded-full bg-white border border-[#dde3ed] text-[#1f2a3f]"><i class="fas fa-times"></i></button>
+    </div>
+    
+    <div class="flex-1 overflow-y-auto p-5 space-y-4">
+      <template x-for="item in cart" :key="item.id">
+        <div class="flex items-center gap-4 bg-white p-3 rounded-2xl shadow-sm border border-[#eef2f8]">
+          <img :src="item.image" class="w-16 h-16 rounded-xl object-cover bg-[#f0f4fa]">
+          <div class="flex-1">
+            <h4 class="font-semibold" x-text="item.name"></h4>
+            <div class="flex items-center justify-between mt-2">
+              <div class="flex items-center border border-[#dde3ed] rounded-full bg-white">
+                <button @click="removeOne(item.id)" class="px-3 py-1 text-[#1f2a3f] font-medium">−</button>
+                <span class="px-3 py-1 font-medium" x-text="item.quantity"></span>
+                <button @click="addToCart(item)" class="px-3 py-1 text-[#1f2a3f] font-medium">+</button>
+              </div>
+              <span class="font-bold text-[#1f2a3f]" x-text="'$' + (item.price * item.quantity).toFixed(2)"></span>
+            </div>
+          </div>
+        </div>
+      </template>
+      <div x-show="cart.length === 0" class="text-center py-12 text-[#8e9aaf] flex flex-col items-center">
+        <i class="fas fa-box-open text-5xl mb-3 opacity-30"></i>
+        <p>your cart feels light</p>
+        <p class="text-sm">add some favorites</p>
+      </div>
+    </div>
+    
+    <div class="border-t border-[#eef2f8] p-5 bg-white/80">
+      <div class="flex justify-between text-xl font-bold mb-4">
+        <span>Total</span>
+        <span class="text-[#1f2a3f]" x-text="'$' + cartTotal"></span>
+      </div>
+      <button @click="placeOrder()" class="w-full bg-[#1f2a3f] hover:bg-[#2b384f] text-white font-semibold py-4 rounded-2xl text-lg shadow-md flex items-center justify-center gap-3">
+        <i class="fas fa-lock"></i> CHECKOUT
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CHECKOUT MODAL (order summary) ===== -->
+<div x-show="showCheckoutModal" class="fixed inset-0 z-50 flex items-center justify-center p-4" @keydown.escape.window="showCheckoutModal = false">
+  <div class="absolute inset-0 bg-black/10 backdrop-blur-sm" @click="showCheckoutModal = false"></div>
+  <div class="relative bg-white max-w-md w-full rounded-3xl p-6 shadow-2xl border border-[#eef2f8]"
+       x-show="showCheckoutModal" x-transition>
+    <h3 class="text-2xl brand-italic font-bold mb-1">order summary</h3>
+    <p class="text-sm text-[#6f7c91] font-mono">ref: <span x-text="orderId"></span></p>
+    
+    <div class="my-5 max-h-60 overflow-y-auto space-y-3 pr-2">
+      <template x-for="item in cart" :key="item.id">
+        <div class="flex justify-between items-center border-b border-[#edf2f9] pb-2">
+          <span><span class="font-bold" x-text="item.quantity"></span> × <span x-text="item.name"></span></span>
+          <span class="font-semibold" x-text="'$' + (item.price * item.quantity).toFixed(2)"></span>
+        </div>
+      </template>
+    </div>
+    
+    <div class="flex justify-between text-xl font-bold border-t border-[#dde3ed] pt-3">
+      <span>total</span>
+      <span x-text="'$' + cartTotal"></span>
+    </div>
+    
+    <div class="flex gap-3 mt-6">
+      <button @click="showCheckoutModal = false" class="flex-1 py-3 border border-[#cfdbe9] rounded-xl text-[#1f2a3f] font-medium">back</button>
+      <button @click="confirmOrder()" class="flex-1 bg-[#1f2a3f] text-white py-3 rounded-xl font-semibold shadow flex items-center justify-center gap-2">
+        <i class="fab fa-whatsapp"></i> confirm
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TOAST (bright and friendly) ===== -->
+<div x-show="toast.visible" x-cloak class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md px-4">
+  <div class="toast-shop px-5 py-4 flex items-center gap-3 shadow-2xl"
+       x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-90" x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-90">
+    <i class="fas fa-check-circle text-white text-xl"></i>
+    <span class="flex-1 text-sm" x-text="toast.message"></span>
+    <button @click="toast.visible = false" class="opacity-70 hover:opacity-100"><i class="fas fa-times"></i></button>
+  </div>
+</div>
+
+<!-- tiny style for line clamp -->
+<style>
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  [x-cloak] { display: none !important; }
+</style>
+
+</div>
+
+<!-- optional micro interaction (no gsap needed, but we keep pure css) -->
+</body>
+</html>

@@ -1,0 +1,70 @@
+Excellent observation — this means you’re really understanding Docker now 👏
+Let’s clear this up cleanly.
+
+---
+
+## ✅ Both workflows are correct
+
+### Option 1 (two steps — explicit)
+
+```bash
+docker pull ubuntu
+docker run -it ubuntu bash
+```
+
+### Option 2 (one step — implicit, what you did)
+
+```bash
+docker run -it ubuntu bash
+```
+
+If the image is **not present locally**, Docker automatically does:
+
+1. `docker pull ubuntu`
+2. Then `docker run ubuntu`
+
+That’s why `hello-world` worked even though you never pulled it manually.
+
+---
+
+## 🧠 What actually happens internally
+
+When you run:
+
+```bash
+docker run hello-world
+```
+
+Docker checks:
+
+1. Do I already have `hello-world` image locally?
+2. ❌ No → Pull it from Docker Hub
+3. ✅ Then run it
+
+Same with `ubuntu`.
+
+---
+
+## 🎯 Best practice
+
+Most people use:
+
+```bash
+docker run ...
+```
+
+and let Docker auto-pull.
+
+You only use `docker pull` when:
+
+* You want to download ahead of time
+* You want a specific version
+* You’re on slow internet
+
+---
+
+## 🔥 Your understanding is now correct:
+
+> ✔ Images must exist before containers run
+> ✔ Docker auto-pulls if missing
+> ✔ Containers are runtime instances of images

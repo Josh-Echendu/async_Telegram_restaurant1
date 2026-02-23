@@ -1,0 +1,72 @@
+ip a: 
+    This is used to find out the information about the available network interfaces and thier associated IP address on a linux based system
+
+docker network ls:
+    This is used to list out all available networks
+
+docker network create <name>:
+    This is used to create a new network with a specifc name
+
+docker network create --subnet 10.0.0.0/16:
+    this is used to create a new network with a custom subnet range
+
+docker network inspect <network-name or ID>:
+    This is used to inspect a docker network
+
+docker run --network <network-name> <image-name>:
+    This is used to run a new container and connect it to a specific docker network apart from docker0 which is default
+
+docker network connect <network-name><container_name>:
+    Connecting a running container to a Docker network
+
+docker network disconnect <network-name><container_name>:
+    Disconnect a running container from a docker network(does not work with none and host network modes)
+
+docker network ls: this are the 3 default networks thier name, drive and scope
+NETWORK ID     NAME      DRIVER    SCOPE
+61eed84fd173   bridge    bridge    local
+5f15baa82460   host      host      local
+4cdaa8edfefc   none      null      local
+
+docker network inspect 61eed84fd173: 
+    This is used to inspect a docker network , its ip subnet, ip gateway, name, driver and containers running on that network bridge 
+    example:
+    C:\Windows\System32>docker network inspect 61eed84fd173
+    [
+        {
+            "Name": "bridge",
+            "Id": "61eed84fd1735bc25b120ba62fdbffea40c7b265013941a37401dab92070297c",
+            "Created": "2026-02-04T01:03:01.7165832Z",
+            "Scope": "local",
+            "Driver": "bridge",
+            "EnableIPv4": true,
+            "EnableIPv6": false,
+            "IPAM": {
+                "Driver": "default",
+                "Options": null,
+                "Config": [
+                    {
+                        "Subnet": "172.17.0.0/16",
+                        "Gateway": "172.17.0.1"
+                    }
+                ]
+            },
+        "Containers": {
+            "0548e0687f1ec8ecea7eb3d99727d523f3a822608a81f2088f366cb98596886c": {
+                "Name": "contbuild1",
+                "EndpointID": "e79d72af4755796b2a1793b8ebc8597124e4f76e3e2c2f2567ac7c1ac7b6f93b",
+                "MacAddress": "a6:46:17:84:e3:c8",
+                "IPv4Address": "172.17.0.4/16",
+                "IPv6Address": ""
+            },
+            "5f782a9b10843b251e726b21d22910013fd4c8f8b0727b5ee8d6ee06f12f2113": {
+                "Name": "alpi",
+                "EndpointID": "c19d57cdb43e23c093759efc6601048c3f78746a6766ff7ad6223d69802c9e65",
+                "MacAddress": "aa:f8:dd:e2:f7:31",
+                "IPv4Address": "172.17.0.3/16",
+                "IPv6Address": ""
+            }
+        }
+    }
+]
+

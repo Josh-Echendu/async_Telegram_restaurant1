@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+  <title>premium · whisk & spoon</title>
+  <!-- Tailwind via CDN + a touch of custom smoothness -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js for reactive state -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- Font Awesome 6 (free) for crisp icons (cart, plus/minus) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    /* extra smoothness & toast animations */
+    .cart-slide { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .toast-animation { animation: slideUpFade 3s ease forwards; }
+    @keyframes slideUpFade {
+      0% { opacity: 0; transform: translateY(20px); }
+      10% { opacity: 1; transform: translateY(0); }
+      80% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-10px); }
+    }
+    .category-pill-active {
+      background-color: #1e293b; /* slate-800 */
+      color: white;
+      box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+    }
+    /* hide scrollbar for horizontal categories but keep functionality */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    /* card softness */
+    .meal-card {
+      transition: all 0.15s ease;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.02);
+    }
+    .meal-card:active { transform: scale(0.99); background-color: #fafafa; }
+    /* sticky header polish */
+    .sticky-blur {
+      backdrop-filter: blur(8px);
+      background-color: rgba(255,255,255,0.85);
+    }
+  </style>
+</head>
+<body class="bg-neutral-50 font-sans antialiased text-gray-800">
+
+<!-- MAIN APP – ALPINE ROOT -->
+<div x-data="restaurantApp()" class="relative min-h-screen">
+    
+  <!-- STICKY HEADER with cart & logo -->
+  <header class="sticky top-0 z-30 flex items-center justify-between px-4 py-3 sticky-blur border-b border-white/40 shadow-sm">
+    <div class="flex items-center space-x-2">
+      <i class="fa-solid fa-utensils text-amber-600 text-xl"></i>
+      <span class="font-bold text-xl tracking-tight text-gray-800">whisk&nbsp;<span class="text-amber-600">·</span>&nbsp;spoon</span>
+    </div>
+    <button @click="showCartDrawer = true" class="relative p-2 rounded-full bg-white/70 shadow-sm hover:bg-white transition">
+      <i class="fa-solid fa-bag-shopping text-gray-700 text-xl"></i>
+      <span x-show="cartCount > 0" x-cloak class="absolute -top-1 -right-1 bg-amber-600 text-white text-xs font-bold rounded-full min-w-[1.25rem] h-5 flex items-center justify-center px-1 border border-white shadow-sm" x-text="cartCount"></span>
+    </button>
+  </header>
+
+  <!-- MAIN CONTENT (categories + meals) -->
+  <main class="px-4 py-4 md:px-6 max-w-7xl mx-auto">
+
+    <!-- CATEGORIES: horizontal scroll on mobile, centered wrap on desktop -->
+    <div class="mb-6">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Categories</h2>
+        <span class="text-xs text-gray-400" x-text="`${filteredMeals.length} items`"></span>
+      </div>
+      <!-- scrollable pills container -->
+      <div class="overflow-x-auto no-scrollbar pb-2 -mb-2">
+        <div class="flex flex-nowrap md:flex-wrap md:justify-center gap-2 md:gap-2">
+          <template x-for="cat in categories" :key="cat">
+            <button @click="selectedCategory = cat;"
+                    :class="selectedCategory === cat ? 'category-pill-active' : 'bg-white/80 text-gray-700 hover:bg-gray-100'"
+                    class="flex-shrink-0 px-5 py-2.5 rounded-full text-sm font-medium shadow-sm transition-all duration-200 border border-gray-200/70">
+              <span x-text="cat"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- MEALS GRID (cards) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mt-4">
+      <template x-for="meal in filteredMeals" :key="meal.id">
+        <div class="meal-card bg-white rounded-2xl overflow-hidden border border-gray-100/80">
+          <!-- image placeholder (premium gradient) -->
+          <div class="h-40 bg-gradient-to-br from-amber-100 to-stone-200 relative flex items-center justify-center text-stone-400/40">
+            <i class="fa-solid fa-image text-5xl"></i>
+            <span class="absolute bottom-2 left-2 text-xs bg-black/20 text-white px-2 py-0.5 rounded-full backdrop-blur-sm" x-text="meal.category"></span>
+          </div>
+          <!-- card content -->
+          <div class="p-4">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-lg text-gray-800" x-text="meal.name"></h3>
+              <span class="font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full text-sm" x-text="'€' + meal.price.toFixed(2)"></span>
+            </div>
+            <p class="text-sm text-gray-500 mt-1 line-clamp-2" x-text="meal.desc"></p>
+            
+            <!-- quantity / add controls -->
+            <div class="mt-4 flex items-center justify-between">
+              <div x-show="!getItemQty(meal.id)" class="w-full">
+                <button @click="addToCart(meal)" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-2.5 rounded-xl shadow-sm transition flex items-center justify-center gap-2">
+                  <i class="fa-solid fa-plus"></i> <span>Add</span>
+                </button>
+              </div>
+              <div x-show="getItemQty(meal.id) > 0" x-cloak class="flex items-center justify-between w-full bg-gray-100 rounded-xl p-1">
+                <button @click="decreaseQty(meal.id)" class="w-10 h-10 rounded-lg bg-white text-amber-700 shadow-sm flex items-center justify-center hover:bg-gray-50">
+                  <i class="fa-solid fa-minus"></i>
+                </button>
+                <span class="font-semibold text-lg w-8 text-center" x-text="getItemQty(meal.id)"></span>
+                <button @click="increaseQty(meal.id)" class="w-10 h-10 rounded-lg bg-amber-600 text-white shadow-sm flex items-center justify-center hover:bg-amber-700">
+                  <i class="fa-solid fa-plus"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- empty state if no meals in category (should not happen but safe) -->
+    <div x-show="filteredMeals.length === 0" class="text-center py-12">
+      <i class="fa-regular fa-face-smile-wink text-5xl text-gray-300"></i>
+      <p class="text-gray-400 mt-3">nothing here, choose another category</p>
+    </div>
+  </main>
+
+  <!-- CART DRAWER (slide from right) -->
+  <div x-show="showCartDrawer" x-cloak @click.away="showCartDrawer = false" class="fixed inset-0 z-50 flex justify-end">
+    <!-- backdrop -->
+    <div class="fixed inset-0 bg-black/20 backdrop-blur-sm" @click="showCartDrawer = false"></div>
+    <!-- drawer -->
+    <div class="relative w-full max-w-md bg-white h-full shadow-2xl cart-slide flex flex-col" @click.stop>
+      <div class="flex items-center justify-between p-5 border-b border-gray-100">
+        <h2 class="text-xl font-bold flex items-center gap-2"><i class="fa-regular fa-rectangle-list text-amber-600"></i> your order</h2>
+        <button @click="showCartDrawer = false" class="p-2 rounded-full hover:bg-gray-100">
+          <i class="fa-solid fa-xmark text-xl"></i>
+        </button>
+      </div>
+
+      <!-- cart items list (scroll) -->
+      <div class="flex-1 overflow-y-auto p-5 space-y-5">
+        <template x-for="item in cartItems" :key="item.id">
+          <div class="flex gap-3 items-center">
+            <!-- tiny image placeholder -->
+            <div class="w-14 h-14 rounded-xl bg-amber-50 flex items-center justify-center text-amber-300/50">
+              <i class="fa-solid fa-bowl-food text-xl"></i>
+            </div>
+            <div class="flex-1">
+              <p class="font-semibold" x-text="item.name"></p>
+              <p class="text-sm text-gray-400" x-text="'€' + item.price.toFixed(2) + ' each'"></p>
+            </div>
+            <div class="flex items-center gap-2 bg-gray-100 rounded-full px-2 py-1">
+              <button @click="decreaseQty(item.id)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-amber-700"><i class="fa-solid fa-minus text-xs"></i></button>
+              <span class="min-w-[1.5rem] text-center font-medium" x-text="item.qty"></span>
+              <button @click="increaseQty(item.id)" class="w-7 h-7 rounded-full bg-amber-600 text-white shadow-sm flex items-center justify-center"><i class="fa-solid fa-plus text-xs"></i></button>
+            </div>
+          </div>
+        </template>
+        <div x-show="cartItems.length === 0" class="text-center py-10 text-gray-400">
+          <i class="fa-regular fa-heart text-4xl mb-2"></i>
+          <p>your cart feels lonely</p>
+        </div>
+      </div>
+
+      <!-- footer with total & checkout -->
+      <div class="border-t border-gray-100 p-5 space-y-4">
+        <div class="flex justify-between font-semibold text-lg">
+          <span>total</span>
+          <span x-text="'€' + cartTotal.toFixed(2)"></span>
+        </div>
+        <button @click="handleCheckout()" :disabled="cartItems.length === 0" :class="cartItems.length === 0 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-700 text-white shadow-lg'"
+                class="w-full py-4 rounded-2xl font-bold text-lg transition flex items-center justify-center gap-2">
+          <i class="fa-regular fa-paper-plane"></i> checkout
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ORDER SUMMARY MODAL (after checkout) -->
+  <div x-show="showOrderModal" x-cloak class="fixed inset-0 z-[70] flex items-center justify-center p-4">
+    <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" @click="showOrderModal = false"></div>
+    <div class="relative bg-white max-w-md w-full rounded-3xl shadow-2xl p-6 animate-fade-in">
+      <div class="text-center">
+        <div class="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+          <i class="fa-regular fa-circle-check text-3xl text-amber-600"></i>
+        </div>
+        <h3 class="text-2xl font-bold">order received</h3>
+        <p class="text-gray-500 mt-1">kitchen is preparing</p>
+      </div>
+      <div class="mt-6 bg-neutral-50 rounded-2xl p-5 space-y-3">
+        <div class="flex justify-between text-sm">
+          <span class="text-gray-500">batch id</span>
+          <span class="font-mono font-bold text-amber-700" x-text="'ORD-' + Math.floor(Math.random()*9000+1000) + '-' + Date.now().toString().slice(-4)"></span>
+        </div>
+        <div class="border-t border-gray-200 my-2"></div>
+        <template x-for="item in cartItems" :key="item.id">
+          <div class="flex justify-between text-sm">
+            <span><span class="font-medium" x-text="item.qty + 'x'"></span> <span class="text-gray-600" x-text="item.name"></span></span>
+            <span class="font-medium" x-text="'€' + (item.price * item.qty).toFixed(2)"></span>
+          </div>
+        </template>
+        <div class="border-t border-gray-200 pt-3 flex justify-between font-bold">
+          <span>total</span>
+          <span class="text-amber-700" x-text="'€' + cartTotal.toFixed(2)"></span>
+        </div>
+      </div>
+      <button @click="showOrderModal = false; showCartDrawer = false; clearCartAfterCheckout()" class="mt-5 w-full bg-gray-900 text-white py-3 rounded-xl font-medium hover:bg-gray-800 transition">continue browsing</button>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div x-show="showToast" x-cloak @click="showToast = false" class="fixed bottom-8 left-4 right-4 md:left-auto md:right-8 md:w-96 z-[100] cursor-pointer">
+    <div class="bg-gray-900 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-3 toast-animation">
+      <i class="fa-regular fa-bell text-amber-300 text-xl"></i>
+      <p class="text-sm font-medium leading-tight" x-text="toastMessage"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ALPINE STORE & LOGIC -->
+<script>
+  function restaurantApp() {
+    return {
+      // ---------- data ----------
+      categories: ['STARTERS', 'MAIN MEALS', 'DRINKS', 'DESSERTS'],
+      selectedCategory: 'STARTERS',
+      meals: [
+        { id: 1, name: 'Crispy Calamari', desc: 'with lemon aioli & wild rocket', price: 9.90, category: 'STARTERS' },
+        { id: 2, name: 'Bruschetta Trio', desc: 'tomato, basil, olive tapenade', price: 8.50, category: 'STARTERS' },
+        { id: 3, name: 'Truffle Arancini', desc: 'mushroom & parmesan', price: 10.20, category: 'STARTERS' },
+        { id: 4, name: 'Ribeye Steak', desc: '300g, chimichurri & rosemary potatoes', price: 28.50, category: 'MAIN MEALS' },
+        { id: 5, name: 'Mushroom Risotto', desc: 'parmesan foam, truffle oil', price: 18.90, category: 'MAIN MEALS' },
+        { id: 6, name: 'Seared Salmon', desc: 'with fennel & orange salad', price: 22.50, category: 'MAIN MEALS' },
+        { id: 7, name: 'Lemonade (house)', desc: 'fresh mint & ginger', price: 4.50, category: 'DRINKS' },
+        { id: 8, name: 'Espresso Martini', desc: 'vodka, fresh espresso', price: 9.00, category: 'DRINKS' },
+        { id: 9, name: 'Craft beer IPA', desc: 'local hoppy brew', price: 5.90, category: 'DRINKS' },
+        { id: 10, name: 'Panna Cotta', desc: 'vanilla bean & berry coulis', price: 7.50, category: 'DESSERTS' },
+        { id: 11, name: 'Molten choc cake', desc: 'with vanilla gelato', price: 8.90, category: 'DESSERTS' },
+        { id: 12, name: 'Tiramisu', desc: 'classic mascarpone', price: 7.90, category: 'DESSERTS' }
+      ],
+      cart: [],                    // { id, name, price, qty }
+      showCartDrawer: false,
+      showOrderModal: false,
+      showToast: false,
+      toastMessage: '',
+      // ---------- getters ----------
+      get filteredMeals() {
+        return this.meals.filter(m => m.category === this.selectedCategory);
+      },
+      get cartItems() {
+        return this.cart;
+      },
+      get cartCount() {
+        return this.cart.reduce((acc, i) => acc + i.qty, 0);
+      },
+      get cartTotal() {
+        return this.cart.reduce((acc, i) => acc + i.price * i.qty, 0);
+      },
+      // ---------- methods ----------
+      init() {
+        // any startup? maybe localstorage? but we skip for demo
+      },
+      getItemQty(id) {
+        const item = this.cart.find(i => i.id === id);
+        return item ? item.qty : 0;
+      },
+      addToCart(meal) {
+        const existing = this.cart.find(i => i.id === meal.id);
+        if (existing) {
+          existing.qty++;
+        } else {
+          this.cart.push({ ...meal, qty: 1 });
+        }
+      },
+      increaseQty(id) {
+        const item = this.cart.find(i => i.id === id);
+        if (item) item.qty++;
+      },
+      decreaseQty(id) {
+        const idx = this.cart.findIndex(i => i.id === id);
+        if (idx === -1) return;
+        if (this.cart[idx].qty > 1) {
+          this.cart[idx].qty--;
+        } else {
+          this.cart.splice(idx, 1);
+        }
+      },
+      handleCheckout() {
+        if (this.cart.length === 0) return;
+        // hide drawer and show order summary modal
+        this.showCartDrawer = false;
+        this.showOrderModal = true;
+      },
+      clearCartAfterCheckout() {
+        // we do NOT clear cart immediately — up to you: keep cart? but typical "after order" we don't clear until next?
+        // let's keep it as many restaurants keep cart after order? better: keep items, but user can continue.
+        // but we should NOT automatically clear — but if they checkout again, it's weird. so let's keep cart as-is for demo.
+        // we show toast after modal is closed (call after order modal closes)
+        // trigger toast after modal close
+        if (!this.showOrderModal) {
+          this.spawnToast();
+        }
+      },
+      spawnToast() {
+        this.toastMessage = '🍽️ YOUR ORDER HAS BEEN SENT TO THE KITCHEN. PLEASE CHECK YOUR WHATSAPP FOR ORDER DETAILS.';
+        this.showToast = true;
+        setTimeout(() => {
+          this.showToast = false;
+        }, 3500);
+      }
+    }
+  }
+</script>
+
+
+
+<!-- additional style for x-cloak -->
+<style>
+  [x-cloak] { display: none !important; }
+  .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+</style>
+
+
+</body>
+</html>

@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+  <title>ꜰᴏʀᴋ & ɢᴏʟᴅ · ᴛʜᴇ ᴘʀᴇᴍɪᴜᴍ ᴋɪᴛᴄʜᴇɴ</title>
+  <!-- Tailwind + luxury extensions -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js for god-tier reactivity -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- Font Awesome 6 Pro (kith) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <!-- GSAP for buttery animations (just a touch) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <style>
+    /* GOD TIER TYPOGRAPHY + DIVINE FINISHES */
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,500;1,600;1,700;1,800&family=Manrope:wght@300;400;500;600;700;800&display=swap');
+    
+    :root {
+      --gold-1: #f9e2b7;
+      --gold-2: #dbb557;
+      --gold-3: #b88a3d;
+      --gold-4: #8a662a;
+      --dark-velvet: #1e1915;
+      --cream-puff: #fffcf5;
+      --marble: #faf3e9;
+    }
+    
+    body {
+      font-family: 'Manrope', sans-serif;
+      background: var(--marble);
+      background-image: radial-gradient(circle at 10% 20%, rgba(219, 181, 87, 0.03) 0%, transparent 30%),
+                        linear-gradient(145deg, #fcf7ef 0%, #f5ede1 100%);
+      min-height: 100vh;
+      position: relative;
+    }
+    
+    /* gold italic masterpiece */
+    .gold-italic-premium {
+      font-family: 'Playfair Display', serif;
+      font-style: italic;
+      font-weight: 800;
+      background: linear-gradient(145deg, #b68b40 0%, #e5c87b 40%, #f9e2b7 70%, #b68b40 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-shadow: 0 2px 10px rgba(183, 137, 54, 0.2);
+      letter-spacing: -0.02em;
+    }
+    
+    /* celestial card glow */
+    .card-divine {
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(219, 181, 87, 0.25);
+      border-radius: 2.5rem 2.5rem 2rem 2rem;
+      box-shadow: 0 25px 45px -18px rgba(100, 70, 20, 0.35),
+                  inset 0 1px 2px rgba(255, 255, 255, 0.8);
+      transition: all 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    }
+    
+    .card-divine:hover {
+      box-shadow: 0 35px 55px -18px #b68b40, 0 10px 25px -12px #8a662a;
+      transform: translateY(-6px) scale(1.01);
+      border-color: rgba(219, 181, 87, 0.6);
+    }
+    
+    /* sticky header with holy glow */
+    .sticky-god {
+      backdrop-filter: blur(16px) saturate(180%);
+      background: rgba(255, 250, 240, 0.7);
+      border-bottom: 1px solid rgba(219, 181, 87, 0.3);
+      box-shadow: 0 10px 30px -15px rgba(0,0,0,0.1), 0 0 0 1px rgba(219, 181, 87, 0.1) inset;
+    }
+    
+    /* category pill god mode */
+    .pill-eternal {
+      background: rgba(255, 255, 255, 0.5);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(219, 181, 87, 0.35);
+      color: #3e3327;
+      font-weight: 600;
+      padding: 0.8rem 1.8rem;
+      border-radius: 60px;
+      letter-spacing: 0.3px;
+      box-shadow: 0 6px 16px -12px #b68b40;
+      transition: 0.2s;
+    }
+    
+    .pill-eternal.active {
+      background: linear-gradient(115deg, #1f1a14, #2f281e);
+      border-color: #f5d36c;
+      color: #fbebb0;
+      box-shadow: 0 15px 25px -12px #dbb557, 0 0 0 2px rgba(251, 235, 176, 0.3) inset;
+      font-weight: 700;
+    }
+    
+    .pill-eternal:hover:not(.active) {
+      background: rgba(255, 249, 235, 0.9);
+      border-color: #dbb557;
+    }
+    
+    /* quantity button divine */
+    .btn-quantity-god {
+      background: white;
+      border: 1px solid #f0dbb8;
+      color: #b88a3d;
+      width: 38px;
+      height: 38px;
+      border-radius: 40px;
+      font-weight: 600;
+      box-shadow: 0 4px 8px -8px #bba16d;
+      transition: 0.15s;
+    }
+    
+    .btn-quantity-god:hover {
+      background: #dbb557;
+      border-color: #b88a3d;
+      color: #1e1915;
+      transform: scale(1.08);
+      box-shadow: 0 6px 16px -8px #b68b40;
+    }
+    
+    /* cart drawer levitation */
+    .drawer-heaven {
+      background: rgba(255, 248, 235, 0.95);
+      backdrop-filter: blur(20px);
+      border-left: 2px solid #f5d36c;
+      box-shadow: -30px 0 60px -20px rgba(110, 70, 10, 0.4);
+    }
+    
+    /* toast from above */
+    .toast-god {
+      background: #1e1915f0;
+      backdrop-filter: blur(16px);
+      border: 1px solid #f5d36c;
+      border-radius: 100px;
+      box-shadow: 0 30px 50px -25px #00000060, 0 0 0 2px rgba(245, 211, 108, 0.2) inset;
+      color: #fffbee;
+    }
+    
+    /* shimmer effect for images */
+    .image-shimmer {
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .image-shimmer::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 50%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+      animation: shimmer 6s infinite;
+    }
+    
+    @keyframes shimmer {
+      0% { left: -100%; }
+      20% { left: 120%; }
+      100% { left: 120%; }
+    }
+    
+    /* custom scrollbar godly */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #eadbc5;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #b68b40;
+      border-radius: 20px;
+    }
+    
+    /* gold text accent */
+    .text-gold-deep {
+      color: #b68b40;
+    }
+    
+    /* floating animation */
+    @keyframes float {
+      0% { transform: translateY(0px); }
+      50% { transform: translateY(-3px); }
+      100% { transform: translateY(0px); }
+    }
+    .float-gentle {
+      animation: float 4s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="antialiased text-[#1e1915] selection:bg-[#dbb557] selection:text-[#1a1410]">
+
+<!-- GOD TIER ALPINE STORE WITH IMMERSIVE DATA -->
+<div x-data="{
+  // divine cart state
+  cart: [],
+  activeCategory: 'all',
+  showCart: false,
+  showCheckoutModal: false,
+  toast: { visible: false, message: '', isSuccess: true },
+  batchId: 'GOLD-' + Math.floor(100000 + Math.random()*900000),
+  
+  // celestial menu collection
+  meals: [
+    { id: 1, name: '24K Tostone', desc: 'crispy plantain, gold dust, smoked yogurt', price: 18.90, category: 'starters', image: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?w=400&auto=format' },
+    { id: 2, name: 'Wagyu Tataki', desc: 'seared wagyu, yuzu truffle, edible gold leaf', price: 34.50, category: 'starters', image: 'https://images.unsplash.com/photo-1558030006-450675393462?w=400&auto=format' },
+    { id: 3, name: 'Golden Lobster Ravioli', desc: 'saffron pasta, lobster claw, champagne cream', price: 42.90, category: 'main', image: 'https://images.unsplash.com/photo-1584277261846-865f3daeb22d?w=400&auto=format' },
+    { id: 4, name: 'A5 Miyazaki Ribeye', desc: 'charcoal seared, truffle butter, crystal salt', price: 89.00, category: 'main', image: 'https://images.unsplash.com/photo-1600891964092-4316c288032e?w=400&auto=format' },
+    { id: 5, name: 'Oscietra Caviar Pizza', desc: 'blini crust, creme fraiche, chives', price: 72.50, category: 'main', image: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400&auto=format' },
+    { id: 6, name: 'Gold Rush Spritz', desc: 'rosé, peach bellini, 24k gold flakes', price: 22.00, category: 'drinks', image: 'https://images.unsplash.com/photo-1558642084-fd07fae5285b?w=400&auto=format' },
+    { id: 7, name: 'Diamond Old Fashioned', desc: 'crystal decanter, smoked maple, angostura', price: 28.00, category: 'drinks', image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=400&auto=format' },
+    { id: 8, name: 'Platinum Panna Cotta', desc: 'madagascar vanilla, gold leaf, osmanthus', price: 19.90, category: 'desserts', image: 'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=400&auto=format' },
+    { id: 9, name: 'Saffron Pear Tart', desc: 'puff pastry, honey glaze, gold-dusted almond', price: 21.50, category: 'desserts', image: 'https://images.unsplash.com/photo-1620916297397-6c0a4afd8c29?w=400&auto=format' }
+  ],
+  
+  categories: [
+    { id: 'all', name: 'All' },
+    { id: 'starters', name: 'Starters' },
+    { id: 'main', name: 'Mains' },
+    { id: 'drinks', name: 'Drinks' },
+    { id: 'desserts', name: 'Desserts' }
+  ],
+
+  // computed divine
+  get filteredMeals() {
+    if (this.activeCategory === 'all') return this.meals;
+    return this.meals.filter(m => m.category === this.activeCategory);
+  },
+  
+  get cartCount() {
+    return this.cart.reduce((acc, i) => acc + i.quantity, 0);
+  },
+  
+  get cartTotal() {
+    return this.cart.reduce((acc, i) => acc + (i.price * i.quantity), 0).toFixed(2);
+  },
+  
+  // actions
+  addToCart(meal) {
+    const found = this.cart.find(i => i.id === meal.id);
+    if (found) {
+      found.quantity++;
+      this.dispatchShimmer();
+    } else {
+      this.cart.push({ ...meal, quantity: 1 });
+    }
+  },
+  
+  removeOne(mealId) {
+    const idx = this.cart.findIndex(i => i.id === mealId);
+    if (idx !== -1) {
+      if (this.cart[idx].quantity > 1) {
+        this.cart[idx].quantity--;
+      } else {
+        this.cart.splice(idx, 1);
+      }
+    }
+  },
+  
+  clearCart() {
+    this.cart = [];
+  },
+  
+  // gsap microinteractions
+  dispatchShimmer() {
+    // subtle animation can be triggered (optional)
+  },
+  
+  placeOrder() {
+    if (this.cart.length === 0) {
+      this.toast = { visible: true, message: '👑 add gold to your basket first', isSuccess: false };
+      setTimeout(() => this.toast.visible = false, 2000);
+      return;
+    }
+    this.batchId = 'GOLD-' + Math.floor(100000 + Math.random()*900000);
+    this.showCheckoutModal = true;
+  },
+  
+  confirmOrder() {
+    this.showCheckoutModal = false;
+    this.showCart = false;
+    this.clearCart();
+    this.toast = { 
+      visible: true, 
+      message: '🍽️ YOUR ORDER HAS BEEN SENT TO THE KITCHEN. PLEASE CHECK YOUR WHATSAPP FOR ORDER DETAILS.', 
+      isSuccess: true 
+    };
+    setTimeout(() => this.toast.visible = false, 4500);
+    // GSAP little flourish
+    gsap.fromTo('.toast-god', {scale: 0.8, opacity: 0}, {scale: 1, opacity: 1, duration: 0.4, ease: 'back.out(1.7)'});
+  }
+}"
+x-init="activeCategory = 'all'"
+class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-8 pb-24 relative"
+>
+
+<!-- GOD STICKY HEADER (gold shimmer) -->
+<header class="sticky top-0 z-50 sticky-god py-4 flex items-center justify-between rounded-[3rem] px-5 mt-2 mb-4">
+  <div class="flex items-center space-x-3">
+    <div class="w-12 h-12 rounded-full bg-gradient-to-br from-[#dbb557] to-[#8a662a] flex items-center justify-center shadow-lg float-gentle">
+      <i class="fas fa-crown text-2xl text-white"></i>
+    </div>
+    <span class="text-3xl md:text-4xl gold-italic-premium tracking-tight">ꜰᴏʀᴋ & ɢᴏʟᴅ</span>
+  </div>
+  <button @click="showCart = true; $dispatch('cart-open')" class="relative p-3 rounded-full bg-white/80 border border-[#eddbb6] shadow-md hover:shadow-xl transition-all group">
+    <i class="fas fa-bag-shopping text-2xl text-[#b68b40] group-hover:scale-110 transition"></i>
+    <span x-show="cartCount > 0" x-cloak class="absolute -top-2 -right-2 bg-gradient-to-r from-[#b68b40] to-[#dbb557] text-white text-xs font-bold px-2 py-1 rounded-full min-w-[24px] text-center shadow-lg">{{ cartCount }}</span>
+  </button>
+</header>
+
+<!-- CATEGORY PILLS (ethereal scroll) -->
+<div class="my-6 flex flex-nowrap md:flex-wrap gap-3 overflow-x-auto pb-3 no-scrollbar md:justify-start">
+  <template x-for="cat in categories" :key="cat.id">
+    <button @click="activeCategory = cat.id"
+      :class="{ 'active': activeCategory === cat.id }"
+      class="pill-eternal text-sm sm:text-base transition-all duration-300">
+      <span x-text="cat.name"></span>
+    </button>
+  </template>
+</div>
+
+<!-- MEALS GRID (GOD TIER) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 mt-4">
+  <template x-for="meal in filteredMeals" :key="meal.id">
+    <div class="card-divine flex flex-col overflow-hidden">
+      <!-- divine image container -->
+      <div class="relative h-52 sm:h-56 image-shimmer bg-[#eadbc5]">
+        <img :src="meal.image" :alt="meal.name" class="w-full h-full object-cover transition duration-700 hover:scale-105">
+        <div class="absolute top-3 right-3 bg-black/50 backdrop-blur-md px-4 py-1.5 rounded-full text-base font-bold text-[#f9e2b7] border border-[#dbb557] shadow-lg">
+          $<span x-text="meal.price.toFixed(2)"></span>
+        </div>
+        <!-- golden corner badge (optional) -->
+        <div class="absolute bottom-2 left-2 w-16 h-16 opacity-20 pointer-events-none">
+          <i class="fas fa-utensils text-5xl text-[#dbb557]"></i>
+        </div>
+      </div>
+      <!-- content -->
+      <div class="p-5 flex-1 flex flex-col">
+        <h3 class="text-2xl font-bold text-[#1f1a14]" x-text="meal.name"></h3>
+        <p class="text-sm text-[#6b5e4f] mt-1.5 leading-relaxed" x-text="meal.desc"></p>
+        <div class="flex items-center justify-between mt-5">
+          <!-- dynamic quantity / add -->
+          <template x-for="item in cart.filter(i => i.id === meal.id)" :key="item.id">
+            <div class="flex items-center space-x-2 bg-white/80 rounded-full border border-[#dbb557] p-1 shadow-inner">
+              <button @click="removeOne(meal.id)" class="btn-quantity-god flex items-center justify-center"><i class="fas fa-minus text-xs"></i></button>
+              <span class="font-bold w-8 text-center text-[#b68b40]" x-text="item.quantity"></span>
+              <button @click="addToCart(meal)" class="btn-quantity-god flex items-center justify-center"><i class="fas fa-plus text-xs"></i></button>
+            </div>
+          </template>
+          <button x-show="!cart.some(i => i.id === meal.id)" @click="addToCart(meal)" 
+            class="bg-gradient-to-r from-[#b68b40] to-[#dbb557] hover:from-[#9e752b] hover:to-[#c9a142] text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-xl flex items-center gap-2 transition-all hover:gap-3">
+            <i class="fas fa-crown"></i> <span>ADD</span>
+          </button>
+          <span x-show="!cart.some(i => i.id === meal.id)" class="text-lg font-bold text-gold-deep">$<span x-text="meal.price.toFixed(2)"></span></span>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>
+
+<!-- CART DRAWER (HEAVENLY) -->
+<div x-show="showCart" class="fixed inset-0 z-[100] flex justify-end" @keydown.escape.window="showCart = false">
+  <!-- backdrop with blur -->
+  <div class="absolute inset-0 bg-black/40 backdrop-blur-md" @click="showCart = false"></div>
+  <!-- drawer -->
+  <div class="relative w-full max-w-md drawer-heaven h-full shadow-2xl flex flex-col" 
+       x-show="showCart" x-transition:enter="transition ease-out duration-400" x-transition:enter-start="translate-x-full opacity-0" x-transition:enter-end="translate-x-0 opacity-100" x-transition:leave="transition ease-in duration-300" x-transition:leave-start="translate-x-0 opacity-100" x-transition:leave-end="translate-x-full opacity-0">
+    
+    <div class="flex items-center justify-between p-6 border-b border-[#eddbb6]">
+      <h2 class="text-3xl gold-italic-premium flex items-center gap-2"><i class="fas fa-shopping-bag"></i> your gold</h2>
+      <button @click="showCart = false" class="w-10 h-10 rounded-full bg-white/90 border border-[#dbb557] text-[#b68b40] hover:rotate-90 transition"><i class="fas fa-times"></i></button>
+    </div>
+    
+    <div class="flex-1 overflow-y-auto p-6 space-y-5">
+      <template x-for="item in cart" :key="item.id">
+        <div class="flex items-center gap-4 bg-white/80 p-3 rounded-3xl shadow-md border border-[#e9d6b0] backdrop-blur-sm">
+          <img :src="item.image" class="w-20 h-20 rounded-2xl object-cover border-2 border-[#dbb557]">
+          <div class="flex-1">
+            <h4 class="font-extrabold text-[#1f1a14]" x-text="item.name"></h4>
+            <div class="flex items-center justify-between mt-3">
+              <div class="flex items-center border border-[#dbb557] rounded-full bg-white">
+                <button @click="removeOne(item.id)" class="px-4 py-2 text-[#b68b40] font-bold text-lg">−</button>
+                <span class="px-4 py-2 font-bold" x-text="item.quantity"></span>
+                <button @click="addToCart(item)" class="px-4 py-2 text-[#b68b40] font-bold text-lg">+</button>
+              </div>
+              <span class="font-black text-xl text-[#b68b40]" x-text="'$' + (item.price * item.quantity).toFixed(2)"></span>
+            </div>
+          </div>
+        </div>
+      </template>
+      <div x-show="cart.length === 0" class="text-center py-16 text-[#b19778] flex flex-col items-center">
+        <i class="fas fa-gem text-6xl mb-4 opacity-40"></i>
+        <p class="text-xl">your treasure is empty</p>
+        <p class="text-sm">add some gold</p>
+      </div>
+    </div>
+    
+    <div class="border-t border-[#eddbb6] p-6 bg-[#fffbf2]">
+      <div class="flex justify-between items-center text-2xl font-black mb-5">
+        <span>TOTAL</span>
+        <span class="gold-italic-premium text-3xl" x-text="'$' + cartTotal"></span>
+      </div>
+      <button @click="placeOrder()" class="w-full bg-gradient-to-r from-[#1f1a14] to-[#352e24] hover:from-black hover:to-[#2f281e] text-[#f9e6b6] font-black py-5 rounded-2xl text-xl shadow-2xl flex items-center justify-center gap-4 border border-[#dbb557] transition-all">
+        <i class="fas fa-feather-alt"></i> CHECKOUT
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- CHECKOUT MODAL (celestial) -->
+<div x-show="showCheckoutModal" class="fixed inset-0 z-[110] flex items-center justify-center p-4" @keydown.escape.window="showCheckoutModal = false">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-lg" @click="showCheckoutModal = false"></div>
+  <div class="relative bg-[#fffbf2] max-w-lg w-full rounded-[3rem] p-8 shadow-2xl border-2 border-[#dbb557]"
+    x-show="showCheckoutModal" x-transition>
+    <div class="flex items-center gap-3 mb-3">
+      <i class="fas fa-scroll text-4xl gold-italic-premium"></i>
+      <h3 class="text-3xl gold-italic-premium">order of the gods</h3>
+    </div>
+    <p class="text-sm text-[#b68b40] font-mono tracking-widest">batch: <span x-text="batchId"></span></p>
+    
+    <div class="my-6 max-h-60 overflow-y-auto space-y-4 pr-2">
+      <template x-for="item in cart" :key="item.id">
+        <div class="flex justify-between items-center border-b border-[#ecdbb8] pb-3">
+          <span class="font-medium"><span class="font-black text-[#b68b40]" x-text="item.quantity"></span> x <span class="font-semibold" x-text="item.name"></span></span>
+          <span class="font-black text-[#b68b40]" x-text="'$' + (item.price * item.quantity).toFixed(2)"></span>
+        </div>
+      </template>
+    </div>
+    
+    <div class="flex justify-between text-3xl font-black border-t-2 border-[#dbb557] pt-4">
+      <span>∑</span>
+      <span class="gold-italic-premium" x-text="'$' + cartTotal"></span>
+    </div>
+    
+    <div class="flex gap-4 mt-8">
+      <button @click="showCheckoutModal = false" class="flex-1 py-4 border-2 border-[#b68b40] rounded-2xl text-[#b68b40] font-black text-lg hover:bg-[#fff2df]">REFINE</button>
+      <button @click="confirmOrder()" class="flex-1 bg-gradient-to-br from-[#b68b40] to-[#dbb557] text-[#1e1915] font-black py-4 rounded-2xl text-lg shadow-xl flex items-center justify-center gap-2 hover:shadow-2xl">
+        <i class="fab fa-whatsapp text-2xl"></i> SEND
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST GOD (divine presence) -->
+<div x-show="toast.visible" x-cloak class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] w-full max-w-md px-4 toast-god py-4"
+     x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-90" x-transition:enter-end="opacity-100 scale-100"
+     x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-90">
+  <div class="flex items-center gap-3">
+    <i class="fas fa-check-circle text-2xl" :class="toast.isSuccess ? 'text-[#dbb557]' : 'text-amber-400'"></i>
+    <span class="flex-1 text-sm font-medium" x-text="toast.message"></span>
+    <button @click="toast.visible = false" class="opacity-70 hover:opacity-100"><i class="fas fa-times"></i></button>
+  </div>
+</div>
+
+<!-- extra hidden gsap initiation -->
+<script>
+  window.onload = function() {
+    gsap.from('.card-divine', {opacity: 0, y: 20, stagger: 0.06, duration: 0.6, ease: 'power2.out'});
+  }
+</script>
+
+</div>
+
+<!-- hide scrollbar -->
+<style>
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  [x-cloak] { display: none !important; }
+</style>
+
+</body>
+</html>

@@ -1,0 +1,188 @@
+Perfect — this is one of the most important Django performance concepts. I’ll give you a **clean revision sheet** you can actually memorize.
+
+---
+
+# ✅ `select_related()` — USE THIS WHEN:
+
+### 📌 Rule:
+
+Use when accessing **ForeignKey** or **OneToOneField** objects.
+
+### 📌 What it does:
+
+Uses **SQL JOIN** to fetch related objects in **one query**.
+
+### 📌 Example:
+
+```python
+Product.objects.select_related("category")
+```
+
+### 📌 Use when:
+
+| Situation                | Use?  |
+| ------------------------ | ----- |
+| `product.category.title` | ✅ YES |
+| `order.user.email`       | ✅ YES |
+| `profile.user.username`  | ✅ YES |
+
+### 📌 Don’t use when:
+
+| Situation                           | Use? |
+| ----------------------------------- | ---- |
+| You never access the related object | ❌ NO |
+| Relationship is ManyToMany          | ❌ NO |
+
+---
+
+# ✅ `prefetch_related()` — USE THIS WHEN:
+
+### 📌 Rule:
+
+Use when accessing **ManyToMany** or **reverse ForeignKey** relations.
+
+### 📌 What it does:
+
+Runs **separate queries** and joins in **Python memory**.
+
+### 📌 Example:
+
+```python
+Product.objects.prefetch_related("reviews")
+```
+
+### 📌 Use when:
+
+| Situation               | Use?  |
+| ----------------------- | ----- |
+| `product.reviews.all()` | ✅ YES |
+| `user.orders.all()`     | ✅ YES |
+| `post.comments.all()`   | ✅ YES |
+
+### 📌 Don’t use when:
+
+| Situation                                         | Use? |
+| ------------------------------------------------- | ---- |
+| Accessing ForeignKey forward (`product.category`) | ❌ NO |
+
+---
+
+# 🧠 SUPER SIMPLE MEMORY RULE
+
+| Relationship type    | Use                  |
+| -------------------- | -------------------- |
+| ForeignKey → forward | `select_related()`   |
+| OneToOneField        | `select_related()`   |
+| ManyToManyField      | `prefetch_related()` |
+| Reverse ForeignKey   | `prefetch_related()` |
+
+---
+
+# 🔥 WHY THIS MATTERS
+
+Without them → **N+1 queries problem**
+With them → **1 or 2 queries total**
+
+---
+
+# 📝 ONE-LINE SUMMARY
+
+> 🟢 Use `select_related()` for **single-object joins**
+> 🔵 Use `prefetch_related()` for **multi-object joins**
+
+---
+
+If you want, I can give you:
+✅ Real SQL output examples
+✅ Performance benchmarks
+✅ Telegram bot use cases
+✅ DRF serializer examples
+✅ Interview-style questions
+
+Just say 💪
+
+If you want, I can:
+✅ Add remove-from-cart ultra-fast version
+✅ Add clear-cart version
+✅ Add cart-summary version
+✅ Add multi-user cart version
+✅ Add Redis-backed cart version
+✅ Add transaction-safe checkout flow
+
+
+✅ Add Redis caching
+✅ Add rate-limiting
+✅ Add bulk operations
+✅ Add optimistic locking
+✅ Add soft-delete
+✅ Add cart-per-user logic
+✅ Add undo/rollback
+✅ Add optimistic UI sync
+✅ Add high-throughput async version
+
+
+✅ Help you wire this into your dashboard HTML
+✅ Add charts (orders per day, revenue per week)
+✅ Optimize queries
+✅ Add auth/permissions
+✅ Add pagination to latest orders
+
+
+
+class CategoryProductsApiView(ListAPIView):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+    permission_classes = [AllowAny]
+    pagination_class = TelegramLimitOffsetPagination
+
+    def get_queryset(self, *args, **kwargs):
+        cat = self.kwargs.get("cat")
+        print("cat:", cat)
+
+        cart_subquery = Cart.objects.filter(product=OuterRef('pk')).values('quantity')[:1]
+        cart_subquery = Coalesce(Subquery(cart_subquery), Value(0))
+
+        # 🚀 Ultra-fast DB query (indexed fields only)
+        return (
+            Product.objects
+            .filter(category__title=cat, in_stock=True) # no iexact = faster
+            .only("id", "title", "price", "image")  # fetch only needed fields
+            .annotate(cart_quantity=(cart_subquery)) # Annotate each product with its cart quantity
+        )
+    
+    # Response to request with pk d8c0665f-09b5-4abe-96e7-5a22674ea415 has content type text/javascript but was unable to parse it 
+    def list(self, request, *args, **kwargs):
+        """Override to add product_ids mapping in response"""
+        cat = self.kwargs.get("cat")
+        limit = request.query_params.get('limit', '3')
+        offset = request.query_params.get("offset", "0")
+
+        # 👉 We create a unique cache key, like: cat_products:affordable_meal:3:0
+        cache_key = f"cat_products:{cat}:{limit}:{offset}" # This means: “This response is for affordable_meal, page size 3, page 1.”
+        cached = cache.get(cache_key)
+        
+        # 👉 If cached data exists: ❌ Do NOT hit database, ❌ Do NOT serialize, ❌ Do NOT paginate
+        if cached:
+            print("Using cached data")
+            return Response(cached)
+
+        # 🧩 NORMAL DRF FLOW (if not cached)
+        response = super().list(request, *args, **kwargs) # This method controls what response is sent to the client.
+        print("response data:", response.data)
+        results = response.data['results'] # response.data['results'] contains serialized products
+        
+        # ⚡ O(n) dict build — unavoidable but tiny
+        product_ids = { p['title'].lower(): p['id'] for p in results }
+        
+        # Include in response
+        final_data = {
+            "products": response.data['results'],
+            "count": response.data['count'],
+            "next": response.data['next'],
+            "previous": response.data['previous'],
+            "product_ids": product_ids
+        }
+        cache.set(cache_key, final_data, timeout=1000) # 🔥 60s hot cache
+        return Response(final_data)
+    
+category_product_api_view = CategoryProductsApiView.as_view()

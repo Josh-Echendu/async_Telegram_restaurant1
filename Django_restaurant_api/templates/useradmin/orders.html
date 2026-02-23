@@ -1,0 +1,121 @@
+{% extends 'useradmin/base.html' %}
+{% load static %}
+{% load humanize %}
+{{ form.media }}
+{% block content %}
+<head>
+<section class="content-main">
+    <div class="content-header">
+        <div>
+            <h2 class="content-title card-title">Order List</h2>
+            <p>Manage all your orders from here</p>
+        </div>
+            <div class="col-lg-3">
+            <div class="card card-body mb-4">
+                <article class="icontext">
+                    <span class="icon icon-sm rounded-circle bg-success-light"><i class="text-success material-icons md-local_shipping"></i></span>
+                    <div class="text">
+                        <h6 class="mb-1 card-title">Monthly Quantity</h6>
+                        <span>{{quantity}}</span>
+                    </div>
+                </article>
+            </div>
+        </div>
+        <div class="col-lg-3">
+            <div class="card card-body mb-4">
+                <article class="icontext">
+                    <span class="icon icon-sm rounded-circle bg-success-light"><i class="text-success material-icons md-local_shipping"></i></span>
+                    <div class="text">
+                        <h6 class="mb-1 card-title">Orders</h6>
+                        <span>{{orders.count}}</span>
+                    </div>
+                </article>
+            </div>
+        </div>
+        <div>
+            <input type="text" placeholder="Search order ID" class="form-control bg-white" />
+        </div>
+    </div>
+    <div class="card mb-4">
+        <header class="card-header">
+            <div class="row gx-3">
+                <div class="col-lg-4 col-md-6 me-auto">
+                    <input type="text" placeholder="Search..." class="form-control" />
+                </div>
+                <div class="col-lg-2 col-6 col-md-3">
+                    <select class="form-select">
+                        <option>Status</option>
+                        <option>Active</option>
+                        <option>Disabled</option>
+                        <option>Show all</option>
+                    </select>
+                </div>
+                <div class="col-lg-2 col-6 col-md-3">
+                    <select class="form-select">
+                        <option>Show 20</option>
+                        <option>Show 30</option>
+                        <option>Show 40</option>
+                    </select>
+                </div>
+            </div>
+        </header>
+        <!-- card-header end// -->
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>#ID</th>
+                            <th scope="col">Name</th>
+                            <th scope="col">Removed Items</th>
+                            <th scope="col">Total</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Date</th>
+                            <th scope="col" class="">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                            {% for o in orders %}
+                                <tr>
+                                    <td>{{o.bid}}</td>
+                                    <td><b>{{o.telegram_user.first_name}}</b></td>
+                                    <td>{{o.removed_cart_items}}</td>
+                                    <td>₦{{o.total_price|intcomma}}</td>
+                                    {% if o.status == "delivered" %}
+                                        <td><span class="badge rounded-pill alert-success">{{o.status}}</span></td>
+                                    {% elif o.status == "processing" %}
+                                        <td><span class="badge rounded-pill alert-warning">{{o.status}}</span></td>
+                                    {% elif o.status == "pending" %}
+                                        <td><span class="badge rounded-pill alert-danger">{{o.status}}</span></td>
+                                    {% endif %}
+                                    <td>{{o.date_created|date:"d/m/Y"}}</td>
+                                    <td class="">
+                                        <a href="{% url 'useradmin:order-details' bid=o.bid %}" class="btn btn-md rounded font-sm">View Detail</a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        
+                    </tbody>
+                </table>
+            </div>
+            <!-- table-responsive //end -->
+        </div>
+        <!-- card-body end// -->
+    </div>
+    <!-- card end// -->
+    <!-- <div class="pagination-area mt-15 mb-50">
+        <nav aria-label="Page navigation example">
+            <ul class="pagination justify-content-start">
+                <li class="page-item active"><a class="page-link" href="#">01</a></li>
+                <li class="page-item"><a class="page-link" href="#">02</a></li>
+                <li class="page-item"><a class="page-link" href="#">03</a></li>
+                <li class="page-item"><a class="page-link dot" href="#">...</a></li>
+                <li class="page-item"><a class="page-link" href="#">16</a></li>
+                <li class="page-item">
+                    <a class="page-link" href="#"><i class="material-icons md-chevron_right"></i></a>
+                </li>
+            </ul>
+        </nav>
+    </div> -->
+</section>
+{% endblock content %}
