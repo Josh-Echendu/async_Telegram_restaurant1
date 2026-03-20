@@ -13,4 +13,4 @@ python manage.py migrate
 
 # Start Celery worker
 echo "Starting Celery..."
-exec celery -A restaurant_api worker --loglevel=info --concurrency=4 --max-tasks-per-child=1000
+exec celery -A restaurant_api worker --loglevel=info --concurrency=5 --max-tasks-per-child=100

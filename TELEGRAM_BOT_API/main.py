@@ -41,7 +41,7 @@ async def global_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================
 # MAIN ENTRY
 # =========================
-NGROK_URL = "https://7481-197-211-63-122.ngrok-free.app"  # replace with your ngrok URL
+NGROK_URL = "https://567c-102-89-82-170.ngrok-free.app"  # replace with your ngrok URL
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = f"{NGROK_URL}{WEBHOOK_PATH}"
 

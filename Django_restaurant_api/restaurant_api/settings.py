@@ -15,7 +15,6 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 DEBUG = os.getenv("DEBUG") == "True"
 
 TELEGRAM_BOT_TOKEN = os.getenv("BOT_TOKEN")
-KITCHEN_CHAT_ID = int(os.getenv("KITCHEN_CHAT_ID"))
 
 
 # Quick-start development settings - unsuitable for production
@@ -27,10 +26,19 @@ SECRET_KEY = 'django-insecure-zw5=&ac93o=r!(-$vc8j#ykx1zmxvqhrow2f(ij0()d_#z%+jz
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "localhost",
+    "web",
+    ".ngrok-free.app",  # allow all ngrok subdomains
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://*.ngrok-free.app",
+]
 
 # CSRF_TRUSTED_ORIGINS = [
-#     'http://localhost:5173',
+#     "https://d37d-159-26-119-220.ngrok-free.app",
 # ]
 
 
@@ -91,6 +99,17 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'restaurant_api.wsgi.application'
 
+# Only send cookies over HTTPS
+SESSION_COOKIE_SECURE = True
+
+# Prevent JavaScript from reading session cookie
+SESSION_COOKIE_HTTPONLY = True
+
+# Optional: limit session to a single browser
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+# Recommended: use signed cookies for extra integrity
+SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
@@ -213,8 +232,8 @@ REST_FRAMEWORK = {
 AUTH_USER_MODEL = 'userAuths.AdminUser'
 
 REST_FRAMEWORK = {
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
-    'PAGE_SIZE': 3,
+    # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
+    # 'PAGE_SIZE': 3,
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.ScopedRateThrottle",
     ],
@@ -224,6 +243,8 @@ REST_FRAMEWORK = {
 }
 
 
+# Celery settings
+CELERYD_PREFETCH_MULTIPLIER = 1
 
 # Celery settings
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL')       # For sending tasks to Celery
@@ -241,4 +262,29 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Africa/Lagos'  # Or your timezone
+TASK_TRACK_STARTED = True
 
+
+# Concurrency: number of tasks each worker can run simultaneously
+CELERY_WORKER_CONCURRENCY = 5
+
+# How many tasks a worker prefetches at once (1 = fair distribution)
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+
+# Only acknowledge a task **after it finishes successfully**
+CELERY_TASK_ACKS_LATE = True
+
+# If worker crashes mid-task, tell broker to requeue task
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+
+# Limit how many tasks a or each worker will process before restarting to prevent memory leak 
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 100
+
+# Soft time limit (raises exception for graceful stop)
+CELERY_TASK_SOFT_TIME_LIMIT = 200
+
+# Track when task starts (useful for monitoring)
+CELERY_TASK_TRACK_STARTED = True
+
+# Disable worker rate limits (improves throughput)
+CELERY_WORKER_DISABLE_RATE_LIMITS = True # i.e remove speed bumbs(remove rate-limiting by celery)

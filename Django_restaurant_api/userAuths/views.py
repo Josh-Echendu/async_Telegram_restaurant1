@@ -9,6 +9,7 @@ from rest_framework import status
 from rest_framework.generics import ListAPIView
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
+from orders.models import Restaurant
 
 
 # Create your views here.
@@ -31,29 +32,52 @@ class TelegramUserCreateAPIView(APIView):
 
     @transaction.atomic
     def post(self, request):
-        print('data: ', request.data)
-        serializer = TelegramUserSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-        print('data-serializer: ', data)
+        data = request.data
 
+        try:
+            restaurant = Restaurant.objects.get(rid=data.get('restaurant_id'))
+        except Restaurant.DoesNotExist:
+            return Response(
+                {"error": f"Restaurant with id {data.get('restaurant_id')} not found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        user, created = TelegramUser.objects.update_or_create(
-            telegram_id=data.get('telegram_id'),
-            defaults={
-                "first_name": data.get("first_name", ""),
-                "username": data.get("username", ""),
-            },
-        )
-        return Response(
-            {
-                "id": user.id,
-                "telegram_id": user.telegram_id,
-                "username": user.username,
-                "created": created,
-            },
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
-        )
+        telegram_id = data.get("telegram_id")
+        defaults = {
+            "first_name": data.get("first_name", ""),
+            "username": data.get("username", ""),
+        }
+
+        try:
+            # Try to create or update
+            user, created = TelegramUser.objects.update_or_create(
+                telegram_id=telegram_id,
+                restaurant=restaurant,
+                defaults=defaults,
+            )
+            return Response(
+                {
+                    "id": user.id,
+                    "telegram_id": user.telegram_id,
+                    "username": user.username,
+                    "created": created,
+                    "restaurant": user.restaurant.name
+                },
+                status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+            )
+        except IntegrityError:
+            # Another request created it at the same time → fetch the existing one
+            user = TelegramUser.objects.get(telegram_id=telegram_id)
+            return Response(
+                {
+                    "id": user.id,
+                    "telegram_id": user.telegram_id,
+                    "username": user.username,
+                    "created": False,
+                    "restaurant": user.restaurant.name
+                },
+                status=status.HTTP_200_OK,
+            )
 
 telegram_user_create_api_view = TelegramUserCreateAPIView.as_view()
 
@@ -75,32 +99,37 @@ class TelegramUserListAPIView(ListAPIView):
 telegram_list_api_view = TelegramUserListAPIView.as_view()
 
 
+def admin_login_view(request, restaurant_id):
 
-def admin_login_view(request):
-    if request.method == 'POST':
-
-        email = request.POST.get('email')
-        password = request.POST.get('password')
+    if request.method == "POST":
+        email = request.POST.get("email")
+        password = request.POST.get("password")
 
         user = authenticate(request, email=email, password=password)
-        if user is not None and user.is_staff:
 
-            # Login successful
+        if user is not None and user.is_staff:
             login(request, user)
+
+            # ✅ STORE IN SESSION
+            request.session["restaurant_id"] = restaurant_id
 
             return redirect("useradmin:dashboard")
 
         else:
-            # Login failed
-            messages.error(request, 'Invalid login credentials. Please try again.')
-            return redirect("userauths:admin_login")
+            messages.error(request, "Invalid login credentials.")
+            return redirect("userauths:admin_login", restaurant_id=restaurant_id)
 
-    return render(request, 'userauths/admin_login.html')
+    return render(request, "userauths/admin_login.html", {"restaurant_id": restaurant_id})
+
 
 def admin_logout_view(request):
-    logout(request)
-    return redirect("userauths:admin_login")
+    restaurant_id = request.session.get('restaurant_id')
+    if not restaurant_id:
+        return redirect("userauths:admin_login", restaurant_id='')
 
+    request.session.pop("restaurant_id", None)
+    logout(request)
+    return redirect("userauths:admin_login", restaurant_id=restaurant_id)
 
 # what do you mean here: Optional Enhancements
 

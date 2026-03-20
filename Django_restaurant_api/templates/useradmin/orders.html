@@ -68,6 +68,7 @@
                             <th>#ID</th>
                             <th scope="col">Name</th>
                             <th scope="col">Removed Items</th>
+                            <th scope="col">Total qty</th>
                             <th scope="col">Total</th>
                             <th scope="col">Status</th>
                             <th scope="col">Date</th>
@@ -80,6 +81,7 @@
                                     <td>{{o.bid}}</td>
                                     <td><b>{{o.telegram_user.first_name}}</b></td>
                                     <td>{{o.removed_cart_items}}</td>
+                                    <td>{{o.order_qty}}</td>
                                     <td>₦{{o.total_price|intcomma}}</td>
                                     {% if o.status == "delivered" %}
                                         <td><span class="badge rounded-pill alert-success">{{o.status}}</span></td>

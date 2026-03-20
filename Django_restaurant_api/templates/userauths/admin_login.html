@@ -20,7 +20,7 @@
           {% endfor %}
       {% endif %}
         
-      <form method="POST" action="{% url 'userauths:admin_login' %}">
+      <form method="POST" action="{% url 'userauths:admin_login' restaurant_id=restaurant_id %}">
 
         {% csrf_token %}
 

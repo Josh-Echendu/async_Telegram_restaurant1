@@ -40,30 +40,12 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-async def get_cart_items(update, max_retries=3):
-    user = update.effective_user
-    telegram_id = int(user.id)
-    print("telegram_id for get_cart_items: ", telegram_id)
-
-    for attempt in range(1, int(max_retries + 1)):
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    f"http://web:8000/api/cart_list/{telegram_id}/",
-                    headers={"Accept": "application/json"}  # ask for JSON explicitly
-                )
-                response.raise_for_status()
-                # print("Cart List Response text:", response.text)
-                print("Cart List Response:", response.json())
-                response_json = response.json()
-                return response_json
-
-        except (httpx.RequestError, httpx.HTTPStatusError, ValueError, Exception) as e:
-            logging.warning(f"Attempt {attempt} failed for retrieving cart items: {e}")
-            
-            if attempt == max_retries:
-                logging.error(f"All {max_retries} attempts failed for retrieving cart items: {e}")
-                return None
-            
-            # optional: wait before retrying
-            await asyncio.sleep(1)
+async def logger(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+        Logs incoming updates and context for debugging purposes.
+    """
+    logging.info("Received /start command: %s", context)
+    logging.info("Bot details: %s", context.bot)
+    logging.info("arguments: %s", context.args)
+    logging.info("user_data: %s", context.chat_data)
+    logging.info("Update details: %s", update)

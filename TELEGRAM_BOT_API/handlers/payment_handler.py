@@ -1,7 +1,6 @@
 # handlers/payment_handler.py - EXACT COPY FROM ORIGINAL FILE
 from utils.image_utils import store_message_id
 from config import *
-from utils.kitchen_utils import send_to_kitchen
 from handlers.start_handler import after_payment
 
 

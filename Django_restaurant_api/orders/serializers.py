@@ -3,20 +3,17 @@ from rest_framework import serializers
 from .models import Product, Category, Cart, OrderBatch, OrderBatchItem
 
 
-class CategorySerializer(serializers.ModelSerializer):
+class CategorySerializer(serializers.ModelSerializer):    
     class Meta:
         model = Category
         fields = ['cid', 'title', 'category_image']
 
-class ProductSerializer(serializers.ModelSerializer):
-    # category = Category()
-    cart_quantity = serializers.IntegerField(read_only=True)
 
-    # cart_items = serializers.SerializerMethodField()
+class ProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Product
-        fields = ['id', 'title', 'price', 'image', 'cart_quantity']
+        fields = "__all__"
 
     # def get_image(self, obj):
     #     if obj.image:

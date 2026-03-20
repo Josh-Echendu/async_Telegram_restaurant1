@@ -3,22 +3,20 @@ from config import *
 from utils.cart_utils import *
 from utils.kitchen_utils import *
 
-
-async def logger(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-        Logs incoming updates and context for debugging purposes.
-    """
-    logging.info("Received /start command: %s", context)
-    logging.info("Bot details: %s", context.bot)
-    logging.info("arguments: %s", context.args)
-    logging.info("user_data: %s", context.chat_data)
-    logging.info("Update details: %s", update)
-
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE, Track_orders=False):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await logger(update, context)
-    web_app_url = "https://3748-197-211-63-122.ngrok-free.app/Users/Admin/Music/async_Telegram_restaurant/Django_restaurant_api/userAuths/a.html"
-    # web_app_url = "https://3748-197-211-63-122.ngrok-free.app/userauths/admin_login/"
+
+    # Extract restaurant ID from deep link
+    if context.args:
+        user_id = update.effective_user.id
+        key = f"restaurant_id:{user_id}"
+        await redis_client.set(key, context.args[0], ex=1800)
+        restaurant_id = await redis_client.get(key)
+    else:
+        await update.message.reply_text("Invalid restaurant link.")
+        return
+    
+    web_app_url = f"https://35d7-102-89-82-170.ngrok-free.app/userauths/admin_login/restaurant/{restaurant_id}/"
 
     ADMIN_WEB_APP_URL = web_app_url
 
@@ -49,55 +47,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE, Track_orders
     # Normal welcome UI
     keyboard = [
         ["🍽 Order Food", "📦 Track Order"],
-        ["📞 Contact Staff", "ℹ️ Help"]
+        ["📞 Contact Staff", "🛍️✅💳 Checkout/Pay"]
     ]
 
-    if not Track_orders:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=(
-                f"<b>👋 Welcome to SupremeBot, <i>{first_name}</i>!</b>\n\n"
-                "━━━━━━━━━━━━━━\n\n"    
-                "🍽 I'm your personal restaurant assistant\n\n"
-                "What you can do:\n\n"
-                "🛍 Browse meals\n"
-                "🛒 View cart\n"
-                "📦 Track orders\n"
-                "⚡ Enjoy fast and easy ordering\n\n"
-                "━━━━━━━━━━━━━━\n"
-                "<i>👇 Choose an option below</i>"
-            ),
-            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
-            parse_mode="HTML"
-        )
-
-    else:
-        text = """
-            📦 <b>TRACK YOUR ORDER</b>
-            ━━━━━━━━━━━━━━━
-
-            You have an active order in progress.
-
-            ⏳ Track its status in real-time  
-            🚚 Get instant updates  
-
-            ━━━━━━━━━━━━━━━
-            👇 <i>Tap Track Order below</i>
-            """
-
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=text,
-            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
-            parse_mode="HTML"
-        )
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=(
+            f"<b>👋 Welcome to SupremeBot, <i>{first_name}</i>!</b>\n\n"
+            "━━━━━━━━━━━━━━\n\n"    
+            "🍽 I'm your personal restaurant assistant\n\n"
+            "What you can do:\n\n"
+            "🛍 Browse meals\n"
+            "🛒 View cart\n"
+            "📦 Track orders\n"
+            "⚡ Enjoy fast and easy ordering\n\n"
+            "━━━━━━━━━━━━━━\n"
+            "<i>👇 Choose an option below</i>"
+        ),
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
+        parse_mode="HTML"
+    )
     
     user = update.effective_user
     first_name = user.first_name
     username = user.username
     telegram_id = user.id
 
-    await telegram_registration(telegram_id=telegram_id, first_name=first_name, username=username)
+    await telegram_registration(telegram_id=telegram_id, first_name=first_name, username=username, restaurant_id=restaurant_id)
+
 
 async def after_payment(chat_id, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -115,20 +92,20 @@ async def after_payment(chat_id, context: ContextTypes.DEFAULT_TYPE):
         text="What would you like to do next?",
         reply_markup=reply_markup
     )
-
     
-async def telegram_registration(telegram_id, first_name, username, max_retries=3):
+async def telegram_registration(telegram_id, first_name, username, restaurant_id, max_retries=3):
     payload = {
         "telegram_id": int(telegram_id),
         "first_name": str(first_name),
         "username": str(username),
+        "restaurant_id": str(restaurant_id)
     }
-    print("payload: ", payload)
+
     for attempt in range(1, int(max_retries + 1)):
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"http://web:8000/userauths/register_user/",
+                    f"http://web:8000/userauths/register_user/restaurant/",
                     headers={"Accept": "application/json"},  # ask for JSON explicitly
                     json=payload
                 )

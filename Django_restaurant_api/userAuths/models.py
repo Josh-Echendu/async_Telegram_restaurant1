@@ -27,6 +27,8 @@ class UserAccountManager(BaseUserManager):
 
 
 class AdminUser(AbstractBaseUser, PermissionsMixin):
+    restaurant = models.ForeignKey('orders.Restaurant', on_delete=models.SET_NULL, null=True, related_name='admin_users')
+
     email = models.EmailField(max_length=200, unique=True)
 
     # Indicates whether this user can log into the Django admin site.
@@ -56,6 +58,7 @@ class AdminUser(AbstractBaseUser, PermissionsMixin):
     
 
 class TelegramUser(models.Model):
+    restaurant = models.ForeignKey('orders.Restaurant', on_delete=models.SET_NULL, null=True, related_name='telegram_users')
     telegram_id = models.BigIntegerField(unique=True, db_index=True)
     first_name = models.CharField(max_length=100, blank=True)
     username = models.CharField(max_length=100, blank=True)
@@ -71,9 +74,13 @@ class TelegramUser(models.Model):
         return str(self.telegram_id)
     
     class Meta:
+        # You cannot have two entries for the same user at the same restaurant — the database will reject it.
+        unique_together = ('telegram_id', 'restaurant')
+
         indexes = [
-            models.Index(fields=["telegram_id"]),
+            models.Index(fields=["telegram_id", "restaurant"]),
         ]
+
 
 
 # class TelegramUser(models.Model):

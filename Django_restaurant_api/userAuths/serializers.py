@@ -18,16 +18,19 @@ class TelegramUserSerializer(serializers.ModelSerializer):
 
 
 
-
 # Invoke-RestMethod -Uri http://127.0.0.1:8000/userauths/register_user/ `
 #   -Method POST `
 #   -ContentType "application/json" `
 #   -Body '{"telegram_id":5680916028,"first_name":"Baddest guy","username":"Danshanu55"}'
 
 # Invoke-RestMethod -Uri http://127.0.0.1:8000/api/update_batch_status/UkWNeewkMe/`
-#   -Method PATCH `
+#   -Method GET `
 #   -ContentType "application/json" `
-#   -Body '{"telegram_id":5680916028,"status":"processing"}'
+#   -Body '{"telegram_id":5680916028,"status":"processing", "batch_id":"AyRtNTEDAK"}'
+
+
+
+
 
 
 

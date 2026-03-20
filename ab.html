@@ -250,6 +250,35 @@
     this.toast = { visible: true, message: '🍽️ YOUR ORDER HAS BEEN SENT TO THE KITCHEN. PLEASE CHECK YOUR WHATSAPP FOR ORDER DETAILS.' };
     setTimeout(() => this.toast.visible = false, 4200);
   }
+
+  async loadCategories() {
+
+    try {
+
+      const params = new URLSearchParams(window.location.search);
+
+      const restaurantId = params.get('restaurant');
+
+      const response = await fetch(`/api/restaurant/${restaurantId}/menu/`);
+
+      const data = await response.json();
+      console.log('Fetched categories:', data);
+
+      this.categories = [
+        { id: 'all', name: 'All' },
+        ...data.map(cat => ({
+          id: cat.cid,
+          name: cat.title
+        }))
+      ];
+
+    } catch (error) {
+
+      console.error('Failed to load categories:', error);
+
+    }
+
+},
 }"
 
 x-init="
