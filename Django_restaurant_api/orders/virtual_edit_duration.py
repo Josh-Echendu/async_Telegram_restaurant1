@@ -2,6 +2,9 @@ import requests
 import json
 import time
 
+import logging
+logger = logging.getLogger(__name__)
+
 SQUAD_SANDBOX_BASE_URL = "https://sandbox-api-d.squadco.com"
 
 EDIT_AMOUNT_DURATION_ENDPOINT = f"{SQUAD_SANDBOX_BASE_URL}/virtual-account/update-dynamic-virtual-account-time-and-amount"
@@ -12,14 +15,16 @@ API_SECRET_KEY = "sandbox_sk_1446c0d02f3e20570f47a6c9297a3c149fc635c5946a"
 # session.va_expiry = timezone.now() + timedelta(seconds=3600)
 # session.save(update_fields=["va_expiry", "total_price"])
 
-def virtual_account_edit_amount_duration(new_amount, transaction_ref, new_duration, max_retries=3):
+def virtual_account_edit_amount_duration(new_amount, transaction_ref, new_duration=1800, max_retries=10):
     print("editing dva duration and amount...")
 
     payload = {
         "amount": new_amount,
-        "transaction_ref": transaction_ref,
+        "transaction_reference": transaction_ref,
         "duration": new_duration,
     }
+    print('edit payload: ', payload)
+
 
     headers = {
         "Authorization": f"Bearer {API_SECRET_KEY}",
@@ -38,6 +43,7 @@ def virtual_account_edit_amount_duration(new_amount, transaction_ref, new_durati
             response.raise_for_status()
 
             data = response.json()
+            print("edit data: ", data)
 
             if data.get("success"):
                 return {
@@ -56,6 +62,7 @@ def virtual_account_edit_amount_duration(new_amount, transaction_ref, new_durati
             if attempt < max_retries - 1:
                 wait = 2 ** attempt
                 print(f"Server error, retrying in {wait}s...")
+                print("error message: ", response.json())
                 time.sleep(wait)
                 continue
 

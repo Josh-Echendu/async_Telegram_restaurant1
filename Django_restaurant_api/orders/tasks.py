@@ -9,13 +9,16 @@ from .models import KITCHEN_STATUS_CHOICES, OrderBatch, CheckoutSession
 from .redis_client import redis_client
 from django.db import transaction
 from dateutil import parser
-from .virtual_account import initiate_dynamic_virtual_account
 from django.utils import timezone
 from django.db.transaction import on_commit
 import uuid
 from celery.exceptions import SoftTimeLimitExceeded
-from .virtual_requery_transaction import virtual_account_requery_transaction
+
+from .virtual_account import initiate_dynamic_virtual_account
 from .errors import prefetch_webhooks, delete_webhook
+from .virtual_edit_duration import virtual_account_edit_amount_duration
+
+from django.db.models import OuterRef, Subquery, Sum, Value, F
 
 
 
@@ -302,6 +305,7 @@ def handle_success(session_id, payload):
         session.amount_received = amount_received
         session.paid_at = paid_date
         session.is_active = False
+        session.payment_in_progress = False
         session.webhook_payload = payload
         session.save()
         logger.info("saved payment status for merchant_refrence %s as PAID: ",  session.merchant_reference)
@@ -347,6 +351,7 @@ def handle_expired(session_id, payload=None):
             session.va_acct_number = virtual_account_data['account_number']
             session.va_bank = virtual_account_data['bank']
             session.va_expiry = expires_at
+            session.payment_in_progress = True
             session.save() 
 
             on_commit(lambda: send_account_details_to_user(session, virtual_account_data))
@@ -543,10 +548,37 @@ def handle_retry_query_external_api(self, merchant_reference):
         raise self.retry(exc=exc, countdown=min(2 ** self.request.retries, 3600))
 
     finally:
-        delete_webhook(transaction_ref)
+        if payload:
+            delete_webhook(transaction_ref)
 
 
+@shared_task(bind=True, soft_time_limit=200, max_retries=10)
+def edit_amount_duration(self, session_id):
+    
+    try:
+        session = CheckoutSession.objects.filter(id=session_id).prefetch_related('session_batches')
 
+        logger.info("session already exist for %s: ", session.merchant_reference)
+        order_batches = session.session_batches.all()
+        vat = int(100)
+
+        total = int(order_batches.aggregate(total_price=Sum('total_price'))['total_price'] or 0) + vat
+
+        total_price = int(total * 100)
+        print("total_price: ", total_price)
+        virtual_account_edit_amount_duration(new_amount=total_price, transaction_ref=session.merchant_reference)
+
+    except SoftTimeLimitExceeded:
+        logger.warning(f"Soft time limit exceeded to handle editing of amount and duration for merchant_reference: {session.merchant_reference}, retrying...")
+        raise self.retry(exc=SoftTimeLimitExceeded(), countdown=1)
+
+    except Exception as exc:
+        logger.error(f"Failed to handle editing of amount and duration for merchant_reference : {session.merchant_reference}: {exc}")
+        if self.request.retries >= 10:
+            logger.error(f"Max retries reached for {session.merchant_reference}")
+            return
+        raise self.retry(exc=exc, countdown=min(2 ** self.request.retries, 3600))
+ 
 
 # @shared_task(bind=True, soft_time_limit=200, max_retries=None)
 # def handle_retry_query_external_api(self, merchant_reference):

@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     restaurant_detail, category_list_api_view, category_product_api_view,remove_cart_view, add_to_cart_view, cart_list_api_view, orderbatch_list_create_view,
-    update_batch_status_api_view, batch_list_api_view, dynamic_virtual_account_view, simulate_payment_api_view, squad_webhook_api_view
+    update_batch_status_api_view, batch_list_api_view, dynamic_virtual_account_view, simulate_payment_api_view, squad_webhook_api_view, checkout_session_api_view
     )
 
 urlpatterns = [
@@ -22,6 +22,7 @@ urlpatterns = [
     path('dva/', dynamic_virtual_account_view),
     path('dva/payment/', simulate_payment_api_view),
     path("payments/squad/webhook/", squad_webhook_api_view),
+    path("check-session/", checkout_session_api_view),
 
     path('user_batch_list/<int:telegram_id>/<str:restaurant_id>/', batch_list_api_view),
 ] 

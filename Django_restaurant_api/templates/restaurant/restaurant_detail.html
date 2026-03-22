@@ -181,6 +181,7 @@
 
 <!-- ALPINE STORE (frontend mock) - FIXED COMMAS -->
 <div x-data="{
+  paymentSessionActive: false,
   telegramId: window.Telegram?.WebApp?.initDataUnsafe?.user?.id ?? 0, // ← FIX: Added comma
   cart: [], // ← FIX: Added comma
   activeCategory: 'all', // ← FIX: Added comma
@@ -374,6 +375,16 @@
   
   addToCart(meal) {
 
+    // stop if payment in session
+    if (this.paymentSessionActive) {
+      this.toast = {
+        visible: true,
+        message: '⚠️ You have a pending payment. Complete it before ordering again.'
+      };
+      setTimeout(() => this.toast.visible = false, 10000);
+      return;
+    }
+
     // STOP if out of stock
     if (!meal.in_stock) {
 
@@ -419,6 +430,15 @@
   
   placeOrder() {
 
+    if (this.paymentSessionActive) {
+      this.toast = {
+        visible: true,
+        message: '⚠️ You have a pending payment. Complete it before ordering again.'
+      };
+      setTimeout(() => this.toast.visible = false, 10000);
+      return;
+    }
+
     // FIRST: block if out of stock exists
     if (this.cart.some(item => !item.in_stock)) {
 
@@ -461,6 +481,16 @@
   
 
   async confirmOrder(maxRetries = 5, baseDelay = 800) {
+
+      if (this.paymentSessionActive) {
+        this.toast = {
+          visible: true,
+          message: '⚠️ You have a pending payment. Complete it before ordering again.'
+        };
+        setTimeout(() => this.toast.visible = false, 10000);
+        return;
+      }
+
       const pathParts = window.location.pathname.split('/').filter(p => p);
       const restaurantId = pathParts[2];
       if (!restaurantId) {
@@ -488,13 +518,26 @@
               const data = response.data;
               console.log(data)
 
+              // ✅ Handle blocked (payment in progress)
+              if (data.blocked) {
+                this.paymentSessionActive = true;
+
+                this.toast = {
+                  visible: true,
+                  message: '⚠️ You have a pending payment. Complete it before ordering again.'
+                };
+
+                setTimeout(() => this.toast.visible = false, 10000);
+                return data;
+              }
+
               // ✅ Handle fully successful order
               if (data.success) {
                   this.showCheckoutModal = false;
                   this.showCart = false;
                   this.clearCart();
 
-                  this.toast = { visible: true, message: '🍽️ Your order was placed successfully! Check WhatsApp for details.' };
+                  this.toast = { visible: true, message: '🍽️ Your order was placed successfully! Check Telegram for details.' };
                   setTimeout(() => this.toast.visible = false, 7200);
                   return data;
               }
@@ -542,6 +585,32 @@
               await new Promise(r => setTimeout(r, delay));
           }
       }
+  },
+
+  async checkPaymentSession() {
+    try {
+      const pathParts = window.location.pathname.split('/').filter(p => p);
+      const restaurantId = pathParts[2];
+
+      const res = await axios.post('/api/check-session/', {
+        telegram_id: this.telegramId,
+        restaurant_id: restaurantId
+      });
+
+      if (res.data.has_active_payment) {
+        this.paymentSessionActive = true;
+
+        this.toast = {
+          visible: true,
+          message: '⚠️ You have a pending payment. Complete it before ordering again.'
+        };
+
+        setTimeout(() => this.toast.visible = false, 5000);
+      }
+
+    } catch (err) {
+      console.error('Session check failed', err);
+    }
   }
 }"
 
@@ -562,6 +631,8 @@ x-init="
 
   loadCategories();
   loadProducts('all');
+  checkPaymentSession(); // ✅ ADD THIS
+
 "
 class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
 >

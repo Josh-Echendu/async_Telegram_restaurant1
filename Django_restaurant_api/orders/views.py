@@ -27,7 +27,7 @@ from django.db.models.functions import Coalesce
 from django.http import Http404
 from rest_framework import status
 from django.db import transaction, IntegrityError
-from .tasks import send_order_notifications, process_squad_webhook, requery_transaction
+from .tasks import send_order_notifications, process_squad_webhook, requery_transaction, edit_amount_duration
 from .throttles import TelegramScopedThrottle  # import the custom throttle
 from .virtual_account import initiate_dynamic_virtual_account
 from dateutil import parser
@@ -354,10 +354,10 @@ def verify_telegram_init_data(init_data: str):
         hashlib.sha256
     ).hexdigest()
 
-    print("Received hash:", received_hash)
-    print("Calculated hash:", calculated_hash)
-    print("Data check string:", repr(data_check_string))
-    print("Secret key (hex):", secret_key.hex())
+    # print("Received hash:", received_hash)
+    # print("Calculated hash:", calculated_hash)
+    # print("Data check string:", repr(data_check_string))
+    # print("Secret key (hex):", secret_key.hex())
 
     # Step 6: Return validation result
     return calculated_hash == received_hash, {
@@ -503,6 +503,13 @@ class OrderBatchListCreateAPIView(APIView):
                 .first()
             )
 
+            if session and session.payment_in_progress:
+                print("payment in process BRO")
+                return Response({
+                    "blocked": True,
+                    "error": "Payment in progress. Complete payment first."
+                }, status=200)
+
             if not session:
                 CheckoutSession.objects.create(
                     restaurant=restaurant,
@@ -510,9 +517,8 @@ class OrderBatchListCreateAPIView(APIView):
                     is_active=True,
                     merchant_reference=None,
                     # expires_at=timezone.now() + timedelta(hours=3)  # expires in 3 hours
-
                 )
-
+            
             # CheckoutSession (ses8F21)
                 # ├── OrderBatch A91X2
                 # ├── OrderBatch B72JK
@@ -545,7 +551,7 @@ class OrderBatchListCreateAPIView(APIView):
             send_order_notifications.delay(restaurant.rid, order_batch.bid, order_batch.telegram_user.telegram_id)
 
             serializer = OrderBatchSerializer(order_batch)
-            
+                
             data = {
                 "success": True,
                 "message": "Order batch created successfully", 
@@ -597,7 +603,35 @@ class OrderBatchListCreateAPIView(APIView):
 # Prevents old abandoned sessions from piling up.
 orderbatch_list_create_view =  OrderBatchListCreateAPIView.as_view()
 
+class CheckSessionAPIView(APIView):
 
+    def post(self, request):
+        telegram_id = request.data.get("telegram_id")
+        restaurant_id = request.data.get("restaurant_id")
+
+        restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
+
+        try:
+            user = TelegramUser.objects.get(
+                telegram_id=telegram_id,
+                restaurant=restaurant
+            )
+        except TelegramUser.DoesNotExist:
+            return Response({"has_active_payment": False})
+
+        # “Find an active session where payment has started for this user and this restaurant”
+        session = CheckoutSession.objects.filter(
+            telegram_user=user,
+            restaurant=restaurant,
+            is_active=True,
+            payment_in_progress=True
+        ).exists()
+
+        return Response({
+            "has_active_payment": session
+        })
+
+checkout_session_api_view = CheckSessionAPIView.as_view()
 
 class DynamicVirtualAccountAPIView(APIView):
 
@@ -686,13 +720,14 @@ class DynamicVirtualAccountAPIView(APIView):
             session.va_acct_number = result['account_number']
             session.va_bank = result['bank']
             session.va_expiry = expires_at
+            session.payment_in_progress = True
             session.save() 
 
-            requery_transaction.apply_async(countdown=1)
-            requery_transaction.apply_async(countdown=60)
-            requery_transaction.apply_async(countdown=120)
-            requery_transaction.apply_async(countdown=240)
-            requery_transaction.apply_async(countdown=300)
+            # requery_transaction.apply_async(countdown=1)
+            # requery_transaction.apply_async(countdown=60)
+            # requery_transaction.apply_async(countdown=120)
+            # requery_transaction.apply_async(countdown=240)
+            # requery_transaction.apply_async(countdown=300)
         
             return Response(
                 {

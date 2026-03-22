@@ -24,7 +24,7 @@ class OrderBatchItemAdmin(admin.ModelAdmin):
     list_display = ['batch', 'product__title', 'product_image', 'quantity', 'price', 'multiply_price']
 
 class CheckoutSessionAdmin(admin.ModelAdmin):
-    list_display = ['session_id', 'telegram_user__username', 'restaurant__name', 'is_active']
+    list_display = ['session_id', 'telegram_user__username', 'restaurant__name', 'is_active', 'payment_in_progress']
 
 
 admin.site.register(Product, ProductAdmin)

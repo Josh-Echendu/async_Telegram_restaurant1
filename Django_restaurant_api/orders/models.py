@@ -27,12 +27,15 @@ TRANSACTION_TYPE = (
 
 def product_image_path(instance, filename):
     category_title = instance.category.title if instance.category else "uncategorized"
-    return f'products/{category_title}/{filename}'
+    resturant_name = instance.resturant.name if instance.restaurant else "uncategorized"
+    return f'{resturant_name}/products/{category_title}/{filename}'
 
 class Restaurant(models.Model):
     rid = ShortUUIDField(unique=True, prefix='res', length=10, max_length=20, alphabet=ALPHABET)
     name = models.CharField(max_length=250)
     description = models.TextField(blank=True, null=True)
+    image = models.ImageField(upload_to=product_image_path, default='product.jpg')
+
     
     # ✅ add this field
     kitchen_chat_id = models.BigIntegerField(
@@ -149,6 +152,7 @@ class CheckoutSession(models.Model):
     va_bank = models.CharField(max_length=50, null=True, blank=True)
     va_expiry = models.DateTimeField(null=True, blank=True)  # NEW FIELD
     merchant_reference = models.CharField(max_length=100, unique=True, null=True, blank=True, db_index=True)
+    transaction_reference = models.CharField(max_length=100, unique=True, null=True, blank=True)
     transaction_type = models.CharField(max_length=100, choices=TRANSACTION_TYPE, default='None')
 
 
@@ -160,6 +164,7 @@ class CheckoutSession(models.Model):
     webhook_payload = models.JSONField(null=True, blank=True)
 
     is_active = models.BooleanField(default=True)
+    payment_in_progress = models.BooleanField(default=False)
     notification_sent =  models.BooleanField(default=False)
     date_created = models.DateTimeField(auto_now_add=True, db_index=True)
     # expires_at = models.DateTimeField(null=True, blank=True)
