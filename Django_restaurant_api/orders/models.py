@@ -27,7 +27,7 @@ TRANSACTION_TYPE = (
 
 def product_image_path(instance, filename):
     category_title = instance.category.title if instance.category else "uncategorized"
-    resturant_name = instance.resturant.name if instance.restaurant else "uncategorized"
+    resturant_name = instance.restaurant.name if instance.restaurant else "uncategorized"
     return f'{resturant_name}/products/{category_title}/{filename}'
 
 class Restaurant(models.Model):
