@@ -1,9 +1,8 @@
 from django.contrib import admin
-from .models import Category, Product, ProductImages, Cart, OrderBatch, OrderBatchItem, Restaurant, CheckoutSession
+from .models import Category, Product, ProductImages, Cart, OrderBatch, OrderBatchItem, CheckoutSession
 
 
-class RestaurantAdmin(admin.ModelAdmin):
-    list_display = ['rid', 'name', 'description', 'image']
+
 
 class ProductAdmin(admin.ModelAdmin):
     list_display = ['restaurant', 'title', 'product_image', 'price', 'category', 'in_stock']
@@ -33,5 +32,4 @@ admin.site.register(ProductImages, ProductImagesAdmin)
 admin.site.register(Cart, CartAdmin)
 admin.site.register(OrderBatch, OrderBatchAdmin)
 admin.site.register(OrderBatchItem, OrderBatchItemAdmin)
-admin.site.register(Restaurant, RestaurantAdmin)
 admin.site.register(CheckoutSession, CheckoutSessionAdmin)

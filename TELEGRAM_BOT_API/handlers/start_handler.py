@@ -2,21 +2,18 @@
 from config import *
 from utils.cart_utils import *
 from utils.kitchen_utils import *
+import json
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await logger(update, context)
 
-    # Extract restaurant ID from deep link
-    if context.args:
-        user_id = update.effective_user.id
-        key = f"restaurant_id:{user_id}"
-        await redis_client.set(key, context.args[0], ex=1800)
-        restaurant_id = await redis_client.get(key)
-    else:
-        await update.message.reply_text("Invalid restaurant link.")
-        return
+    restaurant_data = await get_restaurant_data(update)
+    restaurant_id = restaurant_data.get('current_rid')
+    restaurant_name = restaurant_data.get('restaurant_name')
+    print("resturant ID: ", restaurant_id)
     
-    web_app_url = f"https://35d7-102-89-82-170.ngrok-free.app/userauths/admin_login/restaurant/{restaurant_id}/"
+    web_app_url = f"{NGROK_DJANGO}/userauths/admin_login/restaurant/{restaurant_id}/"
 
     ADMIN_WEB_APP_URL = web_app_url
 
@@ -53,7 +50,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=(
-            f"<b>👋 Welcome to SupremeBot, <i>{first_name}</i>!</b>\n\n"
+            f"<b>👋 Welcome to {restaurant_name}, <i>{first_name}</i>!</b>\n\n"
             "━━━━━━━━━━━━━━\n\n"    
             "🍽 I'm your personal restaurant assistant\n\n"
             "What you can do:\n\n"
@@ -71,29 +68,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     first_name = user.first_name
     username = user.username
-    telegram_id = user.id
 
-    await telegram_registration(telegram_id=telegram_id, first_name=first_name, username=username, restaurant_id=restaurant_id)
+    await telegram_registration(telegram_id=user_id, first_name=first_name, username=username, restaurant_id=restaurant_id)
 
-
-async def after_payment(chat_id, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        ["🍽 Order Food", "📦 Track Order"],
-        ["📞 Contact Staff", "ℹ️ Help"]
-    ]
-
-    reply_markup = ReplyKeyboardMarkup(
-        keyboard,
-        resize_keyboard=True,
-        one_time_keyboard=False
-    )
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text="What would you like to do next?",
-        reply_markup=reply_markup
-    )
     
-async def telegram_registration(telegram_id, first_name, username, restaurant_id, max_retries=3):
+async def telegram_registration(telegram_id, first_name, username, restaurant_id, max_retries=5):
     payload = {
         "telegram_id": int(telegram_id),
         "first_name": str(first_name),
@@ -114,6 +93,8 @@ async def telegram_registration(telegram_id, first_name, username, restaurant_id
                 return response.json()
 
         except (httpx.RequestError, httpx.HTTPStatusError) as e:
+            data = e.response.json()
+            print("user data error: ", data)
             logging.warning(f"Attempt {attempt} failed to submit user data: {e}")
             
             if attempt == max_retries:
@@ -122,3 +103,21 @@ async def telegram_registration(telegram_id, first_name, username, restaurant_id
             
             # optional: wait before retrying
             await asyncio.sleep(1)
+
+
+async def after_payment(chat_id, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        ["🍽 Order Food", "📦 Track Order"],
+        ["📞 Contact Staff", "ℹ️ Help"]
+    ]
+
+    reply_markup = ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True,
+        one_time_keyboard=False
+    )
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text="What would you like to do next?",
+        reply_markup=reply_markup
+    )

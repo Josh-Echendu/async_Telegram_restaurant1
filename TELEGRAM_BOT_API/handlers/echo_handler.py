@@ -19,7 +19,7 @@ async def debug_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
-    telegram_id = update.effective_user.id
+    user_id = update.effective_user.id
 
     if text == "🍽 Order Food":
         await order_meal(update, context)

@@ -489,6 +489,7 @@ def requery_transaction(self):
             logger.info("No pending sessions to re-query...")
             return
         
+        
         # Create a group of tasks for all pending sessions
         tasks_group = group(handle_retry_query_external_api.s(session.merchant_reference) for session in pending_sessions)
 
@@ -505,6 +506,9 @@ def requery_transaction(self):
 
 @shared_task(bind=True, soft_time_limit=200, max_retries=10)
 def handle_retry_query_external_api(self, merchant_reference):
+    if not merchant_reference:
+        return 
+    
     missed_webhook = prefetch_webhooks(merchant_reference)
     
     if not missed_webhook:

@@ -36,12 +36,9 @@ async def update_batch_table(batch_id, status, restaurant_id, query=None, max_re
             
 async def api_get_user_order_batches(update, max_retries=3):
     user_id = update.effective_user.id
-    key = f"restaurant_id:{user_id}"
-    restaurant_id = await redis_client.get(key)
-
-    if not restaurant_id:
-        await update.message.reply_text("Restaurant ID not found for your account.")
-        return None
+    user_session = await get_user_session(user_id)
+    restaurant_id = user_session['current_rid']
+    print("restuarant 123: ", restaurant_id)
 
     url = f"http://web:8000/api/user_batch_list/{user_id}/{restaurant_id}/"
 
@@ -64,6 +61,7 @@ async def api_get_user_order_batches(update, max_retries=3):
             if e.response.status_code == 404:
                 try:
                     data = e.response.json()
+                    print("datawe: ", data)
                     if data.get("error", "").lower() == "session not found":
                         await update.message.reply_text(
                             "You have no active session. Please order some items."

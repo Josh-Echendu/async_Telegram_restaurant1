@@ -9,6 +9,7 @@ done
 
 # Ensure migrations are applied
 echo "Running migrations before starting Celery..."
+python manage.py makemigrations --noinput
 python manage.py migrate
 
 # Start Celery worker

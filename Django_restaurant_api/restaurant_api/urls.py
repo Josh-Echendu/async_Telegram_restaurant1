@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/', include('orders.urls')),  # your other API routes
     path('userauths/', include('userAuths.urls')),  # your other API routes
     path('useradmin/', include('userAdmin.urls')),  # your other API routes
+    path('restaurants/', include('restaurants.urls')),  # your other API routes
 ]
 
 

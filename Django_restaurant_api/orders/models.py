@@ -4,6 +4,9 @@ from django.utils.html import mark_safe
 from django.contrib.auth.models import User
 from decimal import Decimal
 from userAuths.models import TelegramUser, AdminUser
+from django.core.exceptions import ValidationError
+from restaurants.models import Restaurant
+
 
 ALPHABET = "abcdefghijklmnopqrstuvwxyz123456789"
 
@@ -30,28 +33,6 @@ def product_image_path(instance, filename):
     resturant_name = instance.restaurant.name if instance.restaurant else "uncategorized"
     return f'{resturant_name}/products/{category_title}/{filename}'
 
-class Restaurant(models.Model):
-    rid = ShortUUIDField(unique=True, prefix='res', length=10, max_length=20, alphabet=ALPHABET)
-    name = models.CharField(max_length=250)
-    description = models.TextField(blank=True, null=True)
-    image = models.ImageField(upload_to=product_image_path, default='product.jpg')
-
-    
-    # ✅ add this field
-    kitchen_chat_id = models.BigIntegerField(
-        null=True,
-        blank=True,
-        help_text="Telegram kitchen group chat ID"
-    )
-    image = models.ImageField(upload_to='restaurant_images/', blank=True, null=True)
-
-    def restaurant_image(self):
-        if self.image:
-            return mark_safe(f'<img src="{self.image.url}" width="50" height="50" />')
-        return "No Image"
-
-    def __str__(self):
-        return self.name
 
 class Category(models.Model):
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, db_index=True, null=True)

@@ -9,13 +9,14 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 
 
-from orders.models import KITCHEN_STATUS_CHOICES, OrderBatch, Product, Restaurant, OrderBatchItem
+from orders.models import KITCHEN_STATUS_CHOICES, OrderBatch, Product, OrderBatchItem
 from userAuths.models import TelegramUser, AdminUser
 from .forms import AddProductForm
 from .decorators import admin_required
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.core.exceptions import PermissionDenied
+from restaurants.models import Restaurant
 
 
 

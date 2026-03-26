@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.generics import ListAPIView
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
-from orders.models import Restaurant
+from restaurants.models import Restaurant
 
 
 # Create your views here.

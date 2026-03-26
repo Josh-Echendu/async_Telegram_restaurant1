@@ -29,19 +29,6 @@ async def choose_table(update, context):
 
 async def order_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await logger(update, context)
-
-    user_id = update.effective_user.id
-    key = f"restaurant_id:{user_id}"  
-    
-    restaurant_id = await redis_client.get(key)
-    print("restaurant_id for order_meal: ", restaurant_id)
-
-    if not restaurant_id:
-        await update.message.reply_text(
-            "⚠️ Session expired. Please scan the QR code again."
-        )
-        return 
-    
     await choose_table(update, context)
     
 

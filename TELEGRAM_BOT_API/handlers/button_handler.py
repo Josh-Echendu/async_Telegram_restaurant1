@@ -11,14 +11,16 @@ from .kitchen_handler import api_get_user_order_batches, update_batch_table
 from .dynamic_virtual import generate_dynamic_virtual_account
 from .echo_handler import payment_keyboard
 
+
+
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
-    telegram_id = update.effective_user.id
+    user_id = update.effective_user.id
     print("Button clicked data:", data)
 
     if data == 'pay_now':
-        await redis_client.delete(f"user:{telegram_id}:send_to_kitchen_id")
+        await redis_client.delete(f"user:{user_id}:send_to_kitchen_id")
 
         # Get us the orders ther customer has made
         order_batches_data = await api_get_user_order_batches(update)
@@ -29,14 +31,14 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.delete()
             return
         
-        await redis_client.delete(f"user:{telegram_id}:send_to_kitchen_id")
+        await redis_client.delete(f"user:{user_id}:send_to_kitchen_id")
 
         copy_order_batches_data = order_batches_data.copy()
         await pay_now(update, context, copy_order_batches_data, query)
 
     elif data == 'cancel_order':
         await query.answer("❌ Order cancelled")
-        await redis_client.delete(f"user:{telegram_id}:checkout_message_id")
+        await redis_client.delete(f"user:{user_id}:checkout_message_id")
 
         # Unlock cart
         # context.user_data['cart_locked'] = False
@@ -72,14 +74,14 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await after_payment(query.message.chat.id, context)
 
     elif data == "order_more_items":
-        await redis_client.delete(f"user:{telegram_id}:send_to_kitchen_id")
+        await redis_client.delete(f"user:{user_id}:send_to_kitchen_id")
         await query.edit_message_text("🍽️ Order sent to the kitchen! 🎉")
 
         # Extract message chat.id bcos update.message for a callback_query is None
         await order_meal_by_chat_id(query.message.chat.id, context)
 
     elif data == "track_orders":
-        await redis_client.delete(f"user:{telegram_id}:send_to_kitchen_id")
+        await redis_client.delete(f"user:{user_id}:send_to_kitchen_id")
 
         # Get us the orders ther customer has made
         order_batches_data = await api_get_user_order_batches(update)
@@ -155,8 +157,12 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_reply_markup(reply_markup=None)
 
     elif data.startswith("table_"):
+        user_id = update.effective_chat.id
 
-        table_number = data.replace("table_", "")
+        user_session = await get_user_session(user_id)
+        table_number = user_session['table_number']
+
+        print("table_number emoji: ", table_number)
 
         keyboard = [
             [
@@ -174,12 +180,9 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "yes":
 
-        user_id = update.effective_user.id
-        key = f"restaurant_id:{user_id}"
-
-        restaurant_id = await redis_client.get(key)
-
-        WEB_APP_URL = f"https://35d7-102-89-82-170.ngrok-free.app/api/restaurant/{restaurant_id}/menu/"
+        restaurant_data = await get_restaurant_data(update)
+        restaurant_id = restaurant_data['current_rid']
+        WEB_APP_URL = f"{NGROK_DJANGO}/api/restaurant/{restaurant_id}/menu/"
 
         reply_keyboard = [
             [

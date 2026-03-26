@@ -195,7 +195,7 @@
   allmeals: [], // for 'all' category caching // ← FIX: Added comma
   currentPage: 1, // ← FIX: Added comma
   perPage: 3, // ← FIX: Added comma
-
+ 
   mapProducts(products, categoryOverride = null) {
     return products.map(p => ({
       pid: String(p.pid),
@@ -263,6 +263,8 @@
   }, // ← FIX: Added comma
   
   categories: [], 
+  restaurantName: 'Fork & Co.', // Default value
+  restaurantImage: '',
   loading: false,
 
   async loadCategories(retries = 3) {
@@ -286,16 +288,24 @@
                 { timeout: 5000 }  // 5s timeout
             );
 
+            // ✅ CHANGE THIS LINE: Look inside response.data.categories
+            const categoryData = response.data.categories;
+            
+            this.restaurantName = response.data.restaurant_name || 'Fork & Co.';
+            this.restaurantImage = response.data.restuarant_image || '';
+            
             this.categories = [
-                { id: 'all', name: 'All' },
-                ...response.data.map(cat => ({
-                    id: cat.cid,
-                    name: cat.title
-                }))
+              { id: 'all', name: 'All' },
+              ...categoryData.map(cat => ({
+                  id: cat.cid, // Ensure this matches your serializer field
+                  name: cat.title,
+                  restaurant_name: response.data.restaurant_name, // Use the new data!
+                  restaurant_image: response.data.restuarant_image,
+              }))
             ];
-
+            
             this.loading = false;
-            console.log('success......')
+            console.log('success......', this.categories)
             return; // success, exit retry loop
 
         } catch (error) {
@@ -640,8 +650,21 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
 <!-- ===== HEADER (sticky, bright) ===== -->
 <header class="sticky top-0 z-40 sticky-bright py-3 sm:py-4 flex items-center justify-between rounded-2xl px-3">
   <div class="flex items-center gap-2">
-    <i class="fas fa-utensils text-3xl text-[#1f2a3f]"></i>
-    <span class="text-2xl sm:text-3xl brand-italic font-bold">fork & co.</span>
+    <!-- <i class="fas fa-utensils text-3xl text-[#1f2a3f]"></i> -->
+    <template x-if="restaurantImage">
+      <img 
+        :src="restaurantImage"
+        class="w-16 h-16 sm:w-16 sm:h-16 rounded-full object-cover shadow-xl border-2 border-white ring-2 ring-[#e9ecf2]">
+    </template>
+
+    <template x-if="!restaurantImage">
+      <i class="fas fa-utensils text-3xl text-[#1f2a3f]"></i>
+    </template>
+
+    <span 
+    class="text-2xl sm:text-3xl brand-italic font-bold"
+    x-text="restaurantName"
+  ></span>    
   </div>
   <button @click="showCart = true" class="relative p-2.5 rounded-full bg-white shadow-sm border border-[#e9ecf2]">
     <i class="fas fa-bag-shopping text-xl text-[#1f2a3f]"></i>

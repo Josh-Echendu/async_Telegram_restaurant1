@@ -14,14 +14,19 @@ load_dotenv(BASE_DIR.parent / ".env")
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 DEBUG = os.getenv("DEBUG") == "True"
 
+FIELD_ENCRYPTION_KEY = os.getenv("FIELD_ENCRYPTION_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("BOT_TOKEN")
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
+
+NGROK_DJANGO =  os.getenv("NGROK_DJANGO") # your DRF server
+NGROK_FAST_API = os.getenv('NGROK_FAST_API')
+
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-zw5=&ac93o=r!(-$vc8j#ykx1zmxvqhrow2f(ij0()d_#z%+jz'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -58,12 +63,14 @@ INSTALLED_APPS = [
     'bootstrap4',
     'widget_tweaks',
     'django_celery_results',
+    'encrypted_model_fields',
 
 
     # Your apps
     'orders',
     'userAuths',
     'userAdmin',
+    'restaurants',
 ]
 
 MIDDLEWARE = [
@@ -241,6 +248,7 @@ REST_FRAMEWORK = {
         "send_kitchen": "1/minute",  # only 1 request per 30 seconds per user
     },
 }
+
 
 
 # Celery settings

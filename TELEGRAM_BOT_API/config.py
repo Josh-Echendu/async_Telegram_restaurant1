@@ -25,6 +25,7 @@ import os
 from dotenv import load_dotenv
 from pathlib import Path
 from redis_client import redis_client
+import json
 
 
 # python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
@@ -33,12 +34,42 @@ from redis_client import redis_client
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
+
+NGROK_DJANGO = os.getenv('NGROK_DJANGO')
+NGROK_FAST_API = os.getenv('NGROK_FAST_API')
 
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+
+async def get_restaurant_data(update):
+    user_id = update.effective_user.id
+    restaurant_data = json.loads(await redis_client.get(f'user:{user_id}'))
+    return restaurant_data
+
+
+async def get_user_session(user_id):
+    data = await redis_client.get(f"user:{user_id}")
+
+    # convert the json string back to a dict
+    return json.loads(data) if data else {}
+
+
+async def save_user_session(user_id, session):
+
+    # json.dumps(session): 👉 This converts your Python dict into a string
+    await redis_client.set(f"user:{user_id}", json.dumps(session)) # '{"current_rid": "pizza_123", "table_number": 6}'
+    
+    check = await redis_client.get(f"user:{user_id}")
+    print("Stored in Redis:", check)
+    return check
+
+
+
+
 
 async def logger(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """

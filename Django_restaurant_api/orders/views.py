@@ -46,13 +46,25 @@ class CategoryListApiView(ListAPIView):
     permission_classes = [AllowAny]
     pagination_class = None  # No pagination, we want all categories
 
-    def get_queryset(self):
+    def list(self, request, *args, **kwargs):
         restaurant_id = self.kwargs.get("restaurant_id")
         if not restaurant_id:
-            raise Http404("Category or restaurant ID missing")
+            return Response({"error": "Category or restaurant ID missing"}, status=404)
 
         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
-        return Category.objects.filter(restaurant=restaurant).select_related('restaurant')
+        categories = Category.objects.filter(restaurant=restaurant)
+
+        serializers = CategorySerializer(categories, many=True)
+        print("serialized: ", serializers.data)
+
+        return Response({
+            "categories": serializers.data,
+            "restaurant_name": restaurant.name,
+
+            # Use .url to get the string path instead of the file object
+            "restuarant_image": restaurant.image.url if restaurant.image else None        
+        }, status=200)
+
     
 category_list_api_view = CategoryListApiView.as_view()
 
@@ -1077,15 +1089,15 @@ class UpdateBatchStatusAPIView(APIView):
 
 update_batch_status_api_view = UpdateBatchStatusAPIView.as_view()
 
+
 class UserOrderBatchesAPIView(APIView):
     def get(self, request, *args, **kwargs):
         telegram_id = kwargs.get('telegram_id')
         restaurant_id = kwargs.get('restaurant_id')
 
-        if telegram_id is None:
-            return Response({"error": "Missing telegram_id in path"}, status=400)
-        if restaurant_id is None:
-            return Response({"error": "Missing restaurant_id in path"}, status=400)
+        print("resti: ", restaurant_id)
+        if telegram_id is None or restaurant_id is None:
+            return Response({"error": "Missing telegram_id or restaurant_id in path"}, status=400)
 
         try:
             telegram_id = int(telegram_id)
