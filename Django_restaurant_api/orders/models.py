@@ -56,6 +56,9 @@ class Category(models.Model):
     def __str__(self):
         return self.title
 
+product = None  # Replace with your actual product instance
+Category.objects.filter(product__product=product, product_set__instock=True).distinct()
+
 class Product(models.Model):
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='restaurant_products', db_index=True, null=True)
     pid = ShortUUIDField(unique=True, length=10, max_length=20, alphabet=ALPHABET)

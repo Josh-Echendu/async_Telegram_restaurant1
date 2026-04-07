@@ -1,8 +1,13 @@
 from decimal import Decimal
+from operator import is_
+from time import time
+import token
 from httpx import Response, request
+from Django_restaurant_api.userAuths.models import TelegramUser
+from Django_restaurant_api.userAuths.models import TelegramUser
+from restaurants.models import Restaurant, RestaurantMembership
 from celery import shared_task, group
 from celery.signals import worker_ready
-from django.conf import settings
 from django.db.models import Q
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from .models import KITCHEN_STATUS_CHOICES, OrderBatch, CheckoutSession
@@ -19,11 +24,6 @@ from .errors import prefetch_webhooks, delete_webhook
 from .virtual_edit_duration import virtual_account_edit_amount_duration
 
 from django.db.models import OuterRef, Subquery, Sum, Value, F
-
-
-
-TOKEN = settings.TELEGRAM_BOT_TOKEN
-bot = Bot(token=TOKEN)
 
 
 import logging
@@ -124,7 +124,8 @@ def send_order_notifications(self, rid, order_bid, telegram_id):
             raise self.retry(exc=exc, countdown=3)
         
         print(f"Final failure for order {order_bid}")
-        _notify_user_of_failure(telegram_id)
+        TOKEN = order.restaurant.get_bot_token()
+        _notify_user_of_failure(telegram_id, TOKEN)
 
 
 # -----------------------------------------
@@ -135,10 +136,10 @@ def _send_order_notifications(order, telegram_id):
     Sync function to send messages to kitchen and user.
     Updates DB flags after each successful send.
     """
-
+    TOKEN = order.restaurant.get_bot_token()
     if not order.notified_kitchen:
         try:
-            send_to_kitchen_for_celery(order)
+            send_to_kitchen_for_celery(order, TOKEN)
             order.notified_kitchen = True
             order.save(update_fields=["notified_kitchen"])
         except Exception:
@@ -146,7 +147,7 @@ def _send_order_notifications(order, telegram_id):
 
     if not order.notified_user:
         try:
-            send_user_message_for_celery(order, telegram_id)
+            send_user_message_for_celery(order, telegram_id, TOKEN)
             order.notified_user = True
             order.save(update_fields=["notified_user"])
         except Exception:
@@ -156,7 +157,7 @@ def _send_order_notifications(order, telegram_id):
 # -----------------------------------------
 # 5️⃣ Telegram helpers
 # -----------------------------------------
-def send_to_kitchen_for_celery(order):
+def send_to_kitchen_for_celery(order, TOKEN):
     bot = Bot(token=TOKEN)
 
     lines = [
@@ -187,7 +188,7 @@ def send_to_kitchen_for_celery(order):
         reply_markup=InlineKeyboardMarkup(kitchen_keyboard)
     )
 
-def send_user_message_for_celery(order, telegram_id):
+def send_user_message_for_celery(order, telegram_id, TOKEN):
     bot = Bot(token=TOKEN)
     lines = []
     total_price = sum(item.price * item.quantity for item in order.items.all())
@@ -212,7 +213,7 @@ def send_user_message_for_celery(order, telegram_id):
         reply_markup=None
     )
 
-def _notify_user_of_failure(telegram_id):
+def _notify_user_of_failure(telegram_id, TOKEN):
     bot = Bot(token=TOKEN)
     bot.send_message(
         chat_id=telegram_id,
@@ -380,7 +381,7 @@ def handle_mismatch(session_id, payload):
 
 
 @shared_task(bind=True, soft_time_limit=200, max_retries=10)
-def mismatch_message(self, telegram_id):
+def mismatch_message(self, telegram_id, TOKEN):
     try:
         bot.send_message(
             chat_id=telegram_id,
@@ -445,7 +446,7 @@ def send_receipt_to_user(session):
             photo=input_file
         )
 
-def send_account_details_to_user(session, virtual_account_data):
+def send_account_details_to_user(session, virtual_account_data, TOKEN):
 
     # Define the new buttons you want to show
     keyboard = [
@@ -583,6 +584,70 @@ def edit_amount_duration(self, session_id):
             return
         raise self.retry(exc=exc, countdown=min(2 ** self.request.retries, 3600))
  
+
+
+# tasks.py
+from django.utils import timezone
+from telegram.error import RetryAfter
+
+
+@shared_task
+def send_weekly_reminder():
+    restaurants = Restaurant.objects.filter(is_bot_active=True, is_accepting_orders=True).only('rid')
+    tasks_group = group(_send_weekly_reminder_to_restaurant.s(restaurant.rid) for restaurant in restaurants)
+    tasks_group.apply_async()   
+
+
+@shared_task(bind=True, max_retries=3)
+def _send_weekly_reminder_to_restaurant(self, rid):
+    restaurant = Restaurant.objects.filter(rid=rid).only('bot_token').first()
+    
+    # Get the bot object for the restaurant
+    bot = Bot(token=restaurant.get_bot_token())
+
+    # membership = restaurant.restaurantmembership_set.filter(is_active=True).select_related('user')
+    # membership = RestaurantMembership.objects.filter(restaurant=restaurant, is_active=True).select_related('user')
+    # membership = RestaurantMembership.objects.filter(restaurant__rid=rid, is_active=True).select_related('user')
+    # users = TelegramUser.objects.filter(restaurantmembership__restaurant__rid=rid, restaurantmembership__is_active=True).distinct()
+    
+    users = (
+        TelegramUser.objects.filter(
+            restaurantmembership__restaurant=restaurant,
+            restaurantmembership__is_active=True
+        )
+        .order_by('id')
+        .values_list('telegram_id', flat=True)
+    )
+
+    chunk_size = 100
+
+    for i in range(0, len(users), chunk_size): # [0, 100, 200, 300, 400, 500..., len(users)]
+        telegram_ids_batch = users[i:i + chunk_size]
+
+        for telegram_id in list(telegram_ids_batch):
+            try:
+                bot.send_message(
+                    chat_id=telegram_id,
+                    text="⏰ Weekly Reminder: Don't forget to check your orders and update your menu! 🍽️📋"
+                )
+                time.sleep(0.1)  # small delay to avoid hitting rate limits
+
+            except RetryAfter as e:
+                logger.warning(f"Rate limit hit for {telegram_id}, retrying after {e.timeout} seconds...")
+                raise self.retry(exc=e, countdown=e.timeout)
+            
+            except Exception as e:
+                logger.error(f"Failed to send reminder to {telegram_id}: {e}")
+                raise self.retry(exc=e, countdown=2)
+
+
+
+
+
+
+
+
+
 
 # @shared_task(bind=True, soft_time_limit=200, max_retries=None)
 # def handle_retry_query_external_api(self, merchant_reference):

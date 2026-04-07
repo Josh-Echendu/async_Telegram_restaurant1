@@ -6,6 +6,7 @@ from shortuuid.django_fields import ShortUUIDField
 from django.utils.html import mark_safe
 from decimal import Decimal
 import uuid
+from userAuths.models import TelegramUser
 from encrypted_model_fields.fields import EncryptedCharField
 from django.core.exceptions import ValidationError
 from django.db.models.signals import post_save, post_delete
@@ -73,6 +74,41 @@ class Restaurant(models.Model):
 
     def __str__(self):
         return self.name
+    
+
+class RestaurantMembership(models.Model):
+    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='users')
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='restaurants')
+
+    is_active = models.BooleanField(default=True)
+    date_joined = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # one user per resturant
+        unique_together = ('user', 'restaurant')
+
+    # ASK YOURSELF WHO OWNS WHO FIRST
+
+    # 🧠 FINAL ANSWER (VERY CLEAR)
+    #     TelegramUser → independent entity
+    #     Restaurant → independent entity
+    #     PaymentSession → dependent entity
+
+    #     So:
+
+    #     PaymentSession belongs to BOTH TelegramUser and Restaurant
+
+
+    #     Step 2 — Cardinality
+    # One user → how many restaurants?
+
+    # 👉 MANY
+    # (user can order from multiple restaurants)
+
+    # One restaurant → how many users?
+
+    # 👉 MANY
+    # (many customers)
 
 
 @receiver(post_save, sender=Restaurant)

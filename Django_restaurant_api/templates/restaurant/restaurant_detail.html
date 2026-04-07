@@ -181,6 +181,7 @@
 
 <!-- ALPINE STORE (frontend mock) - FIXED COMMAS -->
 <div x-data="{
+  restaurantId: window.location.pathname.split('/').filter(p => p)[2], 
   paymentSessionActive: false,
   telegramId: window.Telegram?.WebApp?.initDataUnsafe?.user?.id ?? 0, // ← FIX: Added comma
   cart: [], // ← FIX: Added comma
@@ -351,7 +352,7 @@
 
     });
 
-    localStorage.setItem(`fork_cart_${this.telegramId}`, JSON.stringify(this.cart));
+    localStorage.setItem(`fork_cart_${this.telegramId}_${this.restaurantId}`, JSON.stringify(this.cart));
 
     console.log('Cart validated against ALL meals:', this.cart);
   }, // ← FIX: Added comma
@@ -380,9 +381,10 @@
   }, // ← FIX: Added comma
 
   saveCart() {
-    localStorage.setItem(`fork_cart_${this.telegramId}`, JSON.stringify(this.cart));
+    const key = `fork_cart_${this.telegramId}_${this.restaurantId}`;
+    localStorage.setItem(key, JSON.stringify(this.cart));
   }, // ← FIX: Added comma
-  
+    
   addToCart(meal) {
 
     // stop if payment in session
@@ -432,12 +434,12 @@
 
     this.saveCart();
   }, // ← FIX: Added comma
-  
+
   clearCart() {
     this.cart = [];
-    localStorage.removeItem(`fork_cart_${this.telegramId}`);
-  }, // ← FIX: Added comma
-  
+    localStorage.removeItem(`fork_cart_${this.telegramId}_${this.restaurantId}`);
+  },  // ← FIX: Added comma
+
   placeOrder() {
 
     if (this.paymentSessionActive) {
@@ -627,8 +629,13 @@
 x-init="
   activeCategory = 'all';
 
-  const saved = localStorage.getItem(`fork_cart_${telegramId}`);
+  const pathParts = window.location.pathname.split('/').filter(p => p);
+  restaurantId = pathParts[2];
 
+  const storageKey = `fork_cart_${telegramId}_${restaurantId}`;
+  const saved = localStorage.getItem(storageKey);
+  
+  
   if (saved) {
     try{
       // REMOVE 'this.' - Alpine maps these directly to your data object
@@ -835,7 +842,7 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
             <!-- ADD THIS WARNING TEXT -->
             <p
               x-show="!item.in_stock"
-              class="text-red-500 text-sm font-medium"
+              class="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full inline-block mt-1"
             >
               Out of stock
             </p>

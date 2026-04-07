@@ -1,0 +1,262 @@
+# version: "3.9"
+
+services:
+
+  # =========================
+  # NGINX LOAD BALANCER
+  # =========================
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: nginx_lb
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+
+    depends_on:
+      - telegram_bot_1
+      - telegram_bot_2
+      - telegram_bot_3
+
+    networks:
+      - backend
+      - public
+
+  web:
+    build: .
+    container_name: django_restaurant_api
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - 8000:8000
+    volumes:
+    # LOCAL_FOLDER : CONTAINER_FOLDER
+      - ./Django_restaurant_api:/app
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+      redis:
+        condition: service_started
+        restart: true
+    networks:
+      - backend
+
+  db:
+    image: postgres:17-alpine
+    container_name: restaurant_db
+    restart: unless-stopped
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+    command: >
+      redis-server 
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    
+    # Flags explained:
+
+    # --appendonly yes → turns on persistence. Redis will save every write to a file so that if it restarts, you don’t lose data.
+
+    # --appendfsync everysec → Redis syncs writes to disk every second. Safe but not super slow.
+
+    # --maxmemory 256mb → Limits Redis to use only 256MB of memory. Helps prevent your system from running out of RAM.
+
+    # --maxmemory-policy allkeys-lru → If Redis hits memory limit, it removes the least recently used items first. Prevents crashes while keeping frequently used data.
+    
+    volumes:
+      #<volume_name_or_host_path>:<container_path>
+      - redis_data:/data
+
+    networks:
+      - backend
+
+  celery:
+    build: .
+    container_name: celery_worker
+    restart: unless-stopped
+
+    command: ["./entrypoint_celery.sh"]
+
+    env_file: .env
+    
+    depends_on:
+      redis:
+        condition: service_started
+      db:
+        condition: service_healthy
+
+    networks:
+      - backend
+
+    # =========================
+    # FASTAPI + PTB REPLICAS
+    # =========================
+
+    # ports = PUBLIC ACCESS (dangerous for replicas)
+    # expose = INTERNAL ACCESS (correct for microservices)
+
+    # NGINX = the ONLY public door
+    # FastAPI bots = hidden workers behind the door
+    
+    telegram_bot_1:
+      build:
+        context: .
+        dockerfile: Dockerfile.bot
+      container_name: telegram_bot_1
+      restart: unless-stopped
+      env_file: .env
+      expose:
+        - "8080"
+      volumes:
+        - ./TELEGRAM_BOT_API:/app  # Mount the bot code for live updates
+      depends_on:
+        redis:
+          condition: service_started
+        web:
+          condition: service_started
+      networks:
+          - backend
+
+    telegram_bot_2:
+      build:
+        context: .
+        dockerfile: Dockerfile.bot
+      container_name: telegram_bot_2
+      restart: unless-stopped
+      env_file: .env
+      expose:
+        - "8080"
+      volumes:
+        - ./TELEGRAM_BOT_API:/app  # Mount the bot code for live updates
+      depends_on:
+        redis:
+          condition: service_started
+        web:
+          condition: service_started
+      networks:
+        - backend
+
+    telegram_bot_3:
+      build:
+        context: .
+        dockerfile: Dockerfile.bot
+      container_name: telegram_bot_3
+      restart: unless-stopped
+      env_file: .env
+      expose:
+        - "8080"
+      volumes:
+        - ./TELEGRAM_BOT_API:/app  # Mount the bot code for live updates
+      depends_on:
+        redis:
+          condition: service_started
+        web:
+          condition: service_started
+      networks:
+        - backend
+
+
+volumes:
+  postgres_data:
+  redis_data:
+
+# Define a custom network bridge(backend) for our services to communicate securely
+
+# =========================
+# NETWORKS
+# =========================
+networks:
+  backend:
+    driver: bridge
+    internal: true   # 🔒 only internal communication
+
+  public:
+    driver: bridge
+
+  # celery-beat:
+  #   build: .
+  #   container_name: celery_beat
+  #   restart: unless-stopped
+
+  #   command: celery -A restaurant_api beat --loglevel=info
+
+  #   env_file: .env
+
+  #   depends_on:
+  #     redis:
+  #       condition: service_started
+  #     db:
+  #       condition: service_healthy
+
+  #   networks:
+  #     - backend
+
+
+# nginx:
+#   image: nginx:alpine              # Use the lightweight official Nginx image
+#   container_name: nginx            # Name the container 'nginx'
+
+#   ports:
+#     - "80:80"                      # Map port 80 on your host to port 80 in the container (HTTP)
+
+#   volumes:
+#     - ./nginx.conf:/etc/nginx/nginx.conf:ro  # Use your custom Nginx config
+
+#   depends_on:
+#     - web                          # Make sure the Django web container is running first
+
+#   networks:
+#     - backend                      # Connect Nginx to the backend network
+
+
+#  # fast api/ telegram_bot
+#   telegram_bot:
+#     build:
+#       context: .
+#       dockerfile: Dockerfile.bot
+#     container_name: telegram_bot
+#     restart: unless-stopped
+#     ports:
+#       - 8080:8080  # Map the bot's listening port to the host
+
+#     env_file: .env
+#     volumes:
+#       - ./TELEGRAM_BOT_API:/app  # Mount the bot code for live updates
+#     depends_on:
+#       redis:
+#         condition: service_started
+#       web:
+#         condition: service_started
+
+#     networks:
+#       - backend

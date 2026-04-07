@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.generics import ListAPIView
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
-from restaurants.models import Restaurant
+from restaurants.models import Restaurant, RestaurantMembership
 
 
 # Create your views here.
@@ -49,32 +49,41 @@ class TelegramUserCreateAPIView(APIView):
         }
 
         try:
-            # Try to create or update
+            # Look for user with this telegram_id
+            # If found → update it
+            # If not found → create it
             user, created = TelegramUser.objects.update_or_create(
                 telegram_id=telegram_id,
-                restaurant=restaurant,
                 defaults=defaults,
             )
+
+            # 2️⃣ Link USER ↔ RESTAURANT
+            RestaurantMembership.objects.get_or_create(
+                user=user,
+                restaurant=restaurant
+            )
+            
             return Response(
                 {
                     "id": user.id,
                     "telegram_id": user.telegram_id,
                     "username": user.username,
                     "created": created,
-                    "restaurant": user.restaurant.name
+                    "restaurant": restaurant.name
                 },
                 status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
             )
         except IntegrityError:
             # Another request created it at the same time → fetch the existing one
             user = TelegramUser.objects.get(telegram_id=telegram_id)
+            
             return Response(
                 {
                     "id": user.id,
                     "telegram_id": user.telegram_id,
                     "username": user.username,
                     "created": False,
-                    "restaurant": user.restaurant.name
+                    "restaurant": restaurant.name
                 },
                 status=status.HTTP_200_OK,
             )

@@ -4,9 +4,9 @@ from django.utils import timezone
 from decimal import Decimal
 from django.shortcuts import render
 import uuid
-
 import requests
-
+from .authentication import TelegramAuthentication
+from restaurants.models import RestaurantMembership
 from .redis_client import redis_client
 from userAuths.models import TelegramUser
 from rest_framework.generics import (
@@ -17,7 +17,6 @@ from .serializers import CartSerializer, CategorySerializer, OrderBatchSerialize
 from .models import KITCHEN_STATUS_CHOICES, Cart, Category, OrderBatch, OrderBatchItem, Product, Restaurant, CheckoutSession
 from rest_framework.permissions import IsAuthenticated , AllowAny
 import json
-import httpx
 from rest_framework.pagination import LimitOffsetPagination 
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
@@ -328,13 +327,16 @@ import hmac
 from urllib.parse import unquote
 from django.conf import settings
 
-BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
-
-def verify_telegram_init_data(init_data: str):
+def verify_telegram_init_data(init_data: str, restaurant_id: str):
     """
     Verifies Telegram Web App init_data according to Telegram docs.
     Returns (is_valid, data_dict).
     """
+    try: 
+        # Optimized: Only fetches the ID and bot_token from the DB
+        restaurant = Restaurant.objects.only('bot_token').get(rid=restaurant_id)
+    except Restaurant.DoesNotExist: return Response({"error": "Restaurant not found"}, status=status.HTTP_400_BAD_REQUEST)
+    
     parsed_data = {}
     
     # Step 1: Parse key=value pairs
@@ -355,7 +357,7 @@ def verify_telegram_init_data(init_data: str):
     # Step 4: First HMAC (key=WebAppData, message=BOT_TOKEN)
     secret_key = hmac.new(
         key=b"WebAppData",
-        msg=BOT_TOKEN.encode(),
+        msg=restaurant.get_bot_token().encode(),
         digestmod=hashlib.sha256
     ).digest()
 
@@ -380,6 +382,7 @@ def verify_telegram_init_data(init_data: str):
 class OrderBatchListCreateAPIView(APIView):
     throttle_scope = "send_kitchen"            # Tells DRF which limit to use
     throttle_classes = [TelegramScopedThrottle]  # Use our custom Telegram ID throttle
+    authentication_classes = [TelegramAuthentication]  # Custom auth to verify Telegram init_data
 
     permission_classes = [AllowAny]
 
@@ -392,8 +395,6 @@ class OrderBatchListCreateAPIView(APIView):
         Create a new order batch along with OrderBatchItems.
         Uses transaction.atomic to ensure all-or-nothing behavior.
         """
-        print("request data: ", request.data)
-
         try:
             restaurant_id = self.kwargs.get("restaurant_id")
             cart_items = request.data.get('cart_items')
@@ -402,37 +403,49 @@ class OrderBatchListCreateAPIView(APIView):
 
         except (TypeError, ValueError):
             return Response({"error": "Invalid cart_items ID or telegram_id or idempotency_key"}, status=status.HTTP_400_BAD_REQUEST)
-        
+    
         if not cart_items: return Response({"error": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST)
         if not idempotency_key: return Response({"error": "Missing idempotency key"}, status=status.HTTP_400_BAD_REQUEST)
         if not restaurant_id: return Response({"error": "Missing restaurant ID"}, status=status.HTTP_400_BAD_REQUEST)
         if not init_data: return Response({"error": "data"}, status=status.HTTP_400_BAD_REQUEST)
         print("cart_items: ", request.data)
 
-        is_valid, data = verify_telegram_init_data(init_data)
+        try:
+            restaurant = Restaurant.objects.get(rid=restaurant_id)
+        except Restaurant.DoesNotExist:
+            return Response(
+                {"error": "Restaurant not found"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        print("data : ", data)
-        print("is valid : ", is_valid)
+        print("restaurant queryset:", restaurant)
+        print("restaurant_id123:", restaurant_id)
 
-        if not is_valid:
-            return Response({"error": "Invalid Telegram data"}, status=403)
-
-        user_data = json.loads(data["user"])
-
-        telegram_id = user_data["id"]
-        print("tel_id: ", telegram_id)
-
-        try: restaurant = Restaurant.objects.get(rid=restaurant_id)
-        except Restaurant.DoesNotExist: return Response({"error": "Restaurant not found"}, status=status.HTTP_400_BAD_REQUEST)
-        
         # 2️⃣ Get telegram User
-        try: telegram_user = TelegramUser.objects.get(telegram_id=telegram_id, restaurant=restaurant)
-        except TelegramUser.DoesNotExist: return Response({"error": "User not found"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            # request.user is set by TelegramAuthentication to be the telegram_id
+            user = TelegramUser.objects.get(telegram_id=request.user)  
+        except TelegramUser.DoesNotExist:
+            return Response(
+                {"error": "User not found"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        print("telegram user: ", user)
 
+        membership_exists = RestaurantMembership.objects.filter(
+            user=user,
+            restaurant=restaurant
+        ).exists()
+
+        if not membership_exists:
+            return Response(
+                {"error": "User not linked to this restaurant"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         # 🔒 Lock existing order if already created
         existing_batch = (
             OrderBatch.objects
-            .filter(telegram_user=telegram_user, idempotency_key=idempotency_key, restaurant=restaurant)
+            .filter(telegram_user=user, idempotency_key=idempotency_key, restaurant=restaurant)
             .first()
         )
 
@@ -446,8 +459,6 @@ class OrderBatchListCreateAPIView(APIView):
 
         product_pids = [item.get("pid") for item in cart_items]
         print("product_pids: ", product_pids)
-
-        print("joshua.....")
         
         # 1️⃣ Auto-remove out-of-stock items from cart DB
         invalid_items = (
@@ -459,10 +470,7 @@ class OrderBatchListCreateAPIView(APIView):
         removed_cart_items = list(invalid_items.values_list('title', flat=True))
         pids = list(invalid_items.values_list('pid', flat=True))
 
-        print("Echendu........")
-
         if invalid_items:
-            print("Anuoluwapo.........")
             invalid_response = {
                 "success": False,
                 "out_of_stock": True,
@@ -508,7 +516,7 @@ class OrderBatchListCreateAPIView(APIView):
             session = (
                 CheckoutSession.objects.filter(
                     restaurant=restaurant,
-                    telegram_user=telegram_user,
+                    telegram_user=user,
                     is_active=True
                 )
                 .order_by('-date_created')
@@ -525,7 +533,7 @@ class OrderBatchListCreateAPIView(APIView):
             if not session:
                 CheckoutSession.objects.create(
                     restaurant=restaurant,
-                    telegram_user=telegram_user,
+                    telegram_user=user,
                     is_active=True,
                     merchant_reference=None,
                     # expires_at=timezone.now() + timedelta(hours=3)  # expires in 3 hours
@@ -541,7 +549,7 @@ class OrderBatchListCreateAPIView(APIView):
                 restaurant=restaurant,
                 removed_cart_items=removed_cart_items,
                 idempotency_key=idempotency_key,
-                telegram_user=telegram_user,
+                telegram_user=user,
                 total_price=total_price,
                 status='pending', # kitchen status
                 payment_status='unpaid'  # payment workflow
@@ -576,12 +584,12 @@ class OrderBatchListCreateAPIView(APIView):
         
         except IntegrityError as e:
             # Race condition: someone else already created it
-            batch = OrderBatch.objects.get(telegram_user=telegram_user, idempotency_key=idempotency_key, restaurant=restaurant)
+            batch = OrderBatch.objects.get(telegram_user=user, idempotency_key=idempotency_key, restaurant=restaurant)
             serializer = OrderBatchSerializer(batch)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.exception(f"Unexpected error creating order batch for user {telegram_user.id}: {e}")
+            logger.exception(f"Unexpected error creating order batch for user {user.id}: {e}")
             return Response(
                 {"detail": "Internal server error."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1095,7 +1103,6 @@ class UserOrderBatchesAPIView(APIView):
         telegram_id = kwargs.get('telegram_id')
         restaurant_id = kwargs.get('restaurant_id')
 
-        print("resti: ", restaurant_id)
         if telegram_id is None or restaurant_id is None:
             return Response({"error": "Missing telegram_id or restaurant_id in path"}, status=400)
 
@@ -1110,9 +1117,20 @@ class UserOrderBatchesAPIView(APIView):
         except Restaurant.DoesNotExist:
             return Response({"error": "Restaurant not found"}, status=404)
 
-        user = TelegramUser.objects.filter(telegram_id=telegram_id, restaurant=restaurant).first()
+        user = TelegramUser.objects.filter(telegram_id=telegram_id).first()
         if not user:
             return Response({"error": "User for this restaurant not found"}, status=404)
+
+        membership_exists = RestaurantMembership.objects.filter(
+            user=user,
+            restaurant=restaurant
+        ).exists()
+        
+        if not membership_exists:
+            return Response(
+                {"error": "User not linked to this restaurant"},
+                status=404
+            )
 
         # session_batches → all OrderBatch
         # items → all OrderItem

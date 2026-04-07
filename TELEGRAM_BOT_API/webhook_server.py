@@ -18,9 +18,6 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-import redis
-import json
-
 
 @app.post("/webhook/{rid}")
 async def webhook(rid: str, request: Request):

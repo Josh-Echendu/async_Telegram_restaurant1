@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'widget_tweaks',
     'django_celery_results',
     'encrypted_model_fields',
+    'django_celery_beat',
 
 
     # Your apps
@@ -71,6 +72,7 @@ INSTALLED_APPS = [
     'userAuths',
     'userAdmin',
     'restaurants',
+    'payments',
 ]
 
 MIDDLEWARE = [
@@ -241,14 +243,13 @@ AUTH_USER_MODEL = 'userAuths.AdminUser'
 REST_FRAMEWORK = {
     # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
     # 'PAGE_SIZE': 3,
-    "DEFAULT_THROTTLE_CLASSES": [
-        "rest_framework.throttling.ScopedRateThrottle",
-    ],
+    # "DEFAULT_THROTTLE_CLASSES": [
+    #     "orders.throttles.TelegramScopedThrottle",
+    # ],
     "DEFAULT_THROTTLE_RATES": {
-        "send_kitchen": "1/minute",  # only 1 request per 30 seconds per user
+        "send_kitchen": "2/minute",  # only 1 request per 60 seconds per user
     },
 }
-
 
 
 # Celery settings
@@ -296,3 +297,19 @@ CELERY_TASK_TRACK_STARTED = True
 
 # Disable worker rate limits (improves throughput)
 CELERY_WORKER_DISABLE_RATE_LIMITS = True # i.e remove speed bumbs(remove rate-limiting by celery)
+
+
+
+# --------------------------- Here is for celery-beat (periodic tasks scheduler)-------------------------------------------
+
+# This tells celery: 👉 “Don’t use the default in-memory schedule — use the database instead.”
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    "send-weekly-restaurant-reminder": {
+        "task": "orders.tasks.send_weekly_reminder",
+        "schedule": crontab(hour=12, minute=0, day_of_week="sat"),
+    },
+}
