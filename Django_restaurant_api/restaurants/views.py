@@ -18,6 +18,7 @@ def get_restaurant_internal(request, rid):
         return Response({}, status=404)
 
     return Response({
+        "rid": restaurant.rid,
         "bot_token": restaurant.get_bot_token(),  # ✅ REQUIRED
         "bot_name": restaurant.name,
         "webhook_secret_token": str(restaurant.webhook_secret_token),

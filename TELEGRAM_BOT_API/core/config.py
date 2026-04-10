@@ -24,7 +24,7 @@ from decimal import Decimal
 import os
 from dotenv import load_dotenv
 from pathlib import Path
-from redis_client import redis_client
+from core.redis import redis_client
 import json
 
 

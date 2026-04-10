@@ -1,7 +1,7 @@
 import httpx
 import asyncio
 from cachetools import TTLCache
-from config import INTERNAL_API_KEY
+from core.config import INTERNAL_API_KEY
 
 # TTL: Time to Live, “How long something stays in memory before it disappears” i.e it last for 60 seconds
 cache = TTLCache(maxsize=2000, ttl=6000)  # cache 1000+ bots, it can store up to 2000 items, e.g 2000 restaurant (or bot tokens)

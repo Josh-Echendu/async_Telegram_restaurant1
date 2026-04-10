@@ -305,11 +305,4 @@ CELERY_WORKER_DISABLE_RATE_LIMITS = True # i.e remove speed bumbs(remove rate-li
 # This tells celery: 👉 “Don’t use the default in-memory schedule — use the database instead.”
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
-from celery.schedules import crontab
 
-CELERY_BEAT_SCHEDULE = {
-    "send-weekly-restaurant-reminder": {
-        "task": "orders.tasks.send_weekly_reminder",
-        "schedule": crontab(hour=12, minute=0, day_of_week="sat"),
-    },
-}

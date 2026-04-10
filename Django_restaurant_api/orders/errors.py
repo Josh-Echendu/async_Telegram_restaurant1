@@ -57,7 +57,7 @@ def prefetch_webhooks(merchant_reference):
             break
 
         rows_data = data.get('rows', []).copy()
-        print("rows: ", rows_data)
+        # print("rows: ", rows_data)
         success_txn = next(
             (
                 row for row in rows_data 
@@ -78,8 +78,8 @@ def prefetch_webhooks(merchant_reference):
             if row.get('payload', {}).get('merchant_reference', '').lower() == merchant_reference.lower()
         ]
 
-        print()
-        print("rows:", rows)
+        # print()
+        # print("rows:", rows)
 
         if rows:
             lastest_txn = max(

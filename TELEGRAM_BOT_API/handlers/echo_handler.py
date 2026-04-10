@@ -1,6 +1,6 @@
 # handlers/echo_handler.py - EXACT COPY FROM ORIGINAL FILE
 from .kitchen_handler import api_get_user_order_batches
-from config import *
+from core.config import *
 from utils.cart_utils import *
 from utils.image_utils import *
 from .payment_handler import pay_now
@@ -10,12 +10,12 @@ from decimal import Decimal
 
 
 async def debug_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
+    pass
     # always turn off privacy with /setprivacy so bot can receive all messages sent to group
-    print("CHAT ID:", update.effective_chat.id)
-    print("CHAT data structure:", type(update.effective_chat.id))
-    print("CHAT TYPE:", update.effective_chat.type)
-    print("CHAT:", update)    
+    # print("CHAT ID:", update.effective_chat.id)
+    # print("CHAT data structure:", type(update.effective_chat.id))
+    # print("CHAT TYPE:", update.effective_chat.type)
+    # print("CHAT:", update)    
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -40,7 +40,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         vat = int(100)
 
         order_batches = await api_get_user_order_batches(update)
-        print("batches......", order_batches)
+        # print("batches......", order_batches)
 
         if not order_batches:
             await update.message.reply_text("You have no active orders.")
@@ -81,6 +81,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=await payment_keyboard(),
             parse_mode="Markdown"
         )
+        
 async def payment_keyboard():
     keyboard = [
         [

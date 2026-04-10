@@ -56,8 +56,6 @@ class Category(models.Model):
     def __str__(self):
         return self.title
 
-product = None  # Replace with your actual product instance
-Category.objects.filter(product__product=product, product_set__instock=True).distinct()
 
 class Product(models.Model):
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='restaurant_products', db_index=True, null=True)
@@ -175,7 +173,7 @@ class OrderBatch(models.Model):
     checkout_session = models.ForeignKey(CheckoutSession, on_delete=models.CASCADE, related_name="session_batches", null=True, db_index=True)
     
     bid = ShortUUIDField(unique=True, length=10, max_length=20, editable=False) # editable=False: 👉 This field will not appear in Django forms or admin forms.
-    restaurant = models.ForeignKey(Restaurant, db_index=True, on_delete=models.SET_NULL, null=True, related_name='restaurant_orders')
+    restaurant = models.ForeignKey(Restaurant, db_index=True, on_delete=models.CASCADE, related_name='restaurant_orders')
     telegram_user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='order_batches', db_index=True, null=True)
     total_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     status = models.CharField(max_length=20, choices=KITCHEN_STATUS_CHOICES, default='pending')

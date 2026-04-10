@@ -12,7 +12,7 @@ from bot_manager import get_bot
 from services.restaurant_cache import get_restaurant
 import logging
 from datetime import datetime
-from config import *
+from core.config import *
 
 logger = logging.getLogger(__name__)
 

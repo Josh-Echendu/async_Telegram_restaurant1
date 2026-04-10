@@ -1,6 +1,6 @@
 # handlers/payment_handler.py - EXACT COPY FROM ORIGINAL FILE
 from utils.image_utils import store_message_id
-from config import *
+from core.config import *
 from handlers.start_handler import after_payment
 
 

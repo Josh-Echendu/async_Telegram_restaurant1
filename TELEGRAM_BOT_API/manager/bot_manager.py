@@ -5,7 +5,7 @@ from handlers.start_handler import start
 from handlers.echo_handler import echo, debug_chat
 from handlers.button_handler import button_click
 import asyncio
-from config import *
+from core.config import *
 
 # =========================
 # GLOBAL GUARD (UNCHANGED)

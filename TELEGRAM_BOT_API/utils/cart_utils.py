@@ -1,5 +1,5 @@
 # utils/cart_utils.py - EXACT COPY FROM ORIGINAL FILE
-from config import *
+from core.config import *
 import telegram
 from utils.image_utils import Extract_message_img_ids
 from decimal import Decimal

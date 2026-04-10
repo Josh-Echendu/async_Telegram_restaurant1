@@ -1,5 +1,5 @@
 # handlers/order_handler.py - EXACT COPY FROM ORIGINAL FILE
-from config import *
+from core.config import *
 from utils.cart_utils import *
 from utils.image_utils import *
 

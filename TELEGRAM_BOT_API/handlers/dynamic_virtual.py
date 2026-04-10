@@ -1,14 +1,13 @@
-from config import *
+from core.config import *
 
 
+async def generate_dynamic_virtual_account(update, max_retries=3):
+    user_id = update.effective_user.id
+    user_session = await get_user_session(user_id)
+    restaurant_id = user_session['current_rid']
 
-async def generate_dynamic_virtual_account(update, context, max_retries=3):
-    user_id = int(update.effective_user.id)
-    key = f"restaurant_id:{user_id}"
-    restaurant_id = str(await redis_client.get(key))
-
-    if not restaurant_id:
-        await update.message.reply_text("Restaurant ID not found for your account.")
+    if not restaurant_id or not user_id:
+        await update.message.reply_text("Restaurant not found for your account.")
         return None
 
     url = f"http://web:8000/api/dva/"

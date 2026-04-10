@@ -206,56 +206,6 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # version: "3.9"
 
 services:
@@ -368,6 +318,27 @@ services:
         condition: service_started
       web:
         condition: service_started
+
+    networks:
+      - backend
+
+  
+  arq_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    container_name: arq_worker
+    restart: unless-stopped
+
+    command: python -m arq workers.worker.WorkerSettings
+
+    env_file: .env
+    
+    depends_on:
+      redis:
+        condition: service_started
+      db:
+        condition: service_healthy
 
     networks:
       - backend

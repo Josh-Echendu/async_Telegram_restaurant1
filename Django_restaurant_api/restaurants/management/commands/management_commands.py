@@ -2,7 +2,7 @@
 
 from django.core.management.base import BaseCommand
 from restaurants.models import Restaurant
-from .services import register_telegram_webhook
+from ...services import register_telegram_webhook
 
 
 class Command(BaseCommand):

@@ -3,9 +3,8 @@ from operator import is_
 from time import time
 import token
 from httpx import Response, request
-from Django_restaurant_api.userAuths.models import TelegramUser
-from Django_restaurant_api.userAuths.models import TelegramUser
-from restaurants.models import Restaurant, RestaurantMembership
+from userAuths.models import TelegramUser
+from restaurants.models import Restaurant
 from celery import shared_task, group
 from celery.signals import worker_ready
 from django.db.models import Q
@@ -24,10 +23,14 @@ from .errors import prefetch_webhooks, delete_webhook
 from .virtual_edit_duration import virtual_account_edit_amount_duration
 
 from django.db.models import OuterRef, Subquery, Sum, Value, F
-
+from django.core.cache import cache
 
 import logging
 logger = logging.getLogger(__name__)
+
+# # In your bot initialization or helper
+# from telegram.request import HTTPXRequest
+# request = HTTPXRequest(connect_timeout=3.0, read_timeout=5.0)
 
 # -----------------------------------------
 # 1️⃣ Retry unsent notifications on worker start
@@ -39,6 +42,12 @@ def at_start(sender, **kwargs):
     retry_unsent_payment_notifications.delay()
     requery_transaction.delay()
 
+
+@shared_task
+def run_retry_jobs():
+    retry_unsent_orders_notifications.delay()
+    retry_unsent_payment_notifications.delay()
+    requery_transaction.delay()
 
 # ---------------------------
 # Main retry task: pushes tasks in bulk
@@ -102,56 +111,76 @@ def send_order_notifications(self, rid, order_bid, telegram_id):
     Only notifies user after FINAL failure.
     """
 
+    # 1. THE SHORT LOCK: Check and update status immediately
     try:
         with transaction.atomic():
-
-            order = OrderBatch.objects.select_for_update().get(bid=order_bid, restaurant__rid=rid)
+            # select_related must come BEFORE .get()
+            order = (
+                OrderBatch.objects
+                .select_for_update()
+                .get(bid=order_bid, restaurant__rid=rid)
+            )
 
             if order.notified_kitchen and order.notified_user:
-                return  # already done
+                return 
 
-            _send_order_notifications(order, telegram_id)
-
+            # Create a 'snapshot' of the data we need for the network call
+            # This allows us to work even after the lock is released
+            order_data = order 
+            
     except OrderBatch.DoesNotExist:
-        # ❌ Order no longer exists → nothing to retry → exit task
         return
 
+    # 2. THE NETWORK CALL: Outside the lock
+    try:
+        _send_order_notifications(order_data, telegram_id)
     except Exception as exc:
-
-        # “If we haven’t retried 5 times yet, raise a retry and wait 3 seconds before trying again.”
         if self.request.retries < 5:
-            print(f"Retrying order {order_bid} for ({self.request.retries + 1}/5)...")
+            logger.info(f"Retrying order {order_bid} ({self.request.retries + 1}/5)...")
             raise self.retry(exc=exc, countdown=3)
-        
-        print(f"Final failure for order {order_bid}")
-        TOKEN = order.restaurant.get_bot_token()
-        _notify_user_of_failure(telegram_id, TOKEN)
-
 
 # -----------------------------------------
 # 4️⃣ Sync helper
 # -----------------------------------------
 def _send_order_notifications(order, telegram_id):
-    """
-    Sync function to send messages to kitchen and user.
-    Updates DB flags after each successful send.
-    """
     TOKEN = order.restaurant.get_bot_token()
-    if not order.notified_kitchen:
-        try:
-            send_to_kitchen_for_celery(order, TOKEN)
-            order.notified_kitchen = True
-            order.save(update_fields=["notified_kitchen"])
-        except Exception:
-            raise
 
+    # --- SECTION 1: KITCHEN ---
+    kitchen_lock = f"lock_kitchen_{order.bid}"
+
+    if not order.notified_kitchen:
+        if cache.add(kitchen_lock, "locked", timeout=60): # Increased to 60s for 3 attempts
+            try:
+                for i in range(3):
+                    try:
+                        send_to_kitchen_for_celery(order, TOKEN)
+                        order.notified_kitchen = True
+                        order.save(update_fields=["notified_kitchen"])
+                        break 
+                    except Exception as e:
+                        if i == 2: raise  # Re-raise on last attempt
+            finally:
+                cache.delete(kitchen_lock) # Released ONLY after the loop finishes
+        else:
+            logger.info(f"Kitchen notification for {order.bid} is locked by another worker.")
+
+    # --- SECTION 2: USER ---
+    user_lock = f"lock_user_{order.bid}"
     if not order.notified_user:
-        try:
-            send_user_message_for_celery(order, telegram_id, TOKEN)
-            order.notified_user = True
-            order.save(update_fields=["notified_user"])
-        except Exception:
-            raise
+        if cache.add(user_lock, "locked", timeout=60):
+            try:
+                for i in range(3):
+                    try:
+                        send_user_message_for_celery(order, telegram_id, TOKEN)
+                        order.notified_user = True
+                        order.save(update_fields=["notified_user"])
+                        break
+                    except Exception as e:
+                        if i == 2: raise
+            finally:
+                cache.delete(user_lock)
+        else:
+            logger.info(f"User notification for {order.bid} is locked by another worker.")
 
 
 # -----------------------------------------
@@ -159,7 +188,6 @@ def _send_order_notifications(order, telegram_id):
 # -----------------------------------------
 def send_to_kitchen_for_celery(order, TOKEN):
     bot = Bot(token=TOKEN)
-
     lines = [
         f"{item.quantity}X - {item.product.title} - ₦{item.price * item.quantity}"
         for item in order.items.all()
@@ -382,6 +410,7 @@ def handle_mismatch(session_id, payload):
 
 @shared_task(bind=True, soft_time_limit=200, max_retries=10)
 def mismatch_message(self, telegram_id, TOKEN):
+    bot = Bot(token=TOKEN)
     try:
         bot.send_message(
             chat_id=telegram_id,
@@ -490,7 +519,6 @@ def requery_transaction(self):
             logger.info("No pending sessions to re-query...")
             return
         
-        
         # Create a group of tasks for all pending sessions
         tasks_group = group(handle_retry_query_external_api.s(session.merchant_reference) for session in pending_sessions)
 
@@ -593,12 +621,24 @@ from telegram.error import RetryAfter
 
 @shared_task
 def send_weekly_reminder():
-    restaurants = Restaurant.objects.filter(is_bot_active=True, is_accepting_orders=True).only('rid')
-    tasks_group = group(_send_weekly_reminder_to_restaurant.s(restaurant.rid) for restaurant in restaurants)
-    tasks_group.apply_async()   
 
+    restaurants = list(
+        Restaurant.objects
+        .filter(is_bot_active=True, is_accepting_orders=True).only('rid')
+        .values_list('rid', flat=True)
+    )
 
-@shared_task(bind=True, max_retries=3)
+    restaurant_chunk_size = 20
+
+    for index, i in enumerate(range(0, len(restaurants), restaurant_chunk_size)): # [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, len(restaurants)]
+        restaurant_batch = restaurants[i:i + restaurant_chunk_size]
+        
+        logger.info(f"Processing batch {index + 1}: {restaurant_batch}")
+
+        for rid in restaurant_batch:
+            _send_weekly_reminder_to_restaurant.delay(rid)
+
+@shared_task(bind=True, max_retries=3, rate_limit="20/s")
 def _send_weekly_reminder_to_restaurant(self, rid):
     restaurant = Restaurant.objects.filter(rid=rid).only('bot_token').first()
     
@@ -610,7 +650,7 @@ def _send_weekly_reminder_to_restaurant(self, rid):
     # membership = RestaurantMembership.objects.filter(restaurant__rid=rid, is_active=True).select_related('user')
     # users = TelegramUser.objects.filter(restaurantmembership__restaurant__rid=rid, restaurantmembership__is_active=True).distinct()
     
-    users = (
+    users = list(
         TelegramUser.objects.filter(
             restaurantmembership__restaurant=restaurant,
             restaurantmembership__is_active=True
@@ -619,9 +659,9 @@ def _send_weekly_reminder_to_restaurant(self, rid):
         .values_list('telegram_id', flat=True)
     )
 
-    chunk_size = 100
+    chunk_size = 20
 
-    for i in range(0, len(users), chunk_size): # [0, 100, 200, 300, 400, 500..., len(users)]
+    for i in range(0, len(users), chunk_size): # [0, 20, 40, 60, 80, 100..., len(users)]
         telegram_ids_batch = users[i:i + chunk_size]
 
         for telegram_id in list(telegram_ids_batch):
@@ -630,11 +670,10 @@ def _send_weekly_reminder_to_restaurant(self, rid):
                     chat_id=telegram_id,
                     text="⏰ Weekly Reminder: Don't forget to check your orders and update your menu! 🍽️📋"
                 )
-                time.sleep(0.1)  # small delay to avoid hitting rate limits
 
             except RetryAfter as e:
                 logger.warning(f"Rate limit hit for {telegram_id}, retrying after {e.timeout} seconds...")
-                raise self.retry(exc=e, countdown=e.timeout)
+                raise self.retry(exc=e, countdown=e.timeout + 2)
             
             except Exception as e:
                 logger.error(f"Failed to send reminder to {telegram_id}: {e}")

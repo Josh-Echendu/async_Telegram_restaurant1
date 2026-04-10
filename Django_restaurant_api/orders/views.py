@@ -633,11 +633,21 @@ class CheckSessionAPIView(APIView):
 
         try:
             user = TelegramUser.objects.get(
-                telegram_id=telegram_id,
-                restaurant=restaurant
-            )
+                telegram_id=telegram_id
+        )
         except TelegramUser.DoesNotExist:
             return Response({"has_active_payment": False})
+
+        membership_exists = RestaurantMembership.objects.filter(
+            user=user,
+            restaurant=restaurant
+        ).exists()
+        
+        if not membership_exists:
+            return Response(
+                {"error": "User not linked to this restaurant"},
+                status=404
+            )
 
         # “Find an active session where payment has started for this user and this restaurant”
         session = CheckoutSession.objects.filter(
@@ -675,8 +685,20 @@ class DynamicVirtualAccountAPIView(APIView):
         
         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
         print("resturant....: ", restaurant)
-        try: telegram_user = TelegramUser.objects.get(telegram_id=telegram_id, restaurant=restaurant)
+
+        try: telegram_user = TelegramUser.objects.get(telegram_id=telegram_id)
         except TelegramUser.DoesNotExist: return Response({"error": "User not found"}, status=status.HTTP_400_BAD_REQUEST)
+
+        membership_exists = RestaurantMembership.objects.filter(
+            user=telegram_user,
+            restaurant=restaurant
+        ).exists()
+        
+        if not membership_exists:
+            return Response(
+                {"error": "User not linked to this restaurant"},
+                status=404
+            )
 
         key = f"{uuid.uuid4().hex}"
 

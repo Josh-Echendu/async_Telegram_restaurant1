@@ -1,5 +1,5 @@
 # utils/image_utils.py - EXACT COPY FROM ORIGINAL FILE
-from config import *
+from core.config import *
 import asyncio
 import httpx
 import logging

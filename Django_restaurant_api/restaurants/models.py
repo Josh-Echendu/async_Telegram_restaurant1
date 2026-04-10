@@ -1,3 +1,5 @@
+import json
+
 from django.db import models
 
 # Create your models here.
@@ -109,7 +111,6 @@ class RestaurantMembership(models.Model):
 
     # 👉 MANY
     # (many customers)
-
 
 @receiver(post_save, sender=Restaurant)
 def manage_restaurant_webhook(sender, instance, created, **kwargs):

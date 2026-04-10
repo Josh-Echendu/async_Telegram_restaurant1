@@ -1,4 +1,4 @@
-from config import *
+from core.config import *
     
 
 async def update_batch_table(batch_id, status, restaurant_id, query=None, max_retries=3):
@@ -49,7 +49,7 @@ async def api_get_user_order_batches(update, max_retries=3):
                 resp.raise_for_status()
 
                 data = resp.json()
-                print("data: ", data)
+                # print("data: ", data)
                 if resp.status_code in (200, 201):
                     return data
 

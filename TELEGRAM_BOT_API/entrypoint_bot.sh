@@ -2,9 +2,10 @@
 # Ensure Redis/other services are reachable first (optional)
 sleep 5
 
-echo running migrations
-python manage.py makemigrations --noinput
-python manage.py migrate --noinput
 
 # Start the bot
-uvicorn webhook_server:app --reload --host 0.0.0.0 --port 8080
+exec uvicorn webhook.webhook_server:app \
+    --host 0.0.0.0 \
+    --port 8080 \
+    --reload \
+    --log-level info
