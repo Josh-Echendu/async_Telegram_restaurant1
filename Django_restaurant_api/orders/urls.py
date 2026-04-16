@@ -2,15 +2,17 @@ from django.urls import path
 from .views import (
     restaurant_detail, category_list_api_view, category_product_api_view,remove_cart_view, add_to_cart_view, cart_list_api_view, orderbatch_list_create_view,
     update_batch_status_api_view, batch_list_api_view, dynamic_virtual_account_view, simulate_payment_api_view, squad_webhook_api_view, checkout_session_api_view
+    preview_order_api_view
     )
 
 urlpatterns = [
 
     # Frontend page
-    path('restaurant/<str:restaurant_id>/menu/', restaurant_detail, name='restaurant-detail'),
+    path('menu/<str:restaurant_id>/', restaurant_detail, name='restaurant-detail'),
     
     # Frontend page
     path('restaurant/<str:restaurant_id>/categories/', category_list_api_view, name='category-list-api'),
+    path('preview-order/<str:restaurant_id>/', preview_order_api_view, name='order-preview'),
     
     path('restaurant/<str:restaurant_id>/products/<str:category_id>/', category_product_api_view),
     path('add-to-cart/', add_to_cart_view),

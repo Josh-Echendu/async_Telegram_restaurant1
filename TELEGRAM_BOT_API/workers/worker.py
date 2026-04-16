@@ -22,6 +22,6 @@ class WorkerSettings:
     job_timeout = 60           # seconds
     
     # 👉 How long ARQ stores job results in Redis
-    keep_result = 60         # 1 hour
+    keep_result = 10         # 1 hour
     max_tries = 5              # retries
     queue_name = "restaurant_jobs"  # queue name

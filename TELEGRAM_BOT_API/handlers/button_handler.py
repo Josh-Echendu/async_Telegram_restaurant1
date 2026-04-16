@@ -1,4 +1,5 @@
 # handlers/button_handler.py - EXACT COPY FROM ORIGINAL FILE
+from .order_handler import choose_table
 from core.config import *
 import telegram
 from utils.cart_utils import *
@@ -6,11 +7,17 @@ from utils.image_utils import *
 from utils.kitchen_utils import *
 from .payment_handler import pay_now
 from .start_handler import after_payment, start
-from .order_handler import order_meal_by_chat_id
 from .kitchen_handler import api_get_user_order_batches, update_batch_table
 from .dynamic_virtual import generate_dynamic_virtual_account
 from .echo_handler import payment_keyboard
 
+
+EMOJI_NUMBERS = {
+    1: "1️⃣", 2: "2️⃣", 3: "3️⃣",
+    4: "4️⃣", 5: "5️⃣", 6: "6️⃣",
+    7: "7️⃣", 8: "8️⃣", 9: "9️⃣",
+    10: "🔟"
+}
 
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -19,24 +26,8 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     print("Button clicked data:", data)
 
-    if data == 'pay_now':
-        await redis_client.delete(f"user:{user_id}:send_to_kitchen_id")
 
-        # Get us the orders ther customer has made
-        order_batches_data = await api_get_user_order_batches(update)
-
-        # if no orders made by the user
-        if order_batches_data == []:
-            await query.answer("You have not made any order Today 😊.", show_alert=True)
-            await query.message.delete()
-            return
-        
-        await redis_client.delete(f"user:{user_id}:send_to_kitchen_id")
-
-        copy_order_batches_data = order_batches_data.copy()
-        await pay_now(update, context, copy_order_batches_data, query)
-
-    elif data == 'cancel_order':
+    if data == 'cancel_order':
         await query.answer("❌ Order cancelled")
         await redis_client.delete(f"user:{user_id}:checkout_message_id")
 
@@ -50,52 +41,16 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass  # message may already be deleted
 
         finally:
+            pass
 
             # Extract message chat.id bcos update.message for a callback_query is None
-            await order_meal_by_chat_id(query.message.chat.id, context)
-
-    elif data == 'confirm_payment':
-        await query.answer("✅ Payment confirmed. Thank you!")
-
-        await query.edit_message_reply_markup(reply_markup=None)
-
-        photo_url = r'C:\Users\Admin\Music\async_Telegram_restaurant\photo_2026-01-09 14.59.50.jpeg'
-
-        input_file = InputFile(open(photo_url, 'rb'))
-
-        await context.bot.send_photo(
-            chat_id=query.message.chat.id,
-            caption="🎉 Your payment has been received! Thank you for choosing our service! 🍽️😊",
-            photo=input_file
-        )
-
-        # Clear cart and unlock cart
-        context.user_data['cart_locked'] = False
-        await after_payment(query.message.chat.id, context)
-
-    elif data == "order_more_items":
-        await redis_client.delete(f"user:{user_id}:send_to_kitchen_id")
-        await query.edit_message_text("🍽️ Order sent to the kitchen! 🎉")
-
-        # Extract message chat.id bcos update.message for a callback_query is None
-        await order_meal_by_chat_id(query.message.chat.id, context)
-
-    elif data == "track_orders":
-        await redis_client.delete(f"user:{user_id}:send_to_kitchen_id")
-
-        # Get us the orders ther customer has made
-        order_batches_data = await api_get_user_order_batches(update)
-
-        # if no orders made by the user
-        if order_batches_data is None:
-            query.answer("You have not made any order Today 😊.", show_alert=True)
-            return
-        
-        await query.edit_message_text("🍽️ Order sent to the kitchen! 🎉")
-        await start(update, context, Track_orders=True)
+            # await order_meal_by_chat_id(query.message.chat.id, context)
 
     elif data == 'bank_transfer':
 
+        await query.answer("Processing payment...")
+        await query.message.reply_text("⏳ Generating account...")
+        
         virtual_account = await generate_dynamic_virtual_account(update, context)
         if not virtual_account:
             return None
@@ -179,42 +134,59 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data == "yes":
-
-        restaurant_data = await get_restaurant_data(update)
-        restaurant_id = restaurant_data['current_rid']
-        WEB_APP_URL = f"{NGROK_DJANGO}/api/restaurant/{restaurant_id}/menu/"
-
-        reply_keyboard = [
-            [
-                InlineKeyboardButton(
-                    text="Open Mini Restaurant App (🍔🍟🌭🍕)",
-                    web_app=WebAppInfo(url=WEB_APP_URL),
-                )
-            ]
-        ]
-
-        markup = InlineKeyboardMarkup(reply_keyboard)
-
-        await query.edit_message_text(
-            text="Please click the menu button to see our meals :",
-            reply_markup=markup
-        )
+        await menu_keyboard(update, query)
 
     elif data == "no":
 
+        user_session = await get_user_session(update.effective_user.id)
+        max_tables = user_session['max_tables']
+
+        keyboard = []
+        row = []
+
+        for i in range(1, max_tables + 1):
+            emoji = EMOJI_NUMBERS.get(i, str(i))  # fallback to normal number
+
+            button = InlineKeyboardButton(
+                text=emoji,
+                callback_data=f"table_{emoji}"
+            )
+
+            row.append(button)
+
+            if len(row) == 3:
+                keyboard.append(row)
+                row = []
+
+        if row:
+            keyboard.append(row)
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
         await query.edit_message_text(
             text="Please select your correct table.",
-            reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("1️⃣", callback_data="table_1"),
-                    InlineKeyboardButton("2️⃣", callback_data="table_2"),
-                ],
-                [
-                    InlineKeyboardButton("3️⃣", callback_data="table_3"),
-                    InlineKeyboardButton("4️⃣", callback_data="table_4"),
-                ],
-            ])
+            reply_markup=reply_markup
         )
+
+    elif data == "order_dine_in":
+        user_session = await get_user_session(update.effective_user.id)
+        user_session['user_service_mode'] = 'dine_in'
+        await save_user_session(update.effective_user.id, user_session)
+
+        await query.answer("🍽️ Dine-in Menu 📜🍔 coming right up! 🎉")
+        await choose_table(update, query)
+
+    elif data == "order_delivery":
+        user_session = await get_user_session(update.effective_user.id)
+        
+        user_session['user_service_mode'] = 'delivery'
+        user_session.pop('table_number', None)  # 🔥 IMPORTANT
+        
+        await save_user_session(update.effective_user.id, user_session)
+
+        await query.answer("🚚 Delivery Menu 📜🍔 coming right up! 🎉")
+        await menu_keyboard(update, query)
+
     elif data == "pay_cash":
         orders_batches = await api_get_user_order_batches(update)
         pass
@@ -225,6 +197,41 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         orders_batches = await api_get_user_order_batches(update)
 
         pass
+
+
+async def menu_keyboard(update, query):
+    restaurant_data = await get_user_session(update.effective_user.id)
+    
+    restaurant_id = restaurant_data['current_rid']
+    user_service_mode = restaurant_data['user_service_mode']
+    table_number = restaurant_data.get('table_number')
+
+    
+    if user_service_mode == 'dine_in':
+        WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode=dine_in&table={table_number}"
+
+    elif user_service_mode == 'delivery':
+        WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode=delivery"
+    else:
+        # fallback safety
+        WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/"
+
+    reply_keyboard = [
+        [
+            InlineKeyboardButton(
+                text="Open Mini Restaurant App (🍔🍟🌭🍕)",
+                web_app=WebAppInfo(url=WEB_APP_URL),
+            )
+        ]
+    ]
+
+    markup = InlineKeyboardMarkup(reply_keyboard)
+
+    await query.edit_message_text(
+        text="Please click the menu button to see our meals :",
+        reply_markup=markup
+    )
+
 
 async def add_to_cart_api(query, update, product_id, max_retries=3):
     """

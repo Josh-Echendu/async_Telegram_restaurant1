@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_telegram_update(ctx, update_data: dict, restaurant: dict):
+    print("ctx: ", ctx)
     
     # 🤖 1. Get the Bot Instance (Ideally from worker context 'ctx')
     bot_app = await get_bot(restaurant['bot_token'])
@@ -25,7 +26,13 @@ async def handle_telegram_update(ctx, update_data: dict, restaurant: dict):
 
         user_session.update({
             "current_rid": restaurant["rid"],
-            "restaurant_name": restaurant["bot_name"]
+            "restaurant_name": restaurant["bot_name"],
+            "business_type": restaurant["business_type"],
+            "service_mode": restaurant["service_mode"],
+            "max_tables": restaurant["max_tables"],
+            "open_time": restaurant["open_time"],
+            "close_time": restaurant["close_time"],
+            "is_closed": restaurant["is_closed"]
         })
 
         if update.callback_query and update.callback_query.data.startswith("table_"):

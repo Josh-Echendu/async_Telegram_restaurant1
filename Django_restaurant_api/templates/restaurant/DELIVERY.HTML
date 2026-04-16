@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -174,25 +175,6 @@
     .meal-card:hover .img-wrapper img {
       transform: scale(1.05);
     }
-
-    /* Rainbow glow animation */
-    @keyframes rainbowGlow {
-      0% {
-        box-shadow: 0 0 20px rgba(255,0,0,0.6), 0 0 40px rgba(255,0,0,0.3);
-      }
-      25% {
-        box-shadow: 0 0 20px rgba(0,255,0,0.6), 0 0 40px rgba(0,255,0,0.3);
-      }
-      50% {
-        box-shadow: 0 0 20px rgba(0,0,255,0.6), 0 0 40px rgba(0,0,255,0.3);
-      }
-      75% {
-        box-shadow: 0 0 20px rgba(255,255,0,0.6), 0 0 40px rgba(255,255,0,0.3);
-      }
-      100% {
-        box-shadow: 0 0 20px rgba(255,0,0,0.6), 0 0 40px rgba(255,0,0,0.3);
-      }
-    }
   </style>
 </head>
 <body class="antialiased">
@@ -209,29 +191,6 @@
   toast: { visible: false, message: '' }, // ← FIX: Added comma
   orderId: 'ORD-' + Math.floor(800000 + Math.random()*200000), // ← FIX: Added comma
   
-  // Add these after 'showCheckoutModal: false,'
-  mode: new URLSearchParams(window.location.search).get('mode') || 'dine_in',
-  showDeliveryForm: false,
-  deliveryInfo: {
-    fullName: '',
-    phone: '',
-    address: '',
-    landmark: '',
-    specialInstructions: ''
-  },
-  isSubmittingDelivery: false,
-
-  
-  // NEW: For price preview screen
-  showPricePreview: false,
-  priceBreakdown: {
-    subtotal: 0,
-    vat: 0,
-    delivery_fee: 0,
-    total: 0
-  },
-  isPreviewLoading: false,
-
   // bright, aspirational menu (like Shopify frontpage)
   meals: [], // ← FIX: Added comma
   allmeals: [], // for 'all' category caching // ← FIX: Added comma
@@ -521,15 +480,6 @@
     // THIRD: allow checkout
     this.orderId = 'ORD-' + Math.floor(800000 + Math.random()*200000);
     this.showCheckoutModal = true;
-
-    // Check mode: if delivery, show delivery form first
-    if (this.mode === 'delivery') {
-      this.showCheckoutModal = false;
-      this.showDeliveryForm = true;
-    } else {
-      // Dine-in: show checkout modal directly
-      this.showCheckoutModal = true;
-    }
   }, // ← FIX: Added comma
 
   get hasOutOfStockItems() {
@@ -649,156 +599,6 @@
       }
   },
 
-  // REPLACED: Now calls preview first, then shows price screen
-  async submitDeliveryOrder() {
-    if (this.isSubmittingDelivery) return;
-    
-    // Validate delivery info
-    if (!this.deliveryInfo.fullName.trim()) {
-      this.toast = { visible: true, message: 'Please enter your full name' };
-      setTimeout(() => this.toast.visible = false, 3000);
-      return;
-    }
-    
-    if (!this.deliveryInfo.phone.trim()) {
-      this.toast = { visible: true, message: 'Please enter your phone number' };
-      setTimeout(() => this.toast.visible = false, 3000);
-      return;
-    }
-    
-    if (!this.deliveryInfo.address.trim()) {
-      this.toast = { visible: true, message: 'Please enter your delivery address' };
-      setTimeout(() => this.toast.visible = false, 3000);
-      return;
-    }
-    
-    this.isPreviewLoading = true;
-    
-    try {
-      const pathParts = window.location.pathname.split('/').filter(p => p);
-      const restaurantId = pathParts[2];
-      
-      // Step 1: Call PREVIEW API to get calculated prices
-      const previewPayload = {
-        cart_items: this.cart.map(i => ({ pid: i.pid, quantity: i.quantity, price: i.price })),
-      };
-      
-      const previewResponse = await axios.post(
-        `/api/preview-order/${restaurantId}/`,
-        previewPayload,
-        { timeout: 10000 }
-      );
-      
-      // Store the price breakdown from backend
-      this.priceBreakdown = {
-        subtotal: previewResponse.data.subtotal,
-        vat: previewResponse.data.vat,
-        delivery_fee: previewResponse.data.delivery_fee,
-        total: previewResponse.data.total
-      };
-      
-      // Close delivery form, show price preview
-      this.showDeliveryForm = false;
-      this.showPricePreview = true;
-      
-    } catch (error) {
-      console.error('Preview failed:', error);
-      this.toast = { 
-        visible: true, 
-        message: '❌ Unable to calculate order total. Please try again.' 
-      };
-      setTimeout(() => this.toast.visible = false, 7000);
-    } finally {
-      this.isPreviewLoading = false;
-    }
-  },
-
-    // NEW: Called after user confirms price preview
-  async confirmDeliveryOrder() {
-    if (this.isSubmittingDelivery) return;
-    
-    this.isSubmittingDelivery = true;
-    
-    try {
-      const pathParts = window.location.pathname.split('/').filter(p => p);
-      const restaurantId = pathParts[2];
-      
-      const payload = {
-        cart_items: this.cart.map(i => ({ pid: i.pid, quantity: i.quantity })),
-        idempotency_key: 'ORD-' + Math.floor(800000 + Math.random() * 200000),
-        init_data: window.Telegram.WebApp.initData,
-        delivery_info: this.deliveryInfo,
-        mode: 'delivery',
-        price_breakdown: this.priceBreakdown  // Send the preview data
-      };
-      
-      const response = await axios.post(
-        `/api/order_batches/${restaurantId}/`,
-        payload,
-        { timeout: 10000 }
-      );
-      
-      const data = response.data;
-      
-      if (data.success) {
-        this.showPricePreview = false;
-        this.showDeliveryForm = false;
-        this.showCheckoutModal = false;
-        this.showCart = false;
-        this.clearCart();
-        
-        // Reset delivery form
-        this.deliveryInfo = {
-          fullName: '',
-          phone: '',
-          address: '',
-          landmark: '',
-          specialInstructions: ''
-        };
-        
-        this.toast = { 
-          visible: true, 
-          message: '🚚 Your delivery order was placed successfully! Check Telegram for details.' 
-        };
-        setTimeout(() => this.toast.visible = false, 7200);
-        
-      } else if (data.out_of_stock && data.product_ids?.length) {
-        this.cart = this.cart.map(item => {
-          if (data.product_ids.includes(item.pid)) return { ...item, in_stock: false };
-          return item;
-        });
-        this.saveCart();
-        this.loadProducts(this.activeCategory);
-        this.showPricePreview = false;
-        this.showCart = true;
-        
-        this.toast = { 
-          visible: true, 
-          message: '⚠️ Some items are out of stock and have been disabled in your cart.' 
-        };
-        setTimeout(() => this.toast.visible = false, 10000);
-      } else if (data.blocked) {
-        this.paymentSessionActive = true;
-        this.showPricePreview = false;
-        this.toast = {
-          visible: true,
-          message: '⚠️ You have a pending payment. Complete it before ordering again.'
-        };
-        setTimeout(() => this.toast.visible = false, 10000);
-      }
-      
-    } catch (error) {
-      console.error('Delivery order failed:', error);
-      this.toast = { 
-        visible: true, 
-        message: '❌ Failed to place delivery order. Please try again.' 
-      };
-      setTimeout(() => this.toast.visible = false, 7000);
-    } finally {
-      this.isSubmittingDelivery = false;
-    }
-  },
-
   async checkPaymentSession() {
     try {
       const pathParts = window.location.pathname.split('/').filter(p => p);
@@ -868,66 +668,16 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
       <i class="fas fa-utensils text-3xl text-[#1f2a3f]"></i>
     </template>
 
-  <span 
-  class="text-2xl sm:text-3xl brand-italic font-bold"
-  x-text="restaurantName"
+    <span 
+    class="text-2xl sm:text-3xl brand-italic font-bold"
+    x-text="restaurantName"
   ></span>    
   </div>
-
   <button @click="showCart = true" class="relative p-2.5 rounded-full bg-white shadow-sm border border-[#e9ecf2]">
     <i class="fas fa-bag-shopping text-xl text-[#1f2a3f]"></i>
     <span x-show="cartCount > 0" x-cloak class="absolute -top-1 -right-1 bg-[#1f2a3f] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">{{ cartCount }}</span>
   </button>
 </header>
-
-<!-- 👇👇👇 ULTRA SPARKLING BADGE CODE (Rainbow Shine) 👇👇👇 -->
-<div class="flex justify-center mt-4 mb-3">
-  <div class="inline-flex items-center gap-4">
-    
-    <!-- DELIVERY MODE BADGE (Ultra Sparkling) -->
-    <span 
-      x-show="mode === 'delivery'"
-      class="relative bg-gradient-to-r from-green-500 to-emerald-600 text-white text-base font-bold px-6 py-2.5 rounded-full flex items-center gap-2"
-      style="border: 2px solid white; box-shadow: 0 0 20px rgba(34,197,94,0.8), 0 0 40px rgba(34,197,94,0.4), inset 0 0 20px rgba(255,255,255,0.3); animation: sparkle 1.5s ease-in-out infinite, rainbowGlow 3s linear infinite;"
-    >
-      <i class="fas fa-truck text-xl"></i>
-      <span>🚚 Delivery</span>
-      
-      <!-- Multiple sparkle stars -->
-      <i class="fas fa-star text-yellow-300 text-xs absolute -top-3 -right-3 animate-bounce" style="filter: drop-shadow(0 0 6px gold);"></i>
-      <i class="fas fa-star text-yellow-300 text-xs absolute -bottom-3 -left-3 animate-bounce" style="animation-delay: 0.5s; filter: drop-shadow(0 0 6px gold);"></i>
-      <i class="fas fa-star text-yellow-300 text-[8px] absolute top-1 right-1 animate-ping" style="animation-delay: 0.2s;"></i>
-      <i class="fas fa-star text-yellow-300 text-[8px] absolute bottom-1 left-1 animate-ping" style="animation-delay: 0.7s;"></i>
-      
-      <!-- Sparkle emojis -->
-      <span class="absolute -top-4 -right-4 text-xl animate-spin" style="animation-duration: 2s;">✨</span>
-      <span class="absolute -bottom-4 -left-4 text-xl animate-spin" style="animation-duration: 2s; animation-delay: 1s;">✨</span>
-    </span>
-    
-    <!-- DINE IN MODE BADGE (Ultra Sparkling) -->
-    <span 
-      x-show="mode === 'dine_in'"
-      class="relative bg-gradient-to-r from-[#1f2a3f] to-[#2b384f] text-white text-base font-bold px-6 py-2.5 rounded-full flex items-center gap-2"
-      style="border: 2px solid white; box-shadow: 0 0 20px rgba(31,42,63,0.8), 0 0 40px rgba(31,42,63,0.4), inset 0 0 20px rgba(255,255,255,0.3); animation: sparkle 1.5s ease-in-out infinite, rainbowGlow 3s linear infinite;"
-    >
-      <i class="fas fa-utensils text-xl"></i>
-      <span>🍽️ Dine In</span>
-      
-      <!-- Multiple sparkle stars -->
-      <i class="fas fa-star text-yellow-300 text-xs absolute -top-3 -right-3 animate-bounce" style="filter: drop-shadow(0 0 6px gold);"></i>
-      <i class="fas fa-star text-yellow-300 text-xs absolute -bottom-3 -left-3 animate-bounce" style="animation-delay: 0.5s; filter: drop-shadow(0 0 6px gold);"></i>
-      <i class="fas fa-star text-yellow-300 text-[8px] absolute top-1 right-1 animate-ping" style="animation-delay: 0.2s;"></i>
-      <i class="fas fa-star text-yellow-300 text-[8px] absolute bottom-1 left-1 animate-ping" style="animation-delay: 0.7s;"></i>
-      
-      <!-- Sparkle emojis -->
-      <span class="absolute -top-4 -right-4 text-xl animate-spin" style="animation-duration: 2s;">✨</span>
-      <span class="absolute -bottom-4 -left-4 text-xl animate-spin" style="animation-duration: 2s; animation-delay: 1s;">✨</span>
-    </span>
-    
-  </div>
-</div>
-<!-- 👆👆👆 END OF ULTRA SPARKLING BADGE CODE 👆👆👆 -->
-
 
 <!-- ===== CATEGORY PILLS (horizontal scroll) ===== -->
 <div class="my-4 flex flex-wrap gap-2 pb-3 no-scrollbar md:justify-start">
@@ -1206,213 +956,6 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
         <i class="fab fa-whatsapp"></i> confirm
       </button>
     </div>
-  </div>
-</div>
-
-<!-- ===== DELIVERY FORM MODAL (beautiful delivery info form) ===== -->
-<div x-show="showDeliveryForm" class="fixed inset-0 z-50 flex items-center justify-center p-4" @keydown.escape.window="showDeliveryForm = false">
-  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" @click="showDeliveryForm = false"></div>
-  <div class="relative bg-white max-w-md w-full rounded-3xl p-6 shadow-2xl border border-[#eef2f8] max-h-[90vh] overflow-y-auto"
-       x-show="showDeliveryForm" x-transition>
-    
-    <!-- Header -->
-    <div class="text-center mb-6">
-      <div class="w-16 h-16 bg-gradient-to-br from-[#1f2a3f] to-[#2b384f] rounded-2xl flex items-center justify-center mx-auto mb-3">
-        <i class="fas fa-truck text-3xl text-white"></i>
-      </div>
-      <h3 class="text-2xl brand-italic font-bold">Delivery Details</h3>
-      <p class="text-sm text-[#6f7c91] mt-1">Where should we send your order?</p>
-    </div>
-    
-    <!-- Form Fields -->
-    <div class="space-y-4">
-      <!-- Full Name -->
-      <div>
-        <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
-          <i class="fas fa-user mr-2"></i>Full Name
-        </label>
-        <input 
-          type="text" 
-          x-model="deliveryInfo.fullName"
-          placeholder="Enter your full name"
-          class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all"
-        >
-      </div>
-      
-      <!-- Phone Number -->
-      <div>
-        <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
-          <i class="fas fa-phone mr-2"></i>Phone Number
-        </label>
-        <input 
-          type="tel" 
-          x-model="deliveryInfo.phone"
-          placeholder="e.g., 08012345678"
-          class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all"
-        >
-      </div>
-      
-<!-- Delivery Address -->
-<div>
-  <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
-    <i class="fas fa-location-dot mr-2"></i>Delivery Address
-  </label>
-  <textarea 
-    x-model="deliveryInfo.address"
-    rows="2"
-    placeholder="Street name, building number, area..."
-    class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all resize-none"
-  ></textarea>
-</div>
-
-<!-- Landmark (Optional) -->
-<div>
-  <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
-    <i class="fas fa-map-pin mr-2"></i>Landmark (Optional)
-  </label>
-  <input 
-    type="text" 
-    x-model="deliveryInfo.landmark"
-    placeholder="Near the church, opposite the mall..."
-    class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all"
-  >
-</div>
-
-<!-- Special Instructions -->
-<div>
-  <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
-    <i class="fas fa-pen mr-2"></i>Special Instructions (Optional)
-  </label>
-  <textarea 
-    x-model="deliveryInfo.specialInstructions"
-    rows="2"
-    placeholder="Gate code, buzzer number, etc..."
-    class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all resize-none"
-  ></textarea>
-</div>
-</div>
-
-<!-- Order Summary Preview -->
-<div class="mt-6 p-4 bg-[#f8fafd] rounded-xl">
-<div class="flex justify-between text-sm mb-2">
-  <span class="text-[#6f7c91]">Items:</span>
-  <span class="font-semibold" x-text="cartCount + ' item(s)'"></span>
-</div>
-<div class="flex justify-between text-lg font-bold">
-  <span>Total:</span>
-  <span class="text-[#1f2a3f]" x-text="'₦' + formatPrice(cartTotal)"></span>
-</div>
-</div>
-
-<!-- Action Buttons -->
-<div class="flex gap-3 mt-6">
-<button 
-  @click="showDeliveryForm = false" 
-  class="flex-1 py-3 border-2 border-[#dee7f2] rounded-xl text-[#1f2a3f] font-semibold hover:bg-gray-50 transition-all"
->
-  <i class="fas fa-arrow-left mr-2"></i>Back
-</button>
-<button 
-  @click="submitDeliveryOrder()" 
-  :disabled="isSubmittingDelivery"
-  :class="isSubmittingDelivery ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg transform hover:scale-[1.02]'"
-  class="flex-1 bg-gradient-to-r from-[#1f2a3f] to-[#2b384f] text-white py-3 rounded-xl font-semibold shadow-md flex items-center justify-center gap-2 transition-all"
->
-  <i class="fas" :class="isSubmittingDelivery ? 'fa-spinner fa-pulse' : 'fa-check-circle'"></i>
-  <span x-text="isSubmittingDelivery ? 'Placing Order...' : 'Confirm Delivery'"></span>
-</button>
-</div>
-</div>
-</div>
-
-<!-- ===== PRICE PREVIEW MODAL (Shows VAT, Delivery Fee, Total) ===== -->
-<div x-show="showPricePreview" class="fixed inset-0 z-50 flex items-center justify-center p-4" @keydown.escape.window="showPricePreview = false">
-  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" @click="showPricePreview = false"></div>
-  <div class="relative bg-white max-w-md w-full rounded-3xl p-6 shadow-2xl border border-[#eef2f8]"
-       x-show="showPricePreview" x-transition>
-    
-    <!-- Header with sparkle -->
-    <div class="text-center mb-6">
-      <div class="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3 animate-pulse" style="box-shadow: 0 0 20px rgba(34,197,94,0.5);">
-        <i class="fas fa-receipt text-3xl text-white"></i>
-      </div>
-      <h3 class="text-2xl brand-italic font-bold">Order Summary</h3>
-      <p class="text-sm text-[#6f7c91] mt-1">Review your charges before payment</p>
-    </div>
-    
-    <!-- Loading State -->
-    <div x-show="isPreviewLoading" class="text-center py-8">
-      <i class="fas fa-spinner fa-pulse text-3xl text-[#1f2a3f]"></i>
-      <p class="mt-2 text-[#6f7c91]">Calculating your total...</p>
-    </div>
-    
-    <!-- Price Breakdown -->
-    <div x-show="!isPreviewLoading" class="space-y-4">
-      
-      <!-- Cart Items Summary -->
-      <div class="border-b border-[#eef2f8] pb-3">
-        <div class="flex justify-between text-sm mb-2">
-          <span class="text-[#6f7c91]">Items (<span x-text="cartCount"></span>):</span>
-          <span class="font-semibold">₦<span x-text="formatPrice(priceBreakdown.subtotal)"></span></span>
-        </div>
-      </div>
-      
-      <!-- VAT (7.5%) -->
-      <div class="flex justify-between items-center">
-        <div>
-          <span class="font-medium">VAT (7.5%)</span>
-          <span class="text-xs text-[#6f7c91] ml-2">Value Added Tax</span>
-        </div>
-        <span class="font-semibold text-amber-600">+₦<span x-text="formatPrice(priceBreakdown.vat)"></span></span>
-      </div>
-      
-      <!-- Delivery Fee -->
-      <div class="flex justify-between items-center">
-        <div>
-          <span class="font-medium">Delivery Fee</span>
-          <span class="text-xs text-[#6f7c91] ml-2">Based on your location</span>
-        </div>
-        <span class="font-semibold text-blue-600">+₦<span x-text="formatPrice(priceBreakdown.delivery_fee)"></span></span>
-      </div>
-      
-      <!-- Divider -->
-      <div class="border-t-2 border-dashed border-[#eef2f8] my-3"></div>
-      
-      <!-- Grand Total -->
-      <div class="flex justify-between items-center bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-xl">
-        <span class="text-lg font-bold text-[#1f2a3f]">Total Amount</span>
-        <span class="text-2xl font-bold text-green-600">₦<span x-text="formatPrice(priceBreakdown.total)"></span></span>
-      </div>
-      
-      <!-- Delivery Info Summary -->
-      <div class="bg-gray-50 p-3 rounded-lg text-sm">
-        <p class="font-semibold text-[#1f2a3f] mb-1">📦 Delivering to:</p>
-        <p class="text-[#6f7c91]" x-text="deliveryInfo.fullName"></p>
-        <p class="text-[#6f7c91] text-xs mt-1" x-text="deliveryInfo.address"></p>
-      </div>
-      
-    </div>
-    
-    <!-- Action Buttons -->
-    <div class="flex gap-3 mt-6">
-      <button 
-        @click="showPricePreview = false; showDeliveryForm = true;" 
-        class="flex-1 py-3 border-2 border-[#dee7f2] rounded-xl text-[#1f2a3f] font-semibold hover:bg-gray-50 transition-all"
-      >
-        <i class="fas fa-arrow-left mr-2"></i>Back
-      </button>
-      <button 
-        @click="confirmDeliveryOrder()" 
-        :disabled="isSubmittingDelivery"
-        :class="isSubmittingDelivery ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg transform hover:scale-[1.02]'"
-        class="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 rounded-xl font-semibold shadow-md flex items-center justify-center gap-2 transition-all"
-        style="animation: rainbowGlow 3s linear infinite;"
-      >
-        <i class="fas" :class="isSubmittingDelivery ? 'fa-spinner fa-pulse' : 'fa-credit-card'"></i>
-        <span x-text="isSubmittingDelivery ? 'Processing...' : 'Pay Now'"></span>
-      </button>
-    </div>
-    
   </div>
 </div>
 

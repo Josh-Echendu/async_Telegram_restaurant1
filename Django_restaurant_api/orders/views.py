@@ -47,24 +47,33 @@ class CategoryListApiView(ListAPIView):
 
     def list(self, request, *args, **kwargs):
         restaurant_id = self.kwargs.get("restaurant_id")
+        # mode = request.GET.get('mode')
+        # table = request.GET.get('table')
+
         if not restaurant_id:
             return Response({"error": "Category or restaurant ID missing"}, status=404)
 
-        restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
+        restaurant = (
+            get_object_or_404(
+                Restaurant.objects.only('name', 'business_type', 'service_mode', 'image'),
+                rid=restaurant_id
+            )
+        )
         categories = Category.objects.filter(restaurant=restaurant)
-
         serializers = CategorySerializer(categories, many=True)
         print("serialized: ", serializers.data)
 
         return Response({
             "categories": serializers.data,
             "restaurant_name": restaurant.name,
+            "business_type": restaurant.business_type,
+            "service_mode": restaurant.service_mode,
+            "delivery_fee": restaurant.delivery_fee,
 
             # Use .url to get the string path instead of the file object
             "restuarant_image": restaurant.image.url if restaurant.image else None        
         }, status=200)
 
-    
 category_list_api_view = CategoryListApiView.as_view()
 
 # OuterRef → used inside a Subquery to refer to a field from the outer/main query.
@@ -378,6 +387,60 @@ def verify_telegram_init_data(init_data: str, restaurant_id: str):
         key: unquote(value) for key, value in parsed_data.items()
     }
 
+class OrderPreviewAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+
+        cart_items = request.data.get('cart_items')
+        restaurant_id = self.kwargs.get("restaurant_id")
+
+        # Extract all cart pid's
+        product_pids = [item.get("pid") for item in cart_items]
+        
+        # Get the restaurant
+        restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
+        
+        # Get all instaock products for the particular restaurant 
+        products = restaurant.restaurant_products.filter(pid__in=product_pids, instock=True).only("price", "pid")
+
+        # {5: <Product object 5>, 8: <Product object 8>, 12: <Product object 12>}
+        product_map = { p.pid: p for p in products }
+        print("product_map: ", product_map)
+
+        if not product_map:
+            return Response({
+                "success": False,
+                "out_of_stock": True,
+                "message": "All selected products are unavailable",
+                "product_ids": product_pids,
+            }, status=status.HTTP_200_OK)
+        
+        # 3️⃣ Rebuild cart_items safely from DB truth
+        safe_items = [ item for item in cart_items if item.get('pid') in product_map ]
+        print("safe_items: ", safe_items)
+
+        # 4️⃣ Calculate total price from DB prices
+        total_price = Decimal('0.00')
+        for item in safe_items:
+            product = product_map.get(item.get('pid'))
+            qty = int(item.get("quantity", 1))
+            price = product.price
+            total_price += price * qty
+
+        vat = total_price * 0.075
+        grand_price = total_price + vat + restaurant.delivery_fee
+        data = {
+            "delivery_fee": restaurant.delivery_fee,
+            "subtotal": total_price,
+            "vat": vat,
+            "total": grand_price,
+        }
+        return Response(data)
+
+preview_order_api_view = OrderPreviewAPIView.as_view()
+
+        
 
 class OrderBatchListCreateAPIView(APIView):
     throttle_scope = "send_kitchen"            # Tells DRF which limit to use
@@ -420,6 +483,22 @@ class OrderBatchListCreateAPIView(APIView):
 
         print("restaurant queryset:", restaurant)
         print("restaurant_id123:", restaurant_id)
+
+        # make sure you check if the restaurant is accepting orders on-delivery before doing all the heavy lifting
+        # i.e check the time and day against the restaurant's opening hours, and also check the is_accepting_orders flag or RestaurantOpeningHours.is_closed flag wether the restaurant is closed for delivery.
+        #  This way you can fail fast before doing all the heavy lifting of checking stock, creating batches, etc.
+
+        if not restaurant.is_accepting_orders or not restaurant.is_bot_active:
+            return Response(
+                {"error": "Restaurant is not accepting orders at the moment"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # if not RestaurantOpeningHours.is_closed:
+        #     return Response(
+        #         {"error": "Restaurant is currently closed for delivery based on its opening hours"},
+        #         status=status.HTTP_400_BAD_REQUEST
+        #     )
 
         # 2️⃣ Get telegram User
         try:

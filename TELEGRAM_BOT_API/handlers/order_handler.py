@@ -2,56 +2,80 @@
 from core.config import *
 from utils.cart_utils import *
 from utils.image_utils import *
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-# 0️⃣     5️⃣ 6️⃣ 7️⃣ 8️⃣ 9️⃣ 🔟
-async def choose_table(update, context):
 
-    # Create keyboard (2 buttons per row)
-    keyboard = [
-        [
-            InlineKeyboardButton("1️⃣", callback_data="table_1️⃣"),
-            InlineKeyboardButton("2️⃣", callback_data="table_2️⃣"),
-        ],
-        [
-            InlineKeyboardButton("3️⃣", callback_data="table_3️⃣"),
-            InlineKeyboardButton("4️⃣", callback_data="table_4️⃣"),
-        ],
-    ]
+EMOJI_NUMBERS = {
+    1: "1️⃣", 2: "2️⃣", 3: "3️⃣",
+    4: "4️⃣", 5: "5️⃣", 6: "6️⃣",
+    7: "7️⃣", 8: "8️⃣", 9: "9️⃣",
+    10: "🔟"
+}
+
+async def choose_table(update, query):
+
+    user_session = await get_user_session(update.effective_user.id)
+    max_tables = user_session['max_tables']
+
+    keyboard = []
+    row = []
+
+    for i in range(1, max_tables + 1):
+        emoji = EMOJI_NUMBERS.get(i, str(i))  # fallback to normal number
+
+        button = InlineKeyboardButton(
+            text=emoji,
+            callback_data=f"table_{emoji}"
+        )
+
+        row.append(button)
+
+        if len(row) == 3:
+            keyboard.append(row)
+            row = []
+
+    if row:
+        keyboard.append(row)
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Send message with keyboard
-    await update.message.reply_text(
-        "Select a table:",
+    await query.edit_message_text(
+        text="Select a table:",
         reply_markup=reply_markup
     )
 
-
 async def order_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await logger(update, context)
-    await choose_table(update, context)
-    
+    user_session = await get_user_session(update.effective_user.id)
+    service_mode = user_session['service_mode'].lower()
+    business_type = user_session['business_type'].lower()
+    keyboard = []
 
-async def order_meal_by_chat_id(chat_id, context: ContextTypes.DEFAULT_TYPE):
-    reply_keyboard = [
-        ["🍚 🍚 🍚Affordable Meals", "🍗🍗Spiced Fried Chicken"],
-        ['🥗🍔🍗🍟🥓 Snacks', '🍗Flamed Grilled Chicken'],
-        ['🍗🍗 Rotisserie Chicken', '🍗🍝 🍜Tasty Sides'],
-        ["⬅️ Back", "➡️ More"]
-    ]
+    # 🟢 Vendor → always delivery only
+    if business_type == "vendor":
+        keyboard.append([
+            InlineKeyboardButton("🚚 Delivery", callback_data="order_delivery")
+        ])
 
-    markup = ReplyKeyboardMarkup(
-        reply_keyboard,
-        resize_keyboard=True,
-        one_time_keyboard=False
-    )
+    # 🟡 Restaurant
+    else:
+        row = []
+
+        if service_mode in ["dine_in", "both"]:
+            row.append(InlineKeyboardButton("🍽️ Dine-in", callback_data="order_dine_in"))
+
+        if service_mode in ["delivery", "both"]:
+            row.append(InlineKeyboardButton("🚚 Delivery", callback_data="order_delivery"))
+
+        keyboard.append(row)
+
     await context.bot.send_message(
-        chat_id=chat_id,
-        text="Please Select a category in the menu below 👇:",
-        reply_markup=markup
+        chat_id=update.effective_chat.id,
+        text="How would you like to order?",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
-
-
+        
+                                                
 # <!DOCTYPE html>
 # <html lang="en">
 # <head>

@@ -4,7 +4,7 @@ from cachetools import TTLCache
 from core.config import INTERNAL_API_KEY
 
 # TTL: Time to Live, “How long something stays in memory before it disappears” i.e it last for 60 seconds
-cache = TTLCache(maxsize=2000, ttl=6000)  # cache 1000+ bots, it can store up to 2000 items, e.g 2000 restaurant (or bot tokens)
+cache = TTLCache(maxsize=2000, ttl=300)  # cache 1000+ bots, it can store up to 2000 items, e.g 2000 restaurant (or bot tokens)
 # if exceeds 2000, the oldest data gets removed automatically: LRU eviction(Least Recently Used)
 
 lock = asyncio.Lock()

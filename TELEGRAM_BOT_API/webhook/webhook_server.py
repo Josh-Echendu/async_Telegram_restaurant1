@@ -45,6 +45,7 @@ async def webhook(rid: str, request: Request):
         logger.warning(f"Bot for {restaurant['name']} is currently disabled.")
         return {"status": "bot disabled"}
     
+    
     arq = await get_arq_redis()
     await arq.enqueue_job(
         'handle_telegram_update',
@@ -53,8 +54,6 @@ async def webhook(rid: str, request: Request):
         _queue_name="restaurant_jobs"   # 🔥 THIS FIXES EVERYTHING
 
     ) 
-    print("josh bro")
-
     return {"ok": True}
 
 

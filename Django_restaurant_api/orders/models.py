@@ -67,6 +67,7 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=12, decimal_places=2, default='0.00')
     in_stock = models.BooleanField(default=True)
     date = models.DateTimeField(auto_now_add=True, db_index=True)
+    
     class Meta:
         verbose_name_plural = 'Products'
         ordering = ['-date']
@@ -125,11 +126,15 @@ class Cart(models.Model):
         return f'{self.telegram_user} | {self.product.title} | {self.quantity}'
 
 
+SERVICE_MODE_CHOICES = (
+    ('dine_in', 'In-Restaurant Only'),
+    ('delivery', 'Delivery Only'),
+)
 class CheckoutSession(models.Model):
     session_id = ShortUUIDField(unique=True, length=10, alphabet=ALPHABET, prefix='ses')
-    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, null=True, related_name='restaurant_session')
-    telegram_user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, null=True, related_name='telegram_session')
-    
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, null=True, related_name='restaurant_session', db_index=True)
+    telegram_user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, null=True, related_name='telegram_session', db_index=True)
+
     va_acct_number = models.CharField(max_length=50, null=True, blank=True)  # Assigned DVA
     va_bank = models.CharField(max_length=50, null=True, blank=True)
     va_expiry = models.DateTimeField(null=True, blank=True)  # NEW FIELD
@@ -150,6 +155,9 @@ class CheckoutSession(models.Model):
     notification_sent =  models.BooleanField(default=False)
     date_created = models.DateTimeField(auto_now_add=True, db_index=True)
     # expires_at = models.DateTimeField(null=True, blank=True)
+
+    dine_in_table_number = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Require customers to provide table number for dine-in orders")
+    service_mode = models.CharField(max_length=20, choices=SERVICE_MODE_CHOICES, help_text="Service mode for this checkout session", db_index=True)
     
     class Meta: # In Django models, Meta is a special inner class used to define extra rules or settings for the model.
         indexes = [
@@ -165,8 +173,24 @@ class CheckoutSession(models.Model):
                 name="one_active_session_per_user" # This gives the constraint a name. It also helps when: debugging, migrations, database inspection
             )
         ]
+
     def __str__(self):
         return f"{self.session_id}-{self.restaurant}"
+    
+# from django.db.models import Q, CheckConstraint
+# class MyModel(models.Model):
+#     rating = models.IntegerField()
+
+#     class Meta:
+#         constraints = [
+#             CheckConstraint(
+#                 condition=Q(rating__gte=0) & Q(rating__lte=6),
+#                 condition=Q(rating__range=(0, 6)),
+#                 name="rating_range_0_6"
+#                 violation_error_message="Rating must be between 0 and 6."
+#             ) 
+
+#         ]
 
 # Permanent order batch (represents one checkout)
 class OrderBatch(models.Model):

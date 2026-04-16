@@ -17,6 +17,7 @@ from django.utils import timezone
 from django.db.transaction import on_commit
 import uuid
 from celery.exceptions import SoftTimeLimitExceeded
+from .redis_client import redis_client
 
 from .virtual_account import initiate_dynamic_virtual_account
 from .errors import prefetch_webhooks, delete_webhook
@@ -48,6 +49,7 @@ def run_retry_jobs():
     retry_unsent_orders_notifications.delay()
     retry_unsent_payment_notifications.delay()
     requery_transaction.delay()
+
 
 # ---------------------------
 # Main retry task: pushes tasks in bulk
@@ -239,13 +241,6 @@ def send_user_message_for_celery(order, telegram_id, TOKEN):
         chat_id=telegram_id,
         text="🍽️ Order sent to the kitchen! 🎉🎉🎉\n\nWhat would you like to do next?",
         reply_markup=None
-    )
-
-def _notify_user_of_failure(telegram_id, TOKEN):
-    bot = Bot(token=TOKEN)
-    bot.send_message(
-        chat_id=telegram_id,
-        text="😔 Sorry your order couldn't be sent to the kitchen.\n\n Please click 🛍️✅💳 Checkout/Pay menu below 👇👇!!"
     )
 
 
@@ -465,6 +460,8 @@ def send_receipt_safe(self, session_id):
 
 def send_receipt_to_user(session):
     photo_url = "/app/orders/photo_2026-01-09 14.59.50.jpeg"
+    token = session.restaurant.get_bot_token()
+    bot = Bot(token=token)
 
     with open(photo_url, "rb") as photo:
         input_file = InputFile(photo)
@@ -475,7 +472,7 @@ def send_receipt_to_user(session):
             photo=input_file
         )
 
-def send_account_details_to_user(session, virtual_account_data, TOKEN):
+def send_account_details_to_user(session, virtual_account_data):
 
     # Define the new buttons you want to show
     keyboard = [
@@ -492,6 +489,8 @@ def send_account_details_to_user(session, virtual_account_data, TOKEN):
         f"👤 Account Name: <b>{bank_account_name}</b>"
     )
 
+    token = session.restaurant.get_bot_token()
+    bot = Bot(token=token)
     try:
         bot.send_message(
             chat_id=session.telegram_user.telegram_id,

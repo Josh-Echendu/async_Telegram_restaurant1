@@ -16,7 +16,7 @@ async def generate_dynamic_virtual_account(update, max_retries=3):
         "user_id": user_id 
     }
 
-    for attempt in range(1, max_retries + 1):
+    for attempt in range(0, max_retries):
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(url, headers={"Content-Type": "application/json"}, json=payload)
