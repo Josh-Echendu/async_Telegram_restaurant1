@@ -103,11 +103,13 @@ def get_restaurant_internal(request, rid):
         "webhook_secret_token": str(restaurant.webhook_secret_token),
         "is_bot_active": restaurant.is_bot_active,
         "is_accepting_orders": restaurant.is_accepting_orders,
+        
         "service_mode": restaurant.service_mode,
         "business_type": restaurant.business_type,
         "max_tables": restaurant.max_tables,
         "open_time": open_time,
         "close_time": close_time,
+        "time_zone": restaurant.timezone,
         "is_closed": delivery_opening_hours.is_closed if delivery_opening_hours else None
     })
 

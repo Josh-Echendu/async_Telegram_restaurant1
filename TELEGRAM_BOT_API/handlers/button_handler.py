@@ -1,4 +1,9 @@
 # handlers/button_handler.py - EXACT COPY FROM ORIGINAL FILE
+from datetime import timezone, datetime
+from datetime import time
+
+from services.restaurant_cache import get_restaurant
+
 from .order_handler import choose_table
 from core.config import *
 import telegram
@@ -10,6 +15,7 @@ from .start_handler import after_payment, start
 from .kitchen_handler import api_get_user_order_batches, update_batch_table
 from .dynamic_virtual import generate_dynamic_virtual_account
 from .echo_handler import payment_keyboard
+import pytz
 
 
 EMOJI_NUMBERS = {
@@ -177,15 +183,33 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await choose_table(update, query)
 
     elif data == "order_delivery":
-        user_session = await get_user_session(update.effective_user.id)
+        restaurant_data = await get_user_session(update.effective_user.id)
+        business_type = restaurant_data['business_type']
+        service_mode = restaurant_data['service_mode']
         
+        # 🔥 Check delivery hours ONLY for restaurants that offer delivery
+        if business_type.lower() == "restaurant" and service_mode.lower() in ['delivery', 'both']:
+            is_available, message = await is_delivery_available(update)
+            
+            if not is_available:
+                await context.bot.send_message(
+                    text=message,
+                    chat_id=update.effective_user.id
+                )
+                return  # 🔥 IMPORTANT: Stop here, don't proceed
+        
+        # ✅ Only reach here if:
+        # - Business is VENDOR, OR
+        # - Restaurant AND delivery is available
+        user_session = await get_user_session(update.effective_user.id)
         user_session['user_service_mode'] = 'delivery'
-        user_session.pop('table_number', None)  # 🔥 IMPORTANT
+        user_session.pop('table_number', None)
         
         await save_user_session(update.effective_user.id, user_session)
-
+        
         await query.answer("🚚 Delivery Menu 📜🍔 coming right up! 🎉")
         await menu_keyboard(update, query)
+
 
     elif data == "pay_cash":
         orders_batches = await api_get_user_order_batches(update)
@@ -197,6 +221,71 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         orders_batches = await api_get_user_order_batches(update)
 
         pass
+
+async def is_delivery_available(update):
+    user_session = await get_user_session(update.effective_user.id)
+    restaurant_id = user_session['current_rid']
+    
+    # ✅ ALWAYS fetch fresh restaurant data (cache TTL is 5 minutes)
+    restaurant_data = await get_restaurant(restaurant_id)
+    print(f"Fetching fresh restaurant data for {restaurant_id}")
+    
+    if not restaurant_data:
+        return False, "Restaurant data unavailable. Please try again."
+    
+    time_zone = restaurant_data['time_zone']
+    open_time_str = restaurant_data['open_time']
+    close_time_str = restaurant_data['close_time']
+    is_closed = restaurant_data['is_closed']
+
+    print(f"Fresh restaurant data for {restaurant_id}: open={open_time_str}, close={close_time_str}, closed={is_closed}")
+
+    try:
+        # convert string("Africa/Lagos") to timezone object using pytz class: <class 'pytz.tzfile.Africa/Lagos'>
+        restaurant_tz = pytz.timezone(time_zone)
+    except Exception:
+        restaurant_tz = pytz.timezone('Africa/Lagos')
+
+    # ✅ CORRECT: Use datetime with pytz
+    now_utc = datetime.now(timezone.utc)  # london UTC
+
+    # astimezone() converts UTC (London) time to whatever timezone the restaurant is in using pytz.
+    now_local = now_utc.astimezone(restaurant_tz)
+
+    # time(): Extract the time object
+    current_time = now_local.time()
+
+    # Check if restaurant is closed today
+    if is_closed:
+        return False, "🙏 We're closed for delivery today. See you tomorrow!"
+
+    # Check if open_time and close_time exist
+    if not open_time_str or not close_time_str:
+        return False, "🙏 We're closed for delivery today. See you tomorrow!"
+
+    # 🔥 CRITICAL: Convert string to time object
+    try:
+        # Always convert time strings from API/Redis to time objects before comparison!
+        open_time = time.fromisoformat(open_time_str)
+        close_time = time.fromisoformat(close_time_str)
+    except Exception:
+        return False, ""
+
+    # Handle overnight hours (e.g., 11pm to 2am)
+    if open_time <= close_time:
+        # Normal hours (e.g., 09:00 to 22:00)
+        is_open = open_time <= current_time <= close_time
+    else:
+        # Overnight hours (e.g., 22:00 to 02:00)
+        is_open = current_time >= open_time or current_time <= close_time
+
+    if not is_open:
+        # Format times in 12-hour format for user
+        open_12hr = open_time.strftime('%I:%M %p')
+        close_12hr = close_time.strftime('%I:%M %p')
+        return False, f"🚚 Delivery available from {open_12hr} to {close_12hr} ({time_zone})"
+
+    return True, "Delivery available"
 
 
 async def menu_keyboard(update, query):

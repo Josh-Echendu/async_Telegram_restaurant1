@@ -41,14 +41,14 @@ def at_start(sender, **kwargs):
     """Runs immediately when Celery worker starts."""
     retry_unsent_orders_notifications.delay()
     retry_unsent_payment_notifications.delay()
-    requery_transaction.delay()
+    # requery_transaction.delay()
 
 
 @shared_task
 def run_retry_jobs():
     retry_unsent_orders_notifications.delay()
     retry_unsent_payment_notifications.delay()
-    requery_transaction.delay()
+    # requery_transaction.delay()
 
 
 # ---------------------------
@@ -195,12 +195,20 @@ def send_to_kitchen_for_celery(order, TOKEN):
         for item in order.items.all()
     ]
     total = sum(item.price * item.quantity for item in order.items.all())
+    
+    # Build table number line separately
+    table_line = ""
+    if order.checkout_session.dine_in_table_number:
+        table_line = f"📋 Table Number: {order.checkout_session.dine_in_table_number}\n\n"
 
+
+    # Then use it
     kitchen_text = (
         f"🔥 NEW ORDER RECEIVED\n\n"
         f"👤 Customer: {order.telegram_user.first_name}\n"
         f"🆔 User ID: {order.telegram_user.telegram_id}\n\n"
         f"🆔 BATCH ID: {order.bid}\n\n"
+        f"{table_line}"
         f"📦 Items:\n" + "\n".join(lines) +
         f"\n\n——————————\n*Total: ₦{total}*\n\n"
         "⏳ Status: Pending"

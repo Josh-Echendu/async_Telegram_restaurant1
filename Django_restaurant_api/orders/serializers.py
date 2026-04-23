@@ -10,6 +10,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    prep_time_minutes = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Product

@@ -306,3 +306,6 @@ CELERY_WORKER_DISABLE_RATE_LIMITS = True # i.e remove speed bumbs(remove rate-li
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 
+# To this:
+# TIME_ZONE = 'Africa/Lagos'  # Nigeria timezone (UTC+1)
+

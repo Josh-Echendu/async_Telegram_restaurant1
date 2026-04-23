@@ -193,6 +193,51 @@
         box-shadow: 0 0 20px rgba(255,0,0,0.6), 0 0 40px rgba(255,0,0,0.3);
       }
     }
+
+    @keyframes sparkle {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+      }
+    }
+    
+    .animate-sparkle {
+      animation: sparkle 1s ease-in-out infinite;
+    }
+
+    /* Smooth scrolling for modal */
+    .fixed.inset-0 .overflow-y-auto {
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 #f1f5f9;
+    }
+
+    .fixed.inset-0 .overflow-y-auto::-webkit-scrollbar {
+        width: 4px;
+    }
+
+    .fixed.inset-0 .overflow-y-auto::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 10px;
+    }
+
+    .fixed.inset-0 .overflow-y-auto::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
+    }
+
+    /* Animation for total amount */
+    @keyframes pulse-gentle {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.02); }
+    }
+
+    .bg-gradient-to-r.from-green-50.to-emerald-50 {
+        animation: pulse-gentle 1.5s ease-in-out infinite;
+    }
   </style>
 </head>
 <body class="antialiased">
@@ -211,6 +256,7 @@
   
   // Add these after 'showCheckoutModal: false,'
   mode: new URLSearchParams(window.location.search).get('mode') || 'dine_in',
+  table_number: new URLSearchParams(window.location.search).get('table') || null,
   showDeliveryForm: false,
   deliveryInfo: {
     fullName: '',
@@ -225,10 +271,12 @@
   // NEW: For price preview screen
   showPricePreview: false,
   priceBreakdown: {
-    subtotal: 0,
-    vat: 0,
-    delivery_fee: 0,
-    total: 0
+      subtotal: 0,
+      vat: 0,
+      delivery_fee: 0,
+      total: 0,
+      prep_time: 0,           // ← ADD THIS
+      prep_time_display: ''   // ← ADD THIS
   },
   isPreviewLoading: false,
 
@@ -246,7 +294,8 @@
       price: parseFloat(p.price),
       category: categoryOverride ?? String(p.category),
       image: p.image,
-      in_stock: p.in_stock !== false
+      in_stock: p.in_stock !== false,
+      prep_time: p.prep_time_minutes || 15  // ← ADD THIS LINE
     }));
   }, // ← FIX: Added comma
 
@@ -263,7 +312,7 @@
       for (let attempt = 1; attempt <= retries; attempt++) {
           try {
               const url = `/api/restaurant/${restaurantId}/products/${cid}/`;
-              const response = await axios.get(url, { timeout: 5000 }); // 5s timeout
+              const response = await axios.get(url, { timeout: 10000 }); // 10s timeout
 
               const categoryProducts = response.data.category_products;
               const allProducts = response.data.all;
@@ -288,6 +337,12 @@
 
           } catch (error) {
               console.warn(`Attempt ${attempt} failed to load products:`, error);
+
+              // Most common ways to read errors:
+              console.log('Full error object:', error);
+              console.log('Error message:', error.message);
+              console.log('Response data:', error.response?.data);
+              console.log('Status code:', error.response?.status);
 
               if (attempt === retries) {
                   // Max retries reached
@@ -564,8 +619,11 @@
       const payload = {
           cart_items: this.cart.map(i => ({ pid: i.pid, quantity: i.quantity })),
           idempotency_key: 'ORD-' + Math.floor(800000 + Math.random() * 200000),
-          init_data: window.Telegram.WebApp.initData
+          init_data: window.Telegram.WebApp.initData,
+          mode: 'dine_in',
+          table_number: this.table_number
       };
+      console.log('table_number: ', payload)
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
@@ -629,6 +687,14 @@
 
           } catch (error) {
               console.warn(`Attempt ${attempt} failed:`, error);
+              
+              // Handle 409 Conflict (lock conflict) - just show message and let user retry manually
+              if (error.response?.status === 409) {
+                  const message = error.response?.data?.message || 'Another order is being processed. Please wait and try again.';
+                  this.toast = { visible: true, message };
+                  setTimeout(() => this.toast.visible = false, 5000);
+                  return; // Stop here, don't retry automatically
+              }
 
               // Check if error is network-related
               const isNetworkError = !error.response || error.code === 'ECONNABORTED';
@@ -689,23 +755,99 @@
         { timeout: 10000 }
       );
       
-      // Store the price breakdown from backend
-      this.priceBreakdown = {
-        subtotal: previewResponse.data.subtotal,
-        vat: previewResponse.data.vat,
-        delivery_fee: previewResponse.data.delivery_fee,
-        total: previewResponse.data.total
-      };
+      const data = previewResponse.data;
       
-      // Close delivery form, show price preview
-      this.showDeliveryForm = false;
-      this.showPricePreview = true;
+      // CASE 1: Empty cart
+      if (data.empty_cart === true) {
+        // Close delivery form
+        this.showDeliveryForm = false;
+        
+        // Show toast message
+        this.toast = { 
+          visible: true, 
+          message: '🛒 Your cart is empty! Add some items before checkout.' 
+        };
+        setTimeout(() => this.toast.visible = false, 4000);
+        
+        // Close delivery form and don't proceed
+        return;
+      }
+      
+      // CASE 2: Out of stock items detected
+      if (data.out_of_stock === true && data.product_ids) {
+        // Update cart to mark out-of-stock items
+        this.cart = this.cart.map(item => {
+          if (data.product_ids.includes(item.pid)) {
+            return { ...item, in_stock: false };
+          }
+          return item;
+        });
+        
+        // Save the updated cart
+        this.saveCart();
+        
+        // Reload products to refresh stock status
+        this.loadProducts(this.activeCategory);
+        
+        // Close delivery form
+        this.showDeliveryForm = false;
+        
+        // Open cart drawer so user sees the disabled items
+        this.showCart = true;
+        
+        // Show toast with details
+        const removedItems = data.removed_items || [];
+        const message = removedItems.length > 0 
+          ? `⚠️ ${removedItems.join(', ')} ${removedItems.length === 1 ? 'is' : 'are'} out of stock and disabled in your cart.`
+          : '⚠️ Some items are out of stock and have been disabled in your cart.';
+        
+        this.toast = { 
+          visible: true, 
+          message: message
+        };
+        setTimeout(() => this.toast.visible = false, 10000);
+        
+        return;
+      }
+      
+      // CASE 3: Success - all items in stock
+      if (data.success === true) {
+        // Store the price breakdown from backend
+        this.priceBreakdown = {
+          subtotal: data.subtotal,
+          vat: data.vat,
+          delivery_fee: data.delivery_fee,
+          total: data.total,
+          prep_time: data.prep_time_minutes,      // ← ADD THIS
+          prep_time_display: data.prep_time_display  // ← ADD THIS
+        };
+        
+        // Close delivery form, show price preview
+        this.showDeliveryForm = false;
+        this.showPricePreview = true;
+        return;
+      }
+      
+      // CASE 4: Any other error
+      throw new Error('Unexpected response from preview API');
       
     } catch (error) {
       console.error('Preview failed:', error);
+
+      // Handle 409 Conflict (lock conflict) - just show message and let user retry manually
+      if (error.response?.status === 409) {
+          const message = error.response?.data?.message || 'Another order is being processed. Please wait and try again.';
+          this.toast = { visible: true, message };
+          setTimeout(() => this.toast.visible = false, 5000);
+          return; // Stop here, don't retry automatically
+      }
+      
+      // 🔥 USE your getErrorMessage function to get backend error messages
+      const errorMessage = this.getErrorMessage(error);
+      
       this.toast = { 
         visible: true, 
-        message: '❌ Unable to calculate order total. Please try again.' 
+        message: errorMessage  // ← Now shows actual backend error!
       };
       setTimeout(() => this.toast.visible = false, 7000);
     } finally {
@@ -713,8 +855,31 @@
     }
   },
 
-    // NEW: Called after user confirms price preview
-  async confirmDeliveryOrder() {
+  getErrorMessage(error) {
+    // Network error (no response from server)
+    if (error.request && !error.response) {
+        return '📡 Unable to connect. Please check your internet connection.';
+    }
+    
+    // Server responded with an error
+    if (error.response && error.response.data) {
+        const data = error.response.data;
+        
+        // ✅ ONLY show user-friendly .message
+        if (data.message) {
+            return data.message;
+        }
+ 
+        return '❌ Error just occured. Please try again.';
+    }
+    
+    // Any other error
+    return 'Something went wrong. Please check your connection and try again.';
+},
+
+
+  async confirmDeliveryOrder() {      
+
     if (this.isSubmittingDelivery) return;
     
     this.isSubmittingDelivery = true;
@@ -789,11 +954,30 @@
       
     } catch (error) {
       console.error('Delivery order failed:', error);
+
+    // Handle 409 Conflict (lock conflict) - just show message and let user retry manually
+    if (error.response?.status === 409) {
+        const message = error.response?.data?.message || 'Another order is being processed. Please wait and try again.';
+        this.toast = { visible: true, message };
+        setTimeout(() => this.toast.visible = false, 5000);
+        return; // Stop here, don't retry automatically
+    }
+      
+      // Most common ways to read errors:
+      console.log('Full error object:', error);
+      console.log('Error message:', error.message);
+      console.log('Response data:', error.response?.data);
+      console.log('Status code:', error.response?.status);
+        
+      // Get error message using helper function
+      const message = this.getErrorMessage(error);
+      
       this.toast = { 
-        visible: true, 
-        message: '❌ Failed to place delivery order. Please try again.' 
+          visible: true, 
+          message: message
       };
       setTimeout(() => this.toast.visible = false, 7000);
+
     } finally {
       this.isSubmittingDelivery = false;
     }
@@ -951,37 +1135,47 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
 <div x-ref="productsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
   <template x-for="meal in paginatedMeals" :key="meal.pid">
   <div
-    class="meal-card p-4 flex flex-col"
+    class="meal-card p-4 flex flex-col relative"
     :class="!meal.in_stock ? 'opacity-50 pointer-events-none' : ''"
   >      
     <!-- image container -->
-     <div class="img-wrapper w-full h-44 sm:h-48 bg-[#f5f7fb] rounded-2xl relative">
-        <img :src="meal.image" :alt="meal.name" class="w-full h-full object-cover">
+    <div class="img-wrapper w-full h-44 sm:h-48 bg-[#f5f7fb] rounded-2xl relative">
+      <img :src="meal.image" :alt="meal.name" class="w-full h-full object-cover">
       
-        <!-- ADD THIS BADGE -->
-        <div
-          x-show="!meal.in_stock"
-          class="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow">
-            Out of stock
-        </div>
+      <!-- Out of stock badge -->
+      <div
+        x-show="!meal.in_stock"
+        class="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow">
+        Out of stock
       </div>
       
-      <!-- text -->
-      <div class="mt-3 flex-1">
-        <h3 class="text-sm font-semibold text-[#1a1e2b]" x-text="meal.name"></h3>
-        <p class="text-sm text-[#4b5565] mt-0.5 line-clamp-2" x-text="meal.desc"></p>
+      <!-- 🔥 PREP TIME BADGE - Delivery only, with fire animation 🔥 -->
+      <div 
+        x-show="mode === 'delivery' && meal.prep_time" 
+        class="absolute bottom-2 right-2 bg-gradient-to-r from-orange-500 to-red-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg flex items-center gap-1"
+        style="animation: sparkle 1s ease-in-out infinite; box-shadow: 0 0 10px rgba(249,115,22,0.5);">
+        <i class="fas fa-fire text-xs" style="animation: gentle-pulse 0.8s ease-in-out infinite;"></i>
+        <span x-text="meal.prep_time + ' min'"></span>
+        <i class="fas fa-clock text-xs"></i>
+      </div>
+    </div>
+    
+    <!-- text -->
+    <div class="mt-3 flex-1">
+      <h3 class="text-sm font-semibold text-[#1a1e2b]" x-text="meal.name"></h3>
+      <p class="text-sm text-[#4b5565] mt-0.5 line-clamp-2" x-text="meal.desc"></p>
+      
+      <!-- price and action row -->
+      <div class="flex items-center justify-between mt-4">
+        <!-- dynamic if in cart -->
+        <template x-for="item in cart.filter(i => i.pid === meal.pid)" :key="item.pid">
+          <div class="flex items-center space-x-1 bg-[#f2f6fd] rounded-full border border-[#dee7f2] p-0.5">
+            <button @click="removeOne(meal.pid)" class="qty-btn w-8 h-8 text-sm"><i class="fas fa-minus"></i></button>
+            <span class="font-semibold w-6 text-center" x-text="item.quantity"></span>
+            <button @click="addToCart(meal)" class="qty-btn w-8 h-8 text-sm"><i class="fas fa-plus"></i></button>
+          </div>
+        </template>
         
-        <!-- price and action row -->
-        <div class="flex items-center justify-between mt-4">
-          <!-- dynamic if in cart -->
-          <template x-for="item in cart.filter(i => i.pid === meal.pid)" :key="item.pid">
-            <div class="flex items-center space-x-1 bg-[#f2f6fd] rounded-full border border-[#dee7f2] p-0.5">
-              <button @click="removeOne(meal.pid)" class="qty-btn w-8 h-8 text-sm"><i class="fas fa-minus"></i></button>
-              <span class="font-semibold w-6 text-center" x-text="item.quantity"></span>
-              <button @click="addToCart(meal)" class="qty-btn w-8 h-8 text-sm"><i class="fas fa-plus"></i></button>
-            </div>
-          </template>
-          
         <button
           x-show="!cart.some(i => i.pid === meal.pid)"
           @click="if(meal.in_stock) addToCart(meal)"
@@ -993,13 +1187,13 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
           <i class="fas fa-cart-plus"></i>
           <span x-text="meal.in_stock ? 'Add' : 'Out of stock'"></span>
         </button>
-          
-          <span class="text-lg font-bold text-[#1f2a3f]">
-            ₦<span x-text="formatPrice(meal.price)"></span>
-          </span>
-        </div>
+        
+        <span class="text-lg font-bold text-[#1f2a3f]">
+          ₦<span x-text="formatPrice(meal.price)"></span>
+        </span>
       </div>
     </div>
+  </div>
   </template>
 </div>
 
@@ -1326,91 +1520,146 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
 </div>
 
 <!-- ===== PRICE PREVIEW MODAL (Shows VAT, Delivery Fee, Total) ===== -->
-<div x-show="showPricePreview" class="fixed inset-0 z-50 flex items-center justify-center p-4" @keydown.escape.window="showPricePreview = false">
+<!-- ===== PRICE PREVIEW MODAL (Fully Responsive) ===== -->
+<div x-show="showPricePreview" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" @keydown.escape.window="showPricePreview = false">
   <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" @click="showPricePreview = false"></div>
-  <div class="relative bg-white max-w-md w-full rounded-3xl p-6 shadow-2xl border border-[#eef2f8]"
+  <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl border border-[#eef2f8] overflow-y-auto max-h-[95vh]"
        x-show="showPricePreview" x-transition>
     
-    <!-- Header with sparkle -->
-    <div class="text-center mb-6">
-      <div class="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3 animate-pulse" style="box-shadow: 0 0 20px rgba(34,197,94,0.5);">
-        <i class="fas fa-receipt text-3xl text-white"></i>
+    <!-- Sticky Header -->
+    <div class="sticky top-0 bg-white z-10 px-5 pt-6 pb-3 border-b border-[#eef2f8]">
+      <div class="text-center">
+        <div class="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3 animate-pulse" style="box-shadow: 0 0 20px rgba(34,197,94,0.5);">
+          <i class="fas fa-receipt text-2xl sm:text-3xl text-white"></i>
+        </div>
+        <h3 class="text-xl sm:text-2xl brand-italic font-bold">Order Summary</h3>
+        <p class="text-xs text-[#6f7c91] mt-1">Review your charges before payment</p>
       </div>
-      <h3 class="text-2xl brand-italic font-bold">Order Summary</h3>
-      <p class="text-sm text-[#6f7c91] mt-1">Review your charges before payment</p>
     </div>
     
-    <!-- Loading State -->
-    <div x-show="isPreviewLoading" class="text-center py-8">
-      <i class="fas fa-spinner fa-pulse text-3xl text-[#1f2a3f]"></i>
-      <p class="mt-2 text-[#6f7c91]">Calculating your total...</p>
+    <!-- Scrollable Content -->
+    <div class="px-5 py-4 space-y-3">
+      
+      <!-- Loading State -->
+      <div x-show="isPreviewLoading" class="text-center py-10">
+        <i class="fas fa-spinner fa-pulse text-3xl text-[#1f2a3f]"></i>
+        <p class="mt-2 text-sm text-[#6f7c91]">Calculating your total...</p>
+      </div>
+      
+      <!-- Price Breakdown -->
+      <div x-show="!isPreviewLoading" class="space-y-3">
+        
+        <!-- Cart Items Summary -->
+        <div class="bg-gray-50 rounded-xl p-3">
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-2">
+              <i class="fas fa-shopping-bag text-[#1f2a3f] text-sm"></i>
+              <span class="text-sm font-medium text-[#6f7c91]">Items (<span x-text="cartCount"></span>)</span>
+            </div>
+            <span class="text-base font-bold text-[#1f2a3f]">₦<span x-text="formatPrice(priceBreakdown.subtotal)"></span></span>
+          </div>
+        </div>
+        
+        <!-- VAT (7.5%) -->
+        <div class="flex justify-between items-center py-2 border-b border-[#eef2f8]">
+          <div class="flex items-center gap-2">
+            <i class="fas fa-percent text-amber-500 text-sm w-5"></i>
+            <div>
+              <span class="text-sm font-medium text-gray-700">VAT (7.5%)</span>
+              <span class="text-xs text-[#6f7c91] block sm:inline sm:ml-2">Value Added Tax</span>
+            </div>
+          </div>
+          <span class="text-sm font-semibold text-amber-600 whitespace-nowrap ml-2">+₦<span x-text="formatPrice(priceBreakdown.vat)"></span></span>
+        </div>
+        
+        <!-- Delivery Fee -->
+        <div class="flex justify-between items-center py-2 border-b border-[#eef2f8]">
+          <div class="flex items-center gap-2">
+            <i class="fas fa-truck text-blue-500 text-sm w-5"></i>
+            <div>
+              <span class="text-sm font-medium text-gray-700">Delivery Fee</span>
+              <span class="text-xs text-[#6f7c91] block sm:inline sm:ml-2">Based on your location</span>
+            </div>
+          </div>
+          <span class="text-sm font-semibold text-blue-600 whitespace-nowrap ml-2">+₦<span x-text="formatPrice(priceBreakdown.delivery_fee)"></span></span>
+        </div>
+        
+        <!-- Preparation Time - ONLY for delivery mode -->
+        <div x-show="mode === 'delivery'" class="bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl p-3">
+          <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+            <div class="flex items-center gap-2">
+              <i class="fas fa-fire text-orange-500 text-sm"></i>
+              <span class="text-sm font-medium text-orange-700">Preparation Time</span>
+              <span class="text-xs text-orange-500 hidden sm:inline">Kitchen prep + packing</span>
+            </div>
+            <div class="flex items-center justify-between sm:justify-end gap-2">
+              <span class="text-xs text-orange-500 sm:hidden">Kitchen prep + packing</span>
+              <div class="flex items-center gap-1 bg-white px-2 py-1 rounded-full shadow-sm">
+                <i class="fas fa-fire text-xs text-orange-500 animate-pulse"></i>
+                <span class="text-sm font-bold text-orange-600" x-text="priceBreakdown.prep_time_display || priceBreakdown.prep_time + ' min'"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Divider -->
+        <div class="relative my-2">
+          <div class="border-t-2 border-dashed border-[#eef2f8]"></div>
+          <div class="absolute left-1/2 -top-2 -translate-x-1/2 bg-white px-2">
+            <i class="fas fa-star text-yellow-400 text-xs"></i>
+          </div>
+        </div>
+        
+        <!-- Grand Total -->
+        <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4">
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-2">
+              <i class="fas fa-calculator text-green-600 text-base"></i>
+              <span class="text-base font-bold text-[#1f2a3f]">Total Amount</span>
+            </div>
+            <div class="text-right">
+              <span class="text-xl sm:text-2xl font-bold text-green-600">₦<span x-text="formatPrice(priceBreakdown.total)"></span></span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Delivery Info Summary -->
+        <div class="bg-gray-50 rounded-xl p-3 mt-2">
+          <div class="flex items-start gap-2">
+            <i class="fas fa-map-marker-alt text-[#1f2a3f] text-sm mt-0.5"></i>
+            <div class="flex-1">
+              <p class="text-xs font-semibold text-[#1f2a3f]">📦 Delivering to:</p>
+              <p class="text-sm font-medium text-gray-800" x-text="deliveryInfo.fullName"></p>
+              <p class="text-xs text-[#6f7c91] mt-0.5" x-text="deliveryInfo.address"></p>
+            </div>
+          </div>
+        </div>
+        
+      </div>
+      
     </div>
     
-    <!-- Price Breakdown -->
-    <div x-show="!isPreviewLoading" class="space-y-4">
-      
-      <!-- Cart Items Summary -->
-      <div class="border-b border-[#eef2f8] pb-3">
-        <div class="flex justify-between text-sm mb-2">
-          <span class="text-[#6f7c91]">Items (<span x-text="cartCount"></span>):</span>
-          <span class="font-semibold">₦<span x-text="formatPrice(priceBreakdown.subtotal)"></span></span>
-        </div>
+    <!-- Sticky Footer with Buttons -->
+    <div class="sticky bottom-0 bg-white border-t border-[#eef2f8] p-4">
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button 
+          @click="showPricePreview = false; showDeliveryForm = true;" 
+          class="order-2 sm:order-1 flex-1 py-3 border-2 border-[#dee7f2] rounded-xl text-[#1f2a3f] font-semibold hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+        >
+          <i class="fas fa-arrow-left"></i>
+          <span>Back</span>
+        </button>
+        <button 
+          @click="confirmDeliveryOrder()" 
+          :disabled="isSubmittingDelivery"
+          :class="isSubmittingDelivery ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg transform hover:scale-[1.02]'"
+          class="order-1 sm:order-2 flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 rounded-xl font-semibold shadow-md flex items-center justify-center gap-2 transition-all"
+          style="animation: rainbowGlow 3s linear infinite;"
+        >
+          <i class="fas" :class="isSubmittingDelivery ? 'fa-spinner fa-pulse' : 'fa-credit-card'"></i>
+          <span x-text="isSubmittingDelivery ? 'Processing...' : 'Pay Now'"></span>
+        </button>
       </div>
-      
-      <!-- VAT (7.5%) -->
-      <div class="flex justify-between items-center">
-        <div>
-          <span class="font-medium">VAT (7.5%)</span>
-          <span class="text-xs text-[#6f7c91] ml-2">Value Added Tax</span>
-        </div>
-        <span class="font-semibold text-amber-600">+₦<span x-text="formatPrice(priceBreakdown.vat)"></span></span>
-      </div>
-      
-      <!-- Delivery Fee -->
-      <div class="flex justify-between items-center">
-        <div>
-          <span class="font-medium">Delivery Fee</span>
-          <span class="text-xs text-[#6f7c91] ml-2">Based on your location</span>
-        </div>
-        <span class="font-semibold text-blue-600">+₦<span x-text="formatPrice(priceBreakdown.delivery_fee)"></span></span>
-      </div>
-      
-      <!-- Divider -->
-      <div class="border-t-2 border-dashed border-[#eef2f8] my-3"></div>
-      
-      <!-- Grand Total -->
-      <div class="flex justify-between items-center bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-xl">
-        <span class="text-lg font-bold text-[#1f2a3f]">Total Amount</span>
-        <span class="text-2xl font-bold text-green-600">₦<span x-text="formatPrice(priceBreakdown.total)"></span></span>
-      </div>
-      
-      <!-- Delivery Info Summary -->
-      <div class="bg-gray-50 p-3 rounded-lg text-sm">
-        <p class="font-semibold text-[#1f2a3f] mb-1">📦 Delivering to:</p>
-        <p class="text-[#6f7c91]" x-text="deliveryInfo.fullName"></p>
-        <p class="text-[#6f7c91] text-xs mt-1" x-text="deliveryInfo.address"></p>
-      </div>
-      
-    </div>
-    
-    <!-- Action Buttons -->
-    <div class="flex gap-3 mt-6">
-      <button 
-        @click="showPricePreview = false; showDeliveryForm = true;" 
-        class="flex-1 py-3 border-2 border-[#dee7f2] rounded-xl text-[#1f2a3f] font-semibold hover:bg-gray-50 transition-all"
-      >
-        <i class="fas fa-arrow-left mr-2"></i>Back
-      </button>
-      <button 
-        @click="confirmDeliveryOrder()" 
-        :disabled="isSubmittingDelivery"
-        :class="isSubmittingDelivery ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg transform hover:scale-[1.02]'"
-        class="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 rounded-xl font-semibold shadow-md flex items-center justify-center gap-2 transition-all"
-        style="animation: rainbowGlow 3s linear infinite;"
-      >
-        <i class="fas" :class="isSubmittingDelivery ? 'fa-spinner fa-pulse' : 'fa-credit-card'"></i>
-        <span x-text="isSubmittingDelivery ? 'Processing...' : 'Pay Now'"></span>
-      </button>
     </div>
     
   </div>

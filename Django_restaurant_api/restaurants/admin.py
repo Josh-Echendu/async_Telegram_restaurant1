@@ -3,7 +3,7 @@ from .models import Restaurant, RestaurantDeliveryOpeningHours, RestaurantMember
 # Register your models here.
 
 class RestaurantAdmin(admin.ModelAdmin):
-    list_display = ['rid', 'name', 'description', 'image']
+    list_display = ['rid', 'name', 'description', 'image', 'business_type', 'service_mode']
     
 class RestaurantDeliveryOpeningHoursAdmin(admin.ModelAdmin):
     list_display = ['restaurant', 'day_of_week', 'open_time', 'close_time', 'is_closed']

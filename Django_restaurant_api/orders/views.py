@@ -1,17 +1,21 @@
 from datetime import timedelta
 import time
 from django.utils import timezone
-from decimal import Decimal
+import pytz
+from decimal import Decimal, ROUND_HALF_UP
 from django.shortcuts import render
 import uuid
 import requests
+
+from .utils import is_delivery_available
 from .authentication import TelegramAuthentication
-from restaurants.models import RestaurantMembership
+from restaurants.models import RestaurantDeliveryOpeningHours, RestaurantMembership
 from .redis_client import redis_client
 from userAuths.models import TelegramUser
 from rest_framework.generics import (
     CreateAPIView, ListAPIView, RetrieveAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView
 )
+from django.db import OperationalError
 from rest_framework.response import Response  # ✅ CORRECT
 from .serializers import CartSerializer, CategorySerializer, OrderBatchSerializer, ProductSerializer
 from .models import KITCHEN_STATUS_CHOICES, Cart, Category, OrderBatch, OrderBatchItem, Product, Restaurant, CheckoutSession
@@ -84,6 +88,7 @@ class TelegramLimitOffsetPagination(LimitOffsetPagination):
     default_limit = 9      # how many items per "page"
     max_limit = 9          # max items the bot can fetch at once
 
+
 class CategoryProductsApiView(ListAPIView):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
@@ -91,38 +96,34 @@ class CategoryProductsApiView(ListAPIView):
             
     def list(self, request, *args, **kwargs):
 
-        # Extract both restuarant_id and category_id from URL kwargs
         restaurant_id = self.kwargs.get("restaurant_id")
         category_id = self.kwargs.get("category_id")
 
-        if not restaurant_id and not category_id:
-            raise Http404("Category or restaurant ID missing")
+        if not restaurant_id:
+            raise Http404("Restaurant ID missing")
         
-        # get_object_or_404(Category, cid=category_id)
-        # get_object_or_404(Restaurant, rid=restaurant_id)
-
-        # Extract all products for a restaurant, ordered by newest first
+        # Get all products with prep_time from category
         all_products = Product.objects.filter(
             restaurant__rid=restaurant_id
-        ).order_by('-date')
+        ).select_related('category').order_by('-date').annotate(
+            prep_time_minutes=F('category__prep_time_minutes')
+        )
+        print("annotted vallues: ", [ i.prep_time_minutes for i in all_products ])
 
-        # serialize all products once for the "all" category
+        # Serialize all products
         all_data = ProductSerializer(all_products, many=True).data
 
         if category_id == "all":
             return Response({
                 "category_products": all_data,
-                "all": all_data
+                "all": all_data,
             })
 
-        # Extract all products for the specific category
+        # Filter by category
         category_products = all_products.filter(
             category__cid=category_id
         )
-
-        # serialize category products 
         category_data = ProductSerializer(category_products, many=True).data
-        print("category_data: ", category_data)
 
         return Response({
             "category_products": category_data,
@@ -392,184 +393,68 @@ class OrderPreviewAPIView(APIView):
 
     def post(self, request, *args, **kwargs):
 
-        cart_items = request.data.get('cart_items')
-        restaurant_id = self.kwargs.get("restaurant_id")
+        try:
+            cart_items = request.data.get('cart_items')
+            restaurant_id = str(self.kwargs.get("restaurant_id"))
+        except (TypeError, ValueError):
+            return Response({"error": "Invalid cart_items ID or resturant ID"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # 1️⃣ Validate cart isn't empty
+        if not cart_items:
+            return Response({
+                "success": False,
+                "message": "Cart is empty",
+                "empty_cart": True,
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate cart items structure
+        for item in cart_items:
+            if not item.get('pid') or not item.get('quantity'):
+                return Response({"error": "Invalid cart item: missing pid or quantity"}, status=status.HTTP_400_BAD_REQUEST)
+            if int(item.get('quantity', 0)) <= 0:
+                return Response({"error": f"Invalid quantity for product {item.get('pid')}"}, status=status.HTTP_400_BAD_REQUEST)
+    
         # Extract all cart pid's
         product_pids = [item.get("pid") for item in cart_items]
         
         # Get the restaurant
         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
         
-        # Get all instaock products for the particular restaurant 
-        products = restaurant.restaurant_products.filter(pid__in=product_pids, instock=True).only("price", "pid")
-
-        # {5: <Product object 5>, 8: <Product object 8>, 12: <Product object 12>}
-        product_map = { p.pid: p for p in products }
-        print("product_map: ", product_map)
-
-        if not product_map:
+        # check delivery availability
+        is_available, message = is_delivery_available(restaurant)
+        if not is_available:
             return Response({
                 "success": False,
-                "out_of_stock": True,
-                "message": "All selected products are unavailable",
-                "product_ids": product_pids,
-            }, status=status.HTTP_200_OK)
-        
-        # 3️⃣ Rebuild cart_items safely from DB truth
-        safe_items = [ item for item in cart_items if item.get('pid') in product_map ]
-        print("safe_items: ", safe_items)
-
-        # 4️⃣ Calculate total price from DB prices
-        total_price = Decimal('0.00')
-        for item in safe_items:
-            product = product_map.get(item.get('pid'))
-            qty = int(item.get("quantity", 1))
-            price = product.price
-            total_price += price * qty
-
-        vat = total_price * 0.075
-        grand_price = total_price + vat + restaurant.delivery_fee
-        data = {
-            "delivery_fee": restaurant.delivery_fee,
-            "subtotal": total_price,
-            "vat": vat,
-            "total": grand_price,
-        }
-        return Response(data)
-
-preview_order_api_view = OrderPreviewAPIView.as_view()
-
-        
-
-class OrderBatchListCreateAPIView(APIView):
-    throttle_scope = "send_kitchen"            # Tells DRF which limit to use
-    throttle_classes = [TelegramScopedThrottle]  # Use our custom Telegram ID throttle
-    authentication_classes = [TelegramAuthentication]  # Custom auth to verify Telegram init_data
-
-    permission_classes = [AllowAny]
-
-    @transaction.atomic
-    def post(self, request, *args, **kwargs):
-        """
-        Idempotent order creation.
-        Same idempotency_key = same order forever.
-        
-        Create a new order batch along with OrderBatchItems.
-        Uses transaction.atomic to ensure all-or-nothing behavior.
-        """
-        try:
-            restaurant_id = self.kwargs.get("restaurant_id")
-            cart_items = request.data.get('cart_items')
-            idempotency_key = str(request.data.get('idempotency_key'))
-            init_data = request.data.get("init_data")
-
-        except (TypeError, ValueError):
-            return Response({"error": "Invalid cart_items ID or telegram_id or idempotency_key"}, status=status.HTTP_400_BAD_REQUEST)
-    
-        if not cart_items: return Response({"error": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST)
-        if not idempotency_key: return Response({"error": "Missing idempotency key"}, status=status.HTTP_400_BAD_REQUEST)
-        if not restaurant_id: return Response({"error": "Missing restaurant ID"}, status=status.HTTP_400_BAD_REQUEST)
-        if not init_data: return Response({"error": "data"}, status=status.HTTP_400_BAD_REQUEST)
-        print("cart_items: ", request.data)
+                "message": message,
+                "delivery_unavailable": True
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            restaurant = Restaurant.objects.get(rid=restaurant_id)
-        except Restaurant.DoesNotExist:
-            return Response(
-                {"error": "Restaurant not found"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        print("restaurant queryset:", restaurant)
-        print("restaurant_id123:", restaurant_id)
-
-        # make sure you check if the restaurant is accepting orders on-delivery before doing all the heavy lifting
-        # i.e check the time and day against the restaurant's opening hours, and also check the is_accepting_orders flag or RestaurantOpeningHours.is_closed flag wether the restaurant is closed for delivery.
-        #  This way you can fail fast before doing all the heavy lifting of checking stock, creating batches, etc.
-
-        if not restaurant.is_accepting_orders or not restaurant.is_bot_active:
-            return Response(
-                {"error": "Restaurant is not accepting orders at the moment"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # if not RestaurantOpeningHours.is_closed:
-        #     return Response(
-        #         {"error": "Restaurant is currently closed for delivery based on its opening hours"},
-        #         status=status.HTTP_400_BAD_REQUEST
-        #     )
-
-        # 2️⃣ Get telegram User
-        try:
-            # request.user is set by TelegramAuthentication to be the telegram_id
-            user = TelegramUser.objects.get(telegram_id=request.user)  
-        except TelegramUser.DoesNotExist:
-            return Response(
-                {"error": "User not found"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        print("telegram user: ", user)
-
-        membership_exists = RestaurantMembership.objects.filter(
-            user=user,
-            restaurant=restaurant
-        ).exists()
-
-        if not membership_exists:
-            return Response(
-                {"error": "User not linked to this restaurant"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        # 🔒 Lock existing order if already created
-        existing_batch = (
-            OrderBatch.objects
-            .filter(telegram_user=user, idempotency_key=idempotency_key, restaurant=restaurant)
-            .first()
-        )
-
-        if existing_batch:
-            serializer = OrderBatchSerializer(existing_batch)
-            existing_data = {
-                "success": "order batch created successfully",
-                "data": serializer.data
-            }
-            return Response(existing_data, status=status.HTTP_201_CREATED)
-
-        product_pids = [item.get("pid") for item in cart_items]
-        print("product_pids: ", product_pids)
+            # Get all instock products for the particular restaurant and the selected products in the cart
+            all_restaurant_products = restaurant.restaurant_products.filter(
+                pid__in=product_pids,
+            ).select_related('category').only("price", "pid", "title", "in_stock", "category")
         
-        # 1️⃣ Auto-remove out-of-stock items from cart DB
-        invalid_items = (
-            Product.objects
-            .filter(in_stock=False, pid__in=product_pids, restaurant=restaurant)
-            .only('pid', 'title')
-        ) # Fetch only product title for removed items log
+            valid_products = [item for item in all_restaurant_products if item.in_stock]
+            invalid_products = [item for item in all_restaurant_products if not item.in_stock]
 
-        removed_cart_items = list(invalid_items.values_list('title', flat=True))
-        pids = list(invalid_items.values_list('pid', flat=True))
+            # ✅ Only populate if there are invalid products
+            if invalid_products:
+                removed_items = [item.title for item in invalid_products]
+                removed_pids = [item.pid for item in invalid_products]
 
-        if invalid_items:
-            invalid_response = {
-                "success": False,
-                "out_of_stock": True,
-                "message": "Some items were out of stock and removed from your cart",
-                "removed_items": removed_cart_items,
-                'product_ids': pids
-            }
-            return Response(invalid_response, status=status.HTTP_200_OK)
-        
-        try:
+                # ✅ Now safe to check (will be False if no invalid products)
+                if removed_items:
+                    return Response({
+                        "success": False,
+                        "out_of_stock": True,
+                        "message": "Some items were out of stock and removed from your cart",
+                        "removed_items": removed_items,
+                        'product_ids': removed_pids
+                    }, status=status.HTTP_200_OK)
 
-            # It tells the database: “Lock these rows while I’m working with them.”
-            products = (
-                Product.objects
-                .filter(pid__in=product_pids, in_stock=True, restaurant=restaurant)
-                # .select_related('category', 'restaurant')
-            )
-            
             # {5: <Product object 5>, 8: <Product object 8>, 12: <Product object 12>}
-            product_map = { p.pid: p for p in products}
+            product_map = { p.pid: p for p in valid_products }
             print("product_map: ", product_map)
 
             if not product_map:
@@ -586,21 +471,201 @@ class OrderBatchListCreateAPIView(APIView):
 
             # 4️⃣ Calculate total price from DB prices
             total_price = Decimal('0.00')
+            prep_times = []
+
             for item in safe_items:
                 product = product_map.get(item.get('pid'))
-                qty = int(item.get("quantity", 1))
+                qty = max(1, int(item.get("quantity", 1)))
                 price = product.price
                 total_price += price * qty
+                prep_times.append(product.category.prep_time_minutes)
 
-            session = (
-                CheckoutSession.objects.filter(
-                    restaurant=restaurant,
-                    telegram_user=user,
-                    is_active=True
-                )
-                .order_by('-date_created')
-                .first()
+            # 7️⃣ Calculate VAT (7.5%) and round to 2 decimals
+            vat = total_price * Decimal('0.075')  # 7.5% VAT
+            vat_rounded = vat.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)  # Round to 2 decimal places Up
+            
+            # 8️⃣ Ensure delivery_fee is Decimal
+            delivery_fee = Decimal(str(restaurant.delivery_fee)) if restaurant.delivery_fee else Decimal('0.00')
+            
+            # 9️⃣ Calculate grand total
+            grand_price = (total_price + vat_rounded + delivery_fee).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            
+            # 🔟 Calculate max prep time
+            max_prep_time = max(prep_times) if prep_times else restaurant.average_preparation_time
+
+            print("sucess")
+            data = {
+                "success": True,
+                "delivery_fee": delivery_fee,
+                "subtotal": total_price,
+                "vat": vat_rounded,
+                "total": grand_price,
+                "prep_time_minutes": max_prep_time,
+                "prep_time_display": f"{max_prep_time} min"
+            }
+            return Response(data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.exception(f"Unexpected error in order preview: {e}")
+            return Response(
+                {"message": "Internal server error."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+preview_order_api_view = OrderPreviewAPIView.as_view()
+
+
+class OrderBatchListCreateAPIView(APIView):
+    throttle_scope = "send_kitchen"            # Tells DRF which limit to use
+    throttle_classes = [TelegramScopedThrottle]  # Use our custom Telegram ID throttle
+    authentication_classes = [TelegramAuthentication]  # Custom auth to verify Telegram init_data
+    permission_classes = [AllowAny]
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        """
+        Idempotent order creation.
+        Same idempotency_key = same order forever.
+        
+        Create a new order batch along with OrderBatchItems.
+        Uses transaction.atomic to ensure all-or-nothing behavior.
+        """
+        try:
+            restaurant_id = self.kwargs.get("restaurant_id")
+            cart_items = request.data.get('cart_items')
+            idempotency_key = str(request.data.get('idempotency_key'))
+            init_data = request.data.get("init_data")
+            service_mode = str(request.data.get("mode"))
+            table_number = str(request.data.get("table_number")) if service_mode == "dine_in" else None
+            delivery_info = request.data.get("delivery_info")  # ← NEW for delivery
+
+        except (TypeError, ValueError) as e:
+            return Response({"error": f"Invalid data: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        print("table_number_joshua: ", table_number)
+
+        if not cart_items: return Response({"message": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST)
+        if not idempotency_key: return Response({"error": "Missing idempotency key"}, status=status.HTTP_400_BAD_REQUEST)
+        if not restaurant_id: return Response({"error": "Missing restaurant ID"}, status=status.HTTP_400_BAD_REQUEST)
+        if not init_data: return Response({"error": "Missing telegram init_data"}, status=status.HTTP_400_BAD_REQUEST)
+        if not service_mode: return Response({"error": "Missing order mode"}, status=status.HTTP_400_BAD_REQUEST)
+        if service_mode.lower() == "dine_in" and not table_number: return Response({"message": "Missing table number for dine-in order"}, status=status.HTTP_400_BAD_REQUEST)
+        if service_mode.lower() == "delivery" and delivery_info is None: return Response({"message": "Missing Delivery information for a delivery order"})
+
+        # Validate cart items structure
+        for item in cart_items:
+            if not item.get('pid') or not item.get('quantity'):
+                return Response({"error": "Invalid cart item: missing pid or quantity"}, status=status.HTTP_400_BAD_REQUEST)
+            if int(item.get('quantity', 0)) <= 0:
+                return Response({"error": f"Invalid quantity for product {item.get('pid')}"}, status=status.HTTP_400_BAD_REQUEST)
+    
+        restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
+
+        # Fast fail - restaurant accepting orders?
+        if not restaurant.is_accepting_orders or not restaurant.is_bot_active:
+            return Response({"message": "Restaurant is not accepting orders at the moment"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 🔥 ADD THIS BLOCK 🔥 Check delivery hours (ONLY for delivery mode)
+        if service_mode == 'delivery':
+            is_available, message = is_delivery_available(restaurant)
+            if not is_available:
+                return Response({
+                    "error": "no delivery today",
+                    "message": message,
+                    "delivery_unavailable": True,
+                    "code": "DELIVERY_NOT_AVAILABLE"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2️⃣ Get telegram User
+        user = get_object_or_404(TelegramUser, telegram_id=request.user) # request.user is set by TelegramAuthentication to be the telegram_id
+        print("telegram user: ", user)
+
+        membership_exists = RestaurantMembership.objects.filter(
+            user=user,
+            restaurant=restaurant
+        ).exists()
+
+        if not membership_exists:
+            return Response(
+                {"message": "User not linked to this restaurant"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 🔒 Lock existing order if already created
+        existing_batch = (
+            OrderBatch.objects
+            .select_for_update()
+            .filter(telegram_user=user, idempotency_key=idempotency_key, restaurant=restaurant)
+            .first()
+        )
+
+        if existing_batch:
+            serializer = OrderBatchSerializer(existing_batch)
+            existing_data = {
+                "message": "order batch created successfully",
+                "data": serializer.data,
+                "success": True,
+            }
+            return Response(existing_data, status=status.HTTP_201_CREATED)
+
+        product_pids = [item.get("pid") for item in cart_items]
+        print("product_pids: ", product_pids)
+
+        try:
+            all_restaurant_products = restaurant.restaurant_products.filter(
+                pid__in=product_pids,
+            ).select_for_update(nowait=True).only("price", "pid", "title", "in_stock")
+
+            valid_products = [item for item in all_restaurant_products if item.in_stock]
+            invalid_items = [item for item in all_restaurant_products if not item.in_stock]            
+
+            # ✅ Initialize variables with default values
+            removed_items = []
+            removed_pids = []
+            
+            if invalid_items:
+                removed_items = [item.title for item in invalid_items]
+                removed_pids = [item.pid for item in invalid_items]
+
+                if removed_items:
+                    return Response({
+                        "success": False,
+                        "out_of_stock": True,
+                        "message": "Some items were out of stock and removed from your cart",
+                        "removed_items": removed_items,
+                        'product_ids': removed_pids
+                    }, status=status.HTTP_200_OK)
+            
+            # {5: <Product object 5>, 8: <Product object 8>, 12: <Product object 12>}
+            product_map = { p.pid: p for p in valid_products}
+            print("product_map: ", product_map)
+
+            if not product_map:
+                return Response({
+                    "success": False,
+                    "out_of_stock": True,
+                    "message": "All selected products are unavailable",
+                    "product_ids": product_pids,
+                }, status=status.HTTP_200_OK)
+            
+            # 3️⃣ Rebuild cart_items safely from DB truth
+            safe_items = [item for item in cart_items if item.get('pid') in product_map]
+            print("safe_items: ", safe_items)
+
+            # 4️⃣ Calculate total price from DB prices
+            total_price = Decimal('0.00')
+            for item in safe_items:
+                product = product_map.get(item.get('pid'))
+                qty = max(1, int(item.get("quantity", 1)))
+                total_price += product.price * qty
+
+            session = self.create_order_session(
+                restaurant=restaurant,
+                user=user,
+                service_mode=service_mode, 
+                table_number=table_number, 
+                delivery_info=delivery_info
+                )
 
             if session and session.payment_in_progress:
                 print("payment in process BRO")
@@ -609,15 +674,6 @@ class OrderBatchListCreateAPIView(APIView):
                     "error": "Payment in progress. Complete payment first."
                 }, status=200)
 
-            if not session:
-                CheckoutSession.objects.create(
-                    restaurant=restaurant,
-                    telegram_user=user,
-                    is_active=True,
-                    merchant_reference=None,
-                    # expires_at=timezone.now() + timedelta(hours=3)  # expires in 3 hours
-                )
-            
             # CheckoutSession (ses8F21)
                 # ├── OrderBatch A91X2
                 # ├── OrderBatch B72JK
@@ -626,7 +682,7 @@ class OrderBatchListCreateAPIView(APIView):
             order_batch = OrderBatch.objects.create(
                 checkout_session=session,
                 restaurant=restaurant,
-                removed_cart_items=removed_cart_items,
+                removed_cart_items=removed_items,
                 idempotency_key=idempotency_key,
                 telegram_user=user,
                 total_price=total_price,
@@ -639,41 +695,121 @@ class OrderBatchListCreateAPIView(APIView):
                 OrderBatchItem(
                     batch=order_batch,
                     product=product_map.get(item.get('pid')),
-                    quantity=int(item.get("quantity", 1)),
+                    quantity=max(1, int(item.get("quantity", 1))),
                     price=product_map[item.get("pid")].price  # price per item
                 )
                 for item in safe_items
             ]
-            OrderBatchItem.objects.bulk_create(batch_items)
+            OrderBatchItem.objects.bulk_create(batch_items, batch_size=100)
 
-            # .delay() → Redis (stored) → Celery worker → runs function
-            send_order_notifications.delay(restaurant.rid, order_batch.bid, order_batch.telegram_user.telegram_id)
-
-            serializer = OrderBatchSerializer(order_batch)
-                
+            for i in range(5):
+                try:
+                    # Send notification (don't fail order if this fails)
+                    send_order_notifications.delay(restaurant.rid, order_batch.bid, order_batch.telegram_user.telegram_id)
+                    break
+                except Exception as e:
+                    if i == 2:
+                        logger.error(f"Failed to queue notification for order {order_batch.bid}: {e}")  
+                    time.sleep(5)      
+            
             data = {
                 "success": True,
                 "message": "Order batch created successfully", 
                 "batch_id": order_batch.bid,
-                "removed_items": removed_cart_items,
-                "order_batch": serializer.data,
-                "safe_cart_items": safe_items
+                "removed_items": removed_items
             }
             return Response(data, status=status.HTTP_201_CREATED)
         
         except IntegrityError as e:
             # Race condition: someone else already created it
-            batch = OrderBatch.objects.get(telegram_user=user, idempotency_key=idempotency_key, restaurant=restaurant)
+            batch = get_object_or_404(OrderBatch, telegram_user=user, idempotency_key=idempotency_key, restaurant=restaurant)
             serializer = OrderBatchSerializer(batch)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
+        except OperationalError:
+            
+            # Lock couldn't be acquired - another order in progress
+            return Response({
+                "message": "Another order is being processed. Please wait 2 seconds and try again.",
+                "retry_after": 2,
+                "code": "LOCK_CONFLICT"
+            }, status=status.HTTP_409_CONFLICT)
+        
         except Exception as e:
             logger.exception(f"Unexpected error creating order batch for user {user.id}: {e}")
             return Response(
-                {"detail": "Internal server error."},
+                {"message": "Internal server error."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+    # 3. In your order creation logic
+    def create_order_session(self, restaurant, user, service_mode, table_number=None, delivery_info=None):
         
+        # 🔥 NEW: Handle sessions based on service_mode
+        if service_mode == 'delivery':
+
+            # Close old unpaid delivery sessions
+            CheckoutSession.objects.filter(
+                restaurant=restaurant,
+                telegram_user=user,
+                service_mode='delivery',
+                is_active=True,
+                payment_status='unpaid'
+            ).update(is_active=False) # ← Close old one
+                
+            
+            # Create a fresh session for delivery
+            session = CheckoutSession.objects.create(
+                restaurant=restaurant,
+                telegram_user=user,
+                service_mode='delivery',
+                is_active=True,
+                payment_status='unpaid',
+
+                # delivery Info
+                delivery_full_name=delivery_info.get('fullName'),
+                delivery_phone=delivery_info.get('phone'),
+                delivery_address=delivery_info.get('address'),
+                delivery_landmark=delivery_info.get('landmark', ''),
+                delivery_instructions=delivery_info.get('specialInstructions', '')
+            )
+            
+        else:  # DINE_IN MODE
+            import re
+            clean_table_number = None
+            if table_number:
+                
+                # Extract only digits from the string (remove emoji)
+                digits_only = re.sub(r'\D', '', str(table_number))
+                if digits_only:
+                    clean_table_number = int(digits_only)
+                        
+            # Dine-in: Use existing active session OR create new one
+            session = CheckoutSession.objects.filter(
+                restaurant=restaurant,
+                telegram_user=user,
+                service_mode='dine_in',
+                is_active=True
+            ).order_by('-date_created').first()
+            
+            if session:
+                session.dine_in_table_number=clean_table_number
+                session.save(update_fields=['dine_in_table_number'])
+
+            if not session:
+                session = CheckoutSession.objects.create(
+                    restaurant=restaurant,
+                    telegram_user=user,
+                    service_mode='dine_in',
+                    is_active=True,
+                    payment_status='unpaid',
+                    dine_in_table_number=clean_table_number if table_number else None
+                )
+        return session
+
+
+
+
 # session = CheckoutSession.objects.get(session_id=session_id)
 # session.is_active = False
 # session.payment_confirmed = True

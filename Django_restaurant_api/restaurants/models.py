@@ -1,6 +1,4 @@
-from email.policy import default
-import json
-
+import pytz
 from django.db import models
 from shortuuid.django_fields import ShortUUIDField
 from django.utils.html import mark_safe
@@ -107,6 +105,13 @@ class Restaurant(models.Model):
     # vendor → handles preorders / flexible delivery / non-restaurant items
     business_type = models.CharField(max_length=20, choices=BUSINESS_TYPE, help_text="Type of business: Restaurant or Vendor", db_index=True)
 
+    timezone = models.CharField(
+        max_length=50,
+        default='Africa/Lagos',
+        choices=[(tz, tz) for tz in pytz.common_timezones],
+        help_text="Restaurant's local timezone"
+    )
+    
     # | Feature         | Restaurant   | Food Vendor     |
     # | --------------- | ------------ | -----------     |
     # | Cooking speed   | Immediate    | Delayed         |
@@ -188,7 +193,6 @@ class Restaurant(models.Model):
 
 class RestaurantDeliveryOpeningHours(models.Model):
     restaurant = models.ForeignKey(Restaurant, db_index=True, on_delete=models.CASCADE, related_name='delivery_opening_hours')
-    # service_type = models.CharField()
     day_of_week = models.IntegerField(
         validators=[
             MinValueValidator(0),
@@ -198,6 +202,15 @@ class RestaurantDeliveryOpeningHours(models.Model):
     open_time = models.TimeField(null=True, blank=True)
     close_time = models.TimeField(null=True, blank=True)
     is_closed = models.BooleanField(default=False)
+
+    class Meta:
+
+        # Add unique constraint (one entry per day per restaurant)
+        unique_together = [['restaurant', 'day_of_week']]
+
+        indexes = [
+            models.Index(fields=['restaurant', 'day_of_week']),
+        ]
 
 
     def clean(self):

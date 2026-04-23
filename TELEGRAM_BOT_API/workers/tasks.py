@@ -30,9 +30,7 @@ async def handle_telegram_update(ctx, update_data: dict, restaurant: dict):
             "business_type": restaurant["business_type"],
             "service_mode": restaurant["service_mode"],
             "max_tables": restaurant["max_tables"],
-            "open_time": restaurant["open_time"],
-            "close_time": restaurant["close_time"],
-            "is_closed": restaurant["is_closed"]
+            "time_zone": restaurant["time_zone"],
         })
 
         if update.callback_query and update.callback_query.data.startswith("table_"):

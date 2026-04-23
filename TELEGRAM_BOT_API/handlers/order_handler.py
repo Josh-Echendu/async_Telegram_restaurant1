@@ -61,10 +61,10 @@ async def order_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         row = []
 
-        if service_mode in ["dine_in", "both"]:
+        if service_mode.lower() in ["dine_in", "both"]:
             row.append(InlineKeyboardButton("🍽️ Dine-in", callback_data="order_dine_in"))
 
-        if service_mode in ["delivery", "both"]:
+        if service_mode.lower() in ["delivery", "both"]:
             row.append(InlineKeyboardButton("🚚 Delivery", callback_data="order_delivery"))
 
         keyboard.append(row)

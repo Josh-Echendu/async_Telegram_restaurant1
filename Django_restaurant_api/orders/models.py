@@ -6,6 +6,8 @@ from decimal import Decimal
 from userAuths.models import TelegramUser, AdminUser
 from django.core.exceptions import ValidationError
 from restaurants.models import Restaurant
+from django.core.validators import MaxValueValidator, MinValueValidator
+
 
 
 ALPHABET = "abcdefghijklmnopqrstuvwxyz123456789"
@@ -34,11 +36,85 @@ def product_image_path(instance, filename):
     return f'{resturant_name}/products/{category_title}/{filename}'
 
 
+# <div x-data="{ businessType: null }" x-init="
+#     fetch('/api/user/business-type/')
+#         .then(res => res.json())
+#         .then(data => businessType = data.business_type)
+# ">
+#     <!-- Restaurant Form -->
+#     <form x-show="businessType === 'restaurant'" method="POST" action="/categories/create/">
+#         {% csrf_token %}
+#         <input type="text" name="title" placeholder="Category name">
+#         <input type="number" name="prep_time_minutes" placeholder="Prep time (minutes)">
+#         <button type="submit">Create Category</button>
+#     </form>
+    
+#     <!-- Vendor Form -->
+#     <form x-show="businessType === 'vendor'" method="POST" action="/categories/create/">
+#         {% csrf_token %}
+#         <input type="text" name="title" placeholder="Category name">
+#         <select name="prep_days">
+#             <option value="0">Same day</option>
+#             <option value="2">2-3 days</option>
+#             <option value="5">5-7 days</option>
+#         </select>
+#         <button type="submit">Create Category</button>
+#     </form>
+# </div>
+
+
+# <select name="prep_days">
+#     <option value="0">Same day</option>
+#     <option value="1">1 day</option>
+#     <option value="2">2 days</option>
+#     <option value="3">3 days</option>
+#     <option value="4">4 days</option>
+#     <option value="5">5 days</option>
+#     <option value="6">6 days</option>
+#     <option value="7">7 days</option>
+# </select>
+
+
 class Category(models.Model):
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, db_index=True, null=True)
     cid = ShortUUIDField(unique=True, length=10, max_length=20, alphabet=ALPHABET)
     title = models.CharField(max_length=100)
     image = models.ImageField(blank=True, null=True, upload_to='category/')
+    prep_time_minutes = models.PositiveIntegerField(
+        default=10,
+        null=True,
+        blank=True,
+        help_text="Prep time for items in this category"
+    )
+    prep_day = models.PositiveSmallIntegerField(
+        validators=[
+            MinValueValidator(0),
+            MaxValueValidator(6)
+        ],
+        default=0,
+        null=True,
+        blank=True,
+        help_text="prep days for items in this category"
+    )
+    # 🔥 ADD THIS
+    max_qty_per_order = models.PositiveIntegerField(
+        null=True, 
+        blank=True,
+        help_text="Maximum quantity allowed per order (leave blank for unlimited)"
+    )
+
+    # Product: Spring Rolls
+    # Prep days: [0 ▼] (same day)
+    # Max quantity for same day: [20]
+    # Price per piece: ₦500
+
+    # Category name: [Snacks]
+    # Preparation days: [0 ▼] (same day)
+    # Maximum quantity per day (for prep_days=0): [30]
+
+    # Category name: [Party Pack]
+    # Preparation days: [2 ▼] (2 days)
+    # (No max_qty field shown)
 
     class Meta:
         verbose_name_plural = 'Categories'
@@ -130,6 +206,7 @@ SERVICE_MODE_CHOICES = (
     ('dine_in', 'In-Restaurant Only'),
     ('delivery', 'Delivery Only'),
 )
+
 class CheckoutSession(models.Model):
     session_id = ShortUUIDField(unique=True, length=10, alphabet=ALPHABET, prefix='ses')
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, null=True, related_name='restaurant_session', db_index=True)
@@ -159,20 +236,41 @@ class CheckoutSession(models.Model):
     dine_in_table_number = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Require customers to provide table number for dine-in orders")
     service_mode = models.CharField(max_length=20, choices=SERVICE_MODE_CHOICES, help_text="Service mode for this checkout session", db_index=True)
     
+     # For Delivery (only used when service_mode='delivery')
+    delivery_full_name = models.CharField(max_length=255, null=True, blank=True)
+    delivery_phone = models.CharField(max_length=20, null=True, blank=True)
+    delivery_address = models.TextField(null=True, blank=True)
+    delivery_landmark = models.CharField(max_length=255, null=True, blank=True)
+    delivery_instructions = models.TextField(null=True, blank=True)
+
+
     class Meta: # In Django models, Meta is a special inner class used to define extra rules or settings for the model.
         indexes = [
-            models.Index(fields=["telegram_user", "restaurant", "is_active", "date_created"])
+            models.Index(fields=["telegram_user", "restaurant", "is_active" ])
         ]
 
         # This line starts a list of database constraints.
         # A constraint is a rule the database must obey.
+        
         constraints = [
+            # ✅ Allow: One active dine_in + One active delivery
             models.UniqueConstraint(
-                fields=["restaurant", "telegram_user"], # A telegram user can only have ONE session for that restaurant in the entire database.
-                condition=models.Q(is_active=True), # here we update it to: A single user in a restaurant can only have ONE session where is_active=True.
-                name="one_active_session_per_user" # This gives the constraint a name. It also helps when: debugging, migrations, database inspection
+                fields=["restaurant", "telegram_user", "service_mode"],
+                condition=models.Q(is_active=True),
+                name="one_active_session_per_user_per_mode"
             )
         ]
+
+    def save(self, *args, **kwargs):
+
+        # If this is a delivery session, auto-close it after payment
+        if self.service_mode == 'delivery' and self.payment_status == 'paid':
+            self.is_active = False
+
+        if self.service_mode == "dine_in" and self.payment_status == "paid":
+            self.is_active = False
+
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.session_id}-{self.restaurant}"
@@ -208,7 +306,6 @@ class OrderBatch(models.Model):
     notified_user = models.BooleanField(default=False)
     idempotency_key = models.CharField(max_length=255, unique=True, null=True)
     removed_cart_items = models.JSONField(default=list, blank=True)
-
 
     class Meta:
         indexes = [
