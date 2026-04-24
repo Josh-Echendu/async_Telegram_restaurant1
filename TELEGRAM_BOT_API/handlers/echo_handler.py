@@ -12,10 +12,10 @@ from decimal import Decimal
 async def debug_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pass
     # always turn off privacy with /setprivacy so bot can receive all messages sent to group
-    # print("CHAT ID:", update.effective_chat.id)
-    # print("CHAT data structure:", type(update.effective_chat.id))
-    # print("CHAT TYPE:", update.effective_chat.type)
-    # print("CHAT:", update)    
+    print("CHAT ID:", update.effective_chat.id)
+    print("CHAT data structure:", type(update.effective_chat.id))
+    print("CHAT TYPE:", update.effective_chat.type)
+    print("CHAT:", update)    
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text

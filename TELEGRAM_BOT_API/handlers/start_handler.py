@@ -104,20 +104,3 @@ async def telegram_registration(telegram_id, first_name, username, restaurant_id
             # optional: wait before retrying
             await asyncio.sleep(1)
 
-
-async def after_payment(chat_id, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        ["🍽 Order Food", "📦 Track Order"],
-        ["📞 Contact Staff", "ℹ️ Help"]
-    ]
-
-    reply_markup = ReplyKeyboardMarkup(
-        keyboard,
-        resize_keyboard=True,
-        one_time_keyboard=False
-    )
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text="What would you like to do next?",
-        reply_markup=reply_markup
-    )

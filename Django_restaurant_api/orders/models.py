@@ -81,7 +81,6 @@ class Category(models.Model):
     title = models.CharField(max_length=100)
     image = models.ImageField(blank=True, null=True, upload_to='category/')
     prep_time_minutes = models.PositiveIntegerField(
-        default=10,
         null=True,
         blank=True,
         help_text="Prep time for items in this category"
