@@ -64,54 +64,7 @@ BUSINESS_TYPE = (
 )
 
 
-class Restaurant(models.Model):
-    rid = ShortUUIDField(unique=True, prefix='res', length=10, max_length=20, alphabet=ALPHABET, db_index=True)
-    name = models.CharField(max_length=250)
-    description = models.TextField(blank=True, null=True)
-    image = models.ImageField(upload_to=resturant_image_path, blank=True, null=True)
-    
-    # @my_restaurant_bot
-    bot_username = models.CharField(max_length=100, blank=True, null=True)
-    bot_token = EncryptedCharField(max_length=255, null=True)
-    webhook_secret_token = models.CharField(
-            max_length=255, 
-            default=uuid.uuid4, 
-            help_text="X-Telegram-Bot-Api-Secret-Token", 
-            null=True, 
-            blank=True
-        )    
-    is_bot_active = models.BooleanField(default=True, db_index=True)
-    
-    # Real-world use cases: Restaurant closed, Kitchen busy, Maintenance mode, 👉 Think of it as a “restaurant open/closed” switch.
-    # if not restaurant.is_accepting_orders:
-    #     await update.message.reply_text("Sorry, we are not accepting orders right now.")
-    #     return
-    is_accepting_orders = models.BooleanField(default=True)
-    
-    # ✅ add this field
-    kitchen_chat_id = models.BigIntegerField(null=True,blank=True,help_text="Telegram kitchen group chat ID")
-    created_at = models.DateTimeField(auto_now_add=True, null=True)
 
-    # Delivery support fields
-    delivery_chat_id = models.BigIntegerField(null=True, blank=True, help_text="Telegram delivery group chat ID (if supports_delivery is True)")
-    service_mode = models.CharField(max_length=20, choices=SERVICE_MODE_CHOICES, help_text="Primary service mode of the business", db_index=True)
-    max_tables = models.PositiveSmallIntegerField(default=0, help_text="Amount of tables a restaurant has for dine-in orders")
-    
-    # “How long does food usually take before it is ready?”
-    average_preparation_time = models.PositiveIntegerField(default=30, help_text="Minutes")
-    delivery_fee = models.DecimalField(max_digits=1000, decimal_places=2, default=0)
-
-    # restaurant → cooks meals for immediate consumption(dine-in) or instant-delivery
-    # vendor → handles preorders / flexible delivery / non-restaurant items
-    business_type = models.CharField(max_length=20, choices=BUSINESS_TYPE, help_text="Type of business: Restaurant or Vendor", db_index=True)
-
-    timezone = models.CharField(
-        max_length=50,
-        default='Africa/Lagos',
-        choices=[(tz, tz) for tz in pytz.common_timezones],
-        help_text="Restaurant's local timezone"
-    )
-    
     # | Feature         | Restaurant   | Food Vendor     |
     # | --------------- | ------------ | -----------     |
     # | Cooking speed   | Immediate    | Delayed         |
@@ -125,33 +78,142 @@ class Restaurant(models.Model):
     # | Vendor     | ❌      | ✅       | ✅       | ✅     
 
 
+
+class Restaurant(models.Model):
+    rid = ShortUUIDField(unique=True, prefix='res', length=10, max_length=20, alphabet=ALPHABET, db_index=True)
+    name = models.CharField(max_length=250)
+    description = models.TextField(blank=True, null=True)
+    image = models.ImageField(upload_to=resturant_image_path, blank=True, null=True)
+    
+    # ========== TELEGRAM BOT FIELDS ==========
+    bot_username = models.CharField(max_length=100, blank=True, null=True)
+    bot_token = EncryptedCharField(max_length=255, null=True)
+    webhook_secret_token = models.CharField(
+            max_length=255, 
+            default=uuid.uuid4, 
+            help_text="X-Telegram-Bot-Api-Secret-Token", 
+            null=True, 
+            blank=True
+        )    
+    is_bot_active = models.BooleanField(default=True, db_index=True)
+    
+    # ========== WHATSAPP BUSINESS FIELDS ==========
+    whatsapp_business_account_id = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text="WhatsApp Business Account ID (WABA ID)"
+    )
+    whatsapp_phone_number_id = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text="WhatsApp Phone Number ID for sending messages"
+    )
+    whatsapp_access_token = EncryptedCharField(
+        max_length=500, 
+        null=True, 
+        blank=True,
+        help_text="WhatsApp Cloud API access token"
+    )
+    whatsapp_business_phone = models.CharField(
+        max_length=20, 
+        null=True, 
+        blank=True,
+        help_text="WhatsApp business phone number (e.g., +2348123456789)"
+    )
+    whatsapp_webhook_verified = models.BooleanField(
+        default=False,
+        help_text="Whether WhatsApp webhook has been verified"
+    )
+    is_whatsapp_active = models.BooleanField(
+        default=False, 
+        db_index=True,
+        help_text="Whether WhatsApp bot is active"
+    )
+    
+    # ========== SHARED FIELDS (Both Telegram & WhatsApp) ==========
+    # Real-world use cases: Restaurant closed, Kitchen busy, Maintenance mode
+    is_accepting_orders = models.BooleanField(default=True)
+    
+    kitchen_chat_id = models.BigIntegerField(
+        null=True, blank=True,
+        help_text="Telegram kitchen group chat ID OR WhatsApp group ID"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+
+    # Delivery support fields
+    delivery_chat_id = models.BigIntegerField(
+        null=True, blank=True, 
+        help_text="Telegram delivery group chat ID (if supports_delivery is True) OR WhatsApp delivery group ID"
+    )
+    service_mode = models.CharField(
+        max_length=20, 
+        choices=SERVICE_MODE_CHOICES, 
+        help_text="Primary service mode of the business", 
+        db_index=True
+    )
+    max_tables = models.PositiveSmallIntegerField(
+        default=0, 
+        help_text="Amount of tables a restaurant has for dine-in orders"
+    )
+    
+    average_preparation_time = models.PositiveIntegerField(
+        default=30, 
+        help_text="Minutes - How long food usually takes before it is ready"
+    )
+    delivery_fee = models.DecimalField(max_digits=1000, decimal_places=2, default=0)
+
+    business_type = models.CharField(
+        max_length=20, 
+        choices=BUSINESS_TYPE, 
+        help_text="Type of business: Restaurant or Vendor", 
+        db_index=True
+    )
+
+    timezone = models.CharField(
+        max_length=50,
+        default='Africa/Lagos',
+        choices=[(tz, tz) for tz in pytz.common_timezones],
+        help_text="Restaurant's local timezone"
+    )
+
     def save(self, *args, **kwargs):
         if self.business_type == "vendor":
             self.max_tables = 0
-
-            # Only override if wrong
             if self.service_mode != "delivery":
                 self.service_mode = "delivery"
 
         elif self.business_type == "restaurant":
             if not self.service_mode:
                 raise ValidationError("Restaurant must choose a service mode")
-            
-        elif self.business_type == "vendor":
-            if not self.service_mode:
-                raise ValidationError("Vendor must choose a service mode")
-            
+
         super().save(*args, **kwargs)
 
     def clean(self):
         if self.kitchen_chat_id and not str(self.kitchen_chat_id).startswith("-"):
             raise ValidationError("Kitchen chat ID must be a group ID (negative number)")
+        
+        # WhatsApp validation
+        if self.is_whatsapp_active:
+            if not self.whatsapp_phone_number_id:
+                raise ValidationError("WhatsApp Phone Number ID required when WhatsApp is active")
+            if not self.whatsapp_access_token:
+                raise ValidationError("WhatsApp Access Token required when WhatsApp is active")
+            if not self.whatsapp_business_phone:
+                raise ValidationError("WhatsApp Business Phone required when WhatsApp is active")
 
     def get_bot_token(self):
         return self.bot_token  # decrypted automatically
     
-    def get_webhook_url(self):
-        return f"{FAST_API_URL}/webhook/{self.rid}"
+    def get_whatsapp_token(self):
+        return self.whatsapp_access_token  # decrypted automatically
+    
+    def get_telegram_webhook_url(self):
+        return f"{FAST_API_URL}/telegram-webhook/{self.rid}"
+    
+    def get_whatsapp_webhook_url(self):
+        return f"{FAST_API_URL}/whatsapp-webhook/{self.rid}"
 
     def restaurant_image(self):
         if self.image:
@@ -159,7 +221,13 @@ class Restaurant(models.Model):
         return "No Image"
 
     def __str__(self):
-        return self.name
+        platform = []
+        if self.is_bot_active:
+            platform.append("Telegram")
+        if self.is_whatsapp_active:
+            platform.append("WhatsApp")
+        platform_str = f" ({'+'.join(platform)})" if platform else ""
+        return f"{self.name}{platform_str}"
  
 # 🧠 YOUR FINAL DESIGN (CLEAN & CORRECT)
 # 🟢 RESTAURANT

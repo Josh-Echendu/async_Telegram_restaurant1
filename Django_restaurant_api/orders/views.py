@@ -6,7 +6,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.shortcuts import render
 import uuid
 import requests
-
+from django.shortcuts import redirect
 from .utils import is_delivery_available
 from .authentication import TelegramAuthentication
 from restaurants.models import RestaurantDeliveryOpeningHours, RestaurantMembership
@@ -35,14 +35,61 @@ from .throttles import TelegramScopedThrottle  # import the custom throttle
 from .virtual_account import initiate_dynamic_virtual_account
 from dateutil import parser
 from .squad_signature_helper import verify_squad_signature
-
+from django.conf import settings
 
 import logging
 logger = logging.getLogger(__name__)
 
+
 def restaurant_detail(request, restaurant_id):
-    print("restaurant_id in view: ", restaurant_id)
-    return render(request, 'restaurant/restaurant_detail.html')
+
+    platform = request.session.get('platform') or request.GET.get("platform")
+
+    user_id = None
+    mode = None
+    table_number = None
+
+    # =========================================
+    # WHATSAPP (session-driven)
+    # =========================================
+    if platform == "whatsapp":
+
+        # 🔥 ADD VALIDATION: Ensure session belongs to this restaurant
+        if request.session.get('restaurant_id') != restaurant_id:
+            # Session is for a different restaurant → clear it
+            request.session.flush()
+            return redirect(f"/whatsapp/login/?restaurant_id={restaurant_id}")
+        
+        user_id = request.session.get('user_id')
+        mode = request.session.get('mode')
+        table_number = request.session.get('table_number')
+        
+        # 🔥 ADD VALIDATION: Must have user_id in session
+        if not user_id:
+            return redirect(f"/whatsapp/login/?restaurant_id={restaurant_id}")
+    
+
+    # =========================================
+    # TELEGRAM (init_data / frontend-driven)
+    # =========================================
+    elif platform == "telegram":
+        
+        # identity is NOT session-based
+        # mode/table are only UI state if provided
+        mode = request.GET.get("mode")
+        table_number = request.GET.get("table")
+
+    context = {
+        "mode": mode,
+        "platform": platform,
+        "restaurant_id": restaurant_id,
+        "table_number": table_number,
+        "user_id": user_id,
+    }
+
+    return render(request, "restaurant/restaurant_detail.html", context)
+
+
 
 class CategoryListApiView(ListAPIView):
     serializer_class = CategorySerializer

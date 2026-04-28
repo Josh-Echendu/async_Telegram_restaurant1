@@ -5,6 +5,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.conf import settings
 from django.utils import timezone
+from orders.models import Category
 
 
 
@@ -83,7 +84,7 @@ def get_restaurant_internal(request, rid):
         restaurant = Restaurant.objects.get(rid=rid)
     except Restaurant.DoesNotExist:
         return Response({}, status=404)
-    
+        
 
     # 👉 This returns an integer from 0 to 6
     day_of_week = timezone.now().weekday()  # Get current day of week (0=Monday, 6=Sunday)

@@ -1,5 +1,10 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from restaurants.models import Restaurant
+from django.utils import timezone
+from datetime import timedelta
+import secrets
+
 
 
 class UserAccountManager(BaseUserManager):
@@ -56,29 +61,79 @@ class AdminUser(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.email
     
-
+      
 class TelegramUser(models.Model):
-    telegram_id = models.BigIntegerField(unique=True, db_index=True)
+    
+    # Telegram fields
+    telegram_id = models.BigIntegerField(unique=True, null=True, blank=True, db_index=True)
+
+    # WhatsApp fields
+    whatsapp_id = models.CharField(max_length=100, unique=True, null=True, blank=True, db_index=True)
+    phone_number = models.CharField(max_length=20, null=True, blank=True)
+    
+    # Common fields
     first_name = models.CharField(max_length=100, blank=True)
     username = models.CharField(max_length=100, blank=True)
     is_active = models.BooleanField(default=True)
     
-    # Create timestamp, and Set once when the row is first inserted
     date_created = models.DateTimeField(auto_now_add=True)
-    
-    # Updated every time .save() is called
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return str(self.telegram_id)
+        if self.telegram_id:
+            return str(self.telegram_id)
+        return self.whatsapp_id or str(self.id)
     
     class Meta:
-
         indexes = [
             models.Index(fields=["telegram_id"]),
+            models.Index(fields=["whatsapp_id"]),
+            models.Index(fields=["phone_number"]),
         ]
 
 
+# ============================================
+# WHATSAPP TOKEN MODEL
+# ============================================
+class AuthToken(models.Model):
+    PLATFORM_CHOICES = (
+        ("whatsapp", "WhatsApp"),
+        ("telegram", "Telegram"),
+    )
+
+    token = models.CharField(max_length=120, unique=True, db_index=True)
+
+    user_id = models.CharField(max_length=100, db_index=True)
+    platform = models.CharField(max_length=20, choices=PLATFORM_CHOICES)
+
+    restaurant = models.ForeignKey("Restaurant", on_delete=models.CASCADE)
+
+    expires_at = models.DateTimeField(db_index=True)
+    used = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    mode = models.CharField(max_length=20, null=True, blank=True)
+    table_number = models.CharField(max_length=20, null=True, blank=True)
+
+
+    def is_valid(self):
+        return (not self.used) and self.expires_at > timezone.now()
+
+    def use(self):
+        self.used = True
+        self.save()
+
+    @staticmethod
+    def generate(user_id, platform, restaurant, mode=None, table_number=None):
+        return AuthToken.objects.create(
+            token=secrets.token_urlsafe(32),
+            user_id=user_id,
+            platform=platform,
+            restaurant=restaurant,
+            mode=mode,
+            table_number=table_number,
+            expires_at=timezone.now() + timedelta(minutes=5),
+        )
 
 # class TelegramUser(models.Model):
 #     telegram_id = models.BigIntegerField(unique=True, db_index=True)

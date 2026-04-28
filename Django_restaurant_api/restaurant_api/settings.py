@@ -21,6 +21,8 @@ INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
 NGROK_DJANGO =  os.getenv("NGROK_DJANGO") # your DRF server
 NGROK_FAST_API = os.getenv('NGROK_FAST_API')
 
+WHATSAPP_INTERNAL_API_KEY = os.getenv("WHATSAPP_INTERNAL_API_KEY")  # For verifying WhatsApp requests to Django
+
 
 
 # Quick-start development settings - unsuitable for production
@@ -114,11 +116,32 @@ SESSION_COOKIE_SECURE = True
 # Prevent JavaScript from reading session cookie
 SESSION_COOKIE_HTTPONLY = True
 
-# Optional: limit session to a single browser
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+# # Optional: limit session to a single browser
+# SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 
 # Recommended: use signed cookies for extra integrity
 SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
+
+
+# ============================================
+# DJANGO SESSIONS CONFIGURATION (settings.py)
+# ============================================
+
+# Session engine (database-backed for production)
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+
+# Session cookie settings (SECURE!)
+SESSION_COOKIE_AGE = 86400  # 24 hours in seconds
+SESSION_COOKIE_SECURE = True  # Only send over HTTPS
+SESSION_COOKIE_HTTPONLY = True  # Cannot be accessed by JavaScript
+SESSION_COOKIE_SAMESITE = 'Lax'  # CSRF protection
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Keep session after browser close
+SESSION_SAVE_EVERY_REQUEST = True  # Refresh expiry on every request
+
+# Required for production
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = 'Lax'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases

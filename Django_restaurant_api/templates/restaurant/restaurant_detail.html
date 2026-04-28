@@ -10,9 +10,15 @@
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
   <script>
-      const tg = window.Telegram.WebApp;
-      const user = tg.initDataUnsafe.user;
-      tg.ready();
+      let tg = null;
+      let user = null;
+      try {
+          tg = window.Telegram.WebApp;
+          user = tg.initDataUnsafe.user;
+          tg.ready();
+      } catch(e) {
+          console.log('Not running in Telegram (likely WhatsApp)');
+      }
   </script>
 
   <script>
@@ -247,6 +253,12 @@
   restaurantId: window.location.pathname.split('/').filter(p => p)[2], 
   paymentSessionActive: false,
   telegramId: window.Telegram?.WebApp?.initDataUnsafe?.user?.id ?? 0, // ← FIX: Added comma
+  
+  // ========== WHATSAPP FIELDS (passed from Django) ==========
+  platform: '{{ platform }}',
+  userId: '{{ user_id }}',
+  // ===========================================================
+  
   cart: [], // ← FIX: Added comma
   activeCategory: 'all', // ← FIX: Added comma
   showCart: false, // ← FIX: Added comma
@@ -619,11 +631,19 @@
       const payload = {
           cart_items: this.cart.map(i => ({ pid: i.pid, quantity: i.quantity })),
           idempotency_key: 'ORD-' + Math.floor(800000 + Math.random() * 200000),
-          init_data: window.Telegram.WebApp.initData,
           mode: 'dine_in',
-          table_number: this.table_number
+          table_number: this.table_number,
+          platform: this.platform  // ← ADD THIS
+
       };
       console.log('table_number: ', payload)
+
+      // Add platform-specific authentication
+      if (this.platform === 'telegram') {
+          payload.init_data = window.Telegram.WebApp.initData;
+      } else if (this.platform === 'whatsapp') {
+          payload.user_id = this.userId;  // From Django template
+      }
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
@@ -891,11 +911,18 @@
       const payload = {
         cart_items: this.cart.map(i => ({ pid: i.pid, quantity: i.quantity })),
         idempotency_key: 'ORD-' + Math.floor(800000 + Math.random() * 200000),
-        init_data: window.Telegram.WebApp.initData,
         delivery_info: this.deliveryInfo,
         mode: 'delivery',
-        price_breakdown: this.priceBreakdown  // Send the preview data
+        price_breakdown: this.priceBreakdown,  // Send the preview data
+        platform: this.platform, // Pass through platform and userId for backend processing
       };
+
+      // Add platform-specific authentication
+      if (this.platform === 'telegram') {
+          payload.init_data = window.Telegram.WebApp.initData;
+      } else if (this.platform === 'whatsapp') {
+          payload.user_id = this.userId;  // From Django template
+      }
       
       const response = await axios.post(
         `/api/order_batches/${restaurantId}/`,
