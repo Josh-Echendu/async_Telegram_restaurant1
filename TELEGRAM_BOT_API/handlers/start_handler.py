@@ -6,9 +6,8 @@ import json
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await logger(update, context)
 
-    restaurant_data = await get_restaurant_data(update)
+    restaurant_data = await get_user_session(update.effective_chat.id)
     restaurant_id = restaurant_data.get('current_rid')
     restaurant_name = restaurant_data.get('restaurant_name')
     print("resturant ID: ", restaurant_id)
@@ -84,7 +83,7 @@ async def telegram_registration(telegram_id, first_name, username, restaurant_id
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"http://web:8000/userauths/register_user/restaurant/",
+                    f"http://web:8000/userauths/register_user/restaurant/telegram/",
                     headers={"Accept": "application/json"},  # ask for JSON explicitly
                     json=payload
                 )

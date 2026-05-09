@@ -27,14 +27,14 @@ async def logger_whatsapp(client: WhatsApp, msg: Message):
     Logs user interactions
     """
     user_name = msg.author.name or "Unknown"
-    user_phone = msg.author.phone
+    whatsapp_id = msg.from_user.wa_id  # WhatsApp ID is usually the phone number
     message_text = msg.text or "[Non-text message]"
     
     print(f"""
     📱 WhatsApp Interaction Log
     ━━━━━━━━━━━━━━━━━━━━━━━
     User: {user_name}
-    Phone: {user_phone}
+    WhatsApp ID: {whatsapp_id}
     Message: {message_text}
     Timestamp: {msg.timestamp}
     ━━━━━━━━━━━━━━━━━━━━━━━
@@ -56,10 +56,10 @@ async def start_handler(client: WhatsApp, msg: Message):
     print(f"🏪 Restaurant Name: {restaurant_name}")
 
     # PyWa way (CORRECT)
-    chat_id = msg.from_user.phone      # ✅ exists in PyWa
-    user_id = msg.author.phone         # ✅ exists in PyWa  
+    chat_id = msg.from_user.wa_id     # ✅ exists in PyWa
+    user_id = msg.from_user.wa_id      # ✅ exists in PyWa  
     first_name = msg.author.name or "Customer"  # ✅ exists in PyWa
-    user_phone = msg.author.phone    # ✅ exists in PyWa
+    user_phone = msg.author.phone   # ✅ exists in PyWa
 
     print(f"👤 User: {first_name} ({user_phone})")
 
@@ -109,23 +109,23 @@ async def start_handler(client: WhatsApp, msg: Message):
     # Send the welcome message with the ListMessage (dropdown)
     # First send the text, then send the button menu
     await client.send_message(
-        to=msg.from_user,
+        to=user_id,
         text=welcome_text
     )
 
     # Now send the interactive menu (the LIST)
     await client.send_message(
-        to=msg.from_user,
+        to=user_id,
         interactive=list_message
     )
 
     # You can choose to send either interactive_buttons or list_message based on your preference
     await client.send_message(
-        to=msg.from_user,
+        to=user_id,
         interactive=interactive_buttons
     )
 
-    username = msg.author.name or f"user_{user_phone[-4:]}"  # Create username from name or phone
+    username = msg.author.name or f"user_{user_id[-4:]}"  # Create username from name or phone
 
 
     await whatsapp_registration(
@@ -166,7 +166,7 @@ async def whatsapp_registration(
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"http://web:8000/userauths/register_user/whatsapp/",  # Changed endpoint
+                    f"http://web:8000/userauths/register_user/restaurant/whatsapp/",  # Changed endpoint
                     headers={"Accept": "application/json"},
                     json=payload
                 )

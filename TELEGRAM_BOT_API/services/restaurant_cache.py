@@ -6,7 +6,7 @@ from cachetools import TTLCache
 from core.config import INTERNAL_API_KEY
 
 # TTL: Time to Live, “How long something stays in memory before it disappears” i.e it last for 300 seconds (5 minutes)
-cache = TTLCache(maxsize=2000, ttl=300)  # cache 2000 restaurants
+cache = TTLCache(maxsize=2000, ttl=30)  # cache 2000 restaurants
 lock = asyncio.Lock()
 DRF_URL = "http://web:8000"
 
@@ -62,7 +62,7 @@ async def get_restaurant(rid: str):
         async with httpx.AsyncClient(timeout=10.0) as client:
             try:
                 res = await client.get(
-                    f"{DRF_URL}/restaurants/internal/{rid}/",
+                    f"{DRF_URL}/restaurants/internal/telegram/{rid}/",
                     headers={"X-INTERNAL-API-KEY": INTERNAL_API_KEY}
                 )
 

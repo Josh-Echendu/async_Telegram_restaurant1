@@ -322,11 +322,33 @@ services:
     networks:
       - backend
 
+  whatsapp_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.whatsapp
+    container_name: whatsapp_bot
+    restart: unless-stopped
+    ports:
+      - 8082:8080
+
+    env_file: .env
+    volumes:
+      - ./WHATSAPP_BOT_API:/app   # ← WhatsApp code (overrides)
+
+    depends_on:
+      redis:
+        condition: service_started
+      web:
+        condition: service_started
+    
+    networks:
+      - backend
+
   
   arq_worker:
     build:
       context: .
-      dockerfile: Dockerfile.bot
+      dockerfile: Dockerfile.arq
     container_name: arq_worker
     restart: unless-stopped
 

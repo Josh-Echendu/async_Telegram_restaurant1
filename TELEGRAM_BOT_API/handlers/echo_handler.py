@@ -3,7 +3,6 @@ from .kitchen_handler import api_get_user_order_batches
 from core.config import *
 from utils.cart_utils import *
 from utils.image_utils import *
-from .payment_handler import pay_now
 from .start_handler import start
 from .order_handler import order_meal
 from decimal import Decimal

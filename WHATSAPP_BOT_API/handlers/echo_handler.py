@@ -2,6 +2,8 @@ from decimal import Decimal
 from pywa.types import Button
 from pywa.types import Message
 from pywa import WhatsApp
+from .order_handler import order_meal
+from .kitchen_handler import api_get_user_order_batches
 
 async def debug_chat(client: WhatsApp, msg: Message):
     pass
@@ -37,7 +39,7 @@ async def echo(client: WhatsApp, msg: Message):
         grand_total = Decimal('0.00')  # ← initialize here
 
         # Note: You'll need to adapt this function - same logic but pass msg instead of update
-        order_batches = await api_get_user_order_batches_whatsapp(msg)
+        order_batches = await api_get_user_order_batches(msg)
 
         if not order_batches:
             await client.send_message(
