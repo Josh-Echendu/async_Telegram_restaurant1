@@ -29,25 +29,22 @@
 #         }
 
 
-
 import json
 import urllib.parse
 from rest_framework.throttling import ScopedRateThrottle
 
 
-class TelegramScopedThrottle(ScopedRateThrottle):
+class TelegramWhatsappScopedThrottle(ScopedRateThrottle):
 
     def get_cache_key(self, request, view):
 
-        # 1. restaurant_id comes from URL
         restaurant_id = view.kwargs.get("restaurant_id")
-
-        # 2. init_data comes from request body
+        whatsapp_id = request.data.get("user_id") or request.data.get("whatsapp_id")        
         init_data = request.data.get("init_data")
 
         telegram_id = None
 
-        # 3. Extract telegram_id from init_data
+        # Extract telegram_id
         if init_data:
             try:
                 parsed = dict(urllib.parse.parse_qsl(init_data))
@@ -56,44 +53,23 @@ class TelegramScopedThrottle(ScopedRateThrottle):
                 if user:
                     user_data = json.loads(urllib.parse.unquote(user))
                     telegram_id = user_data.get("id")
-                    print("throttle user_data: ", user_data)
 
             except Exception:
-                return None  # if parsing fails, skip throttle
+                telegram_id = None  # don't kill flow
 
-        # 4. If missing data → skip throttle (safe fallback)
-        if not telegram_id or not restaurant_id:
+        # Must have restaurant
+        if not restaurant_id:
             return None
 
-        # 5. Unique key per user per restaurant
-        ident = f"tg_{telegram_id}_rest_{restaurant_id}"
-        print("ident_throttle: ", ident)
-
+        # Build ident
+        if telegram_id:
+            ident = f"tg_{telegram_id}_rest_{restaurant_id}"
+        elif whatsapp_id:
+            ident = f"wa_{whatsapp_id}_rest_{restaurant_id}"
+        else:
+            ident = f"anon_rest_{restaurant_id}"            
+            
         return self.cache_format % {
             "scope": self.scope,
             "ident": ident,
         }
-
-
-# class TelegramScopedThrottle(ScopedRateThrottle):
-#     """
-#     Custom throttle that identifies users by telegram_id from the request.
-#     This ensures each Telegram user is counted individually.
-#     """
-#     def get_ident(self, request):
-
-#         # Try to get telegram_id from the incoming JSON payload
-#         telegram_id = request.data.get("telegram_id")
-
-#         restaurant_id = request.data.get('restaurant_id')
-#         print('telegram_id: ', telegram_id)
-#         print('restaurant_id: ', restaurant_id)
-        
-#         if telegram_id and restaurant_id:
-#             return f"tg_{telegram_id}_rest_{restaurant_id}"  # Use Telegram ID and restaurant_id as unique identifier
-        
-#         if telegram_id:
-#             return str(telegram_id)
-        
-#         # If telegram_id not provided, fallback to default behavior (IP)
-#         return super().get_ident(request)

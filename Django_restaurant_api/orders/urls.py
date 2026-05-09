@@ -5,6 +5,8 @@ from .views import (
     preview_order_api_view
     )
 
+app_name = 'orders'
+
 urlpatterns = [
 
     # Frontend page

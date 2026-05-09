@@ -271,6 +271,7 @@ REST_FRAMEWORK = {
     # ],
     "DEFAULT_THROTTLE_RATES": {
         "send_kitchen": "2/minute",  # only 1 request per 60 seconds per user
+        "kitchen_otp": "190/hour",
     },
 }
 

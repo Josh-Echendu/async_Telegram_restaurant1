@@ -206,6 +206,12 @@ SERVICE_MODE_CHOICES = (
     ('delivery', 'Delivery Only'),
 )
 
+PLATFORM_CHOICES = (
+    ('telegram', 'Telegram'),
+    ('whatsapp', 'Whatsapp')
+)
+
+
 class CheckoutSession(models.Model):
     session_id = ShortUUIDField(unique=True, length=10, alphabet=ALPHABET, prefix='ses')
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, null=True, related_name='restaurant_session', db_index=True)
@@ -217,7 +223,6 @@ class CheckoutSession(models.Model):
     merchant_reference = models.CharField(max_length=100, unique=True, null=True, blank=True, db_index=True)
     transaction_reference = models.CharField(max_length=100, unique=True, null=True, blank=True)
     transaction_type = models.CharField(max_length=100, choices=TRANSACTION_TYPE, default='None')
-
 
     expected_amount = models.PositiveIntegerField(null=True, blank=True)
     amount_received = models.PositiveIntegerField(null=True, blank=True)
@@ -232,10 +237,10 @@ class CheckoutSession(models.Model):
     date_created = models.DateTimeField(auto_now_add=True, db_index=True)
     # expires_at = models.DateTimeField(null=True, blank=True)
 
-    dine_in_table_number = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Require customers to provide table number for dine-in orders")
     service_mode = models.CharField(max_length=20, choices=SERVICE_MODE_CHOICES, help_text="Service mode for this checkout session", db_index=True)
-    
-     # For Delivery (only used when service_mode='delivery')
+    platform = models.CharField(max_length=100, choices=PLATFORM_CHOICES, null=True, blank=True, help_text="platform used for this checkout session", db_index=True)
+
+    # For Delivery (only used when service_mode='delivery')
     delivery_full_name = models.CharField(max_length=255, null=True, blank=True)
     delivery_phone = models.CharField(max_length=20, null=True, blank=True)
     delivery_address = models.TextField(null=True, blank=True)
@@ -305,6 +310,11 @@ class OrderBatch(models.Model):
     notified_user = models.BooleanField(default=False)
     idempotency_key = models.CharField(max_length=255, unique=True, null=True)
     removed_cart_items = models.JSONField(default=list, blank=True)
+
+    dine_in_table_number = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Require customers to provide table number for dine-in orders")
+    platform = models.CharField(max_length=100, choices=PLATFORM_CHOICES, null=True, blank=True, help_text="platform used for this checkout session", db_index=True)
+
+
 
     class Meta:
         indexes = [

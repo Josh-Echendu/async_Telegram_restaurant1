@@ -8,7 +8,7 @@ import uuid
 import requests
 from django.shortcuts import redirect
 from .utils import is_delivery_available
-from .authentication import TelegramAuthentication
+from .authentication import TelegramWhatsappAuthentication
 from restaurants.models import RestaurantDeliveryOpeningHours, RestaurantMembership
 from .redis_client import redis_client
 from userAuths.models import TelegramUser
@@ -31,61 +31,61 @@ from django.http import Http404
 from rest_framework import status
 from django.db import transaction, IntegrityError
 from .tasks import send_order_notifications, process_squad_webhook, requery_transaction, edit_amount_duration
-from .throttles import TelegramScopedThrottle  # import the custom throttle
+from .throttles import TelegramWhatsappScopedThrottle  # import the custom throttle
 from .virtual_account import initiate_dynamic_virtual_account
 from dateutil import parser
 from .squad_signature_helper import verify_squad_signature
 from django.conf import settings
+from restaurants.models import DineInOTPSession
 
 import logging
 logger = logging.getLogger(__name__)
 
 
 def restaurant_detail(request, restaurant_id):
-
     platform = request.session.get('platform') or request.GET.get("platform")
-
+    
     user_id = None
     mode = None
     table_number = None
-
+    
+    # ✅ Get restaurant FIRST (needed for both platforms)
+    restaurant = get_object_or_404(Restaurant.objects.only('max_tables'), rid=restaurant_id)
+    
     # =========================================
     # WHATSAPP (session-driven)
     # =========================================
     if platform == "whatsapp":
-
-        # 🔥 ADD VALIDATION: Ensure session belongs to this restaurant
+        
+        # 🔥 Ensure session belongs to this restaurant
         if request.session.get('restaurant_id') != restaurant_id:
-            # Session is for a different restaurant → clear it
             request.session.flush()
-            return redirect(f"/whatsapp/login/?restaurant_id={restaurant_id}")
+            return redirect(f"/whatsapp/login/{restaurant_id}/")
         
         user_id = request.session.get('user_id')
         mode = request.session.get('mode')
-        table_number = request.session.get('table_number')
-        
-        # 🔥 ADD VALIDATION: Must have user_id in session
-        if not user_id:
-            return redirect(f"/whatsapp/login/?restaurant_id={restaurant_id}")
-    
 
+        
+        # 🔥 Must have user_id in session
+        if not user_id:
+            return redirect(f"/whatsapp/login/{restaurant_id}/")
+    
     # =========================================
     # TELEGRAM (init_data / frontend-driven)
     # =========================================
     elif platform == "telegram":
-        
-        # identity is NOT session-based
-        # mode/table are only UI state if provided
         mode = request.GET.get("mode")
         table_number = request.GET.get("table")
-
+    
     context = {
         "mode": mode,
         "platform": platform,
         "restaurant_id": restaurant_id,
         "table_number": table_number,
         "user_id": user_id,
+        'max_tables': restaurant.max_tables or 10  # ✅ Now restaurant always exists!
     }
+    print("context: ", context)
 
     return render(request, "restaurant/restaurant_detail.html", context)
 
@@ -97,12 +97,35 @@ class CategoryListApiView(ListAPIView):
     pagination_class = None  # No pagination, we want all categories
 
     def list(self, request, *args, **kwargs):
+        session_id = request.headers.get("X-Session-ID")
         restaurant_id = self.kwargs.get("restaurant_id")
-        # mode = request.GET.get('mode')
-        # table = request.GET.get('table')
+        mode = request.GET.get('mode')
+
+        if mode:
+            mode = mode.lower()
 
         if not restaurant_id:
-            return Response({"error": "Category or restaurant ID missing"}, status=404)
+            return Response({"error": "restaurant ID missing"}, status=404)
+        
+        # Session validation for dine-in
+        if mode == 'dine_in':
+            if not session_id:
+                return Response({
+                    "error": "Session is required for dine-in",
+                    "session": False
+                }, status=401)
+            
+            session = DineInOTPSession.objects.filter(
+                session_id=session_id,
+                restaurant__rid=restaurant_id,
+                status='verified',
+            ).only('session_id').first()
+
+            if not session:
+                return Response({
+                    "error": "Invalid or expired session",
+                    "session": False
+                    }, status=401)
 
         restaurant = (
             get_object_or_404(
@@ -122,7 +145,7 @@ class CategoryListApiView(ListAPIView):
             "delivery_fee": restaurant.delivery_fee,
 
             # Use .url to get the string path instead of the file object
-            "restuarant_image": restaurant.image.url if restaurant.image else None        
+            "restaurant_image": restaurant.image.url if restaurant.image else None        
         }, status=200)
 
 category_list_api_view = CategoryListApiView.as_view()
@@ -143,12 +166,38 @@ class CategoryProductsApiView(ListAPIView):
             
     def list(self, request, *args, **kwargs):
 
+        mode = request.GET.get('mode')
+        
+        if mode:
+            mode = mode.lower()
+
+        session_id = request.headers.get("X-Session-ID")
         restaurant_id = self.kwargs.get("restaurant_id")
         category_id = self.kwargs.get("category_id")
 
         if not restaurant_id:
             raise Http404("Restaurant ID missing")
-        
+
+      # Session validation for dine-in
+        if mode == 'dine_in':
+            if not session_id:
+                return Response({
+                    "error": "Session ID required for dine-in",
+                    "session": False
+                }, status=401)
+            
+            session = DineInOTPSession.objects.filter(
+                session_id=session_id,
+                restaurant__rid=restaurant_id,
+                status='verified',
+            ).only('session_id').first()
+
+            if not session:
+                return Response({
+                    "error": "Invalid or expired session",
+                    "session": False
+                    },status=401)
+
         # Get all products with prep_time from category
         all_products = Product.objects.filter(
             restaurant__rid=restaurant_id
@@ -564,8 +613,8 @@ preview_order_api_view = OrderPreviewAPIView.as_view()
 
 class OrderBatchListCreateAPIView(APIView):
     throttle_scope = "send_kitchen"            # Tells DRF which limit to use
-    throttle_classes = [TelegramScopedThrottle]  # Use our custom Telegram ID throttle
-    authentication_classes = [TelegramAuthentication]  # Custom auth to verify Telegram init_data
+    throttle_classes = [TelegramWhatsappScopedThrottle]  # Use our custom Telegram ID throttle
+    authentication_classes = [TelegramWhatsappAuthentication]  # Custom auth to verify Telegram init_data
     permission_classes = [AllowAny]
 
     @transaction.atomic
@@ -581,23 +630,22 @@ class OrderBatchListCreateAPIView(APIView):
             restaurant_id = self.kwargs.get("restaurant_id")
             cart_items = request.data.get('cart_items')
             idempotency_key = str(request.data.get('idempotency_key'))
-            init_data = request.data.get("init_data")
             service_mode = str(request.data.get("mode"))
             table_number = str(request.data.get("table_number")) if service_mode == "dine_in" else None
-            delivery_info = request.data.get("delivery_info")  # ← NEW for delivery
+            delivery_info = request.data.get("delivery_info")  # ← NEW for delivery            
+            platform = request.data.get('platform')
 
         except (TypeError, ValueError) as e:
             return Response({"error": f"Invalid data: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
         print("table_number_joshua: ", table_number)
-
         if not cart_items: return Response({"message": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST)
         if not idempotency_key: return Response({"error": "Missing idempotency key"}, status=status.HTTP_400_BAD_REQUEST)
-        if not restaurant_id: return Response({"error": "Missing restaurant ID"}, status=status.HTTP_400_BAD_REQUEST)
-        if not init_data: return Response({"error": "Missing telegram init_data"}, status=status.HTTP_400_BAD_REQUEST)
-        if not service_mode: return Response({"error": "Missing order mode"}, status=status.HTTP_400_BAD_REQUEST)
-        if service_mode.lower() == "dine_in" and not table_number: return Response({"message": "Missing table number for dine-in order"}, status=status.HTTP_400_BAD_REQUEST)
-        if service_mode.lower() == "delivery" and delivery_info is None: return Response({"message": "Missing Delivery information for a delivery order"})
+
+        if service_mode:
+            service_mode = service_mode.lower()
+        if service_mode == "dine_in" and not table_number: return Response({"message": "Missing table number for dine-in order"}, status=status.HTTP_400_BAD_REQUEST)
+        if service_mode == "delivery" and delivery_info is None: return Response({"message": "Missing Delivery information for a delivery order"})
 
         # Validate cart items structure
         for item in cart_items:
@@ -624,8 +672,13 @@ class OrderBatchListCreateAPIView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
         # 2️⃣ Get telegram User
-        user = get_object_or_404(TelegramUser, telegram_id=request.user) # request.user is set by TelegramAuthentication to be the telegram_id
-        print("telegram user: ", user)
+        if platform.lower() == 'telegram':
+            user = get_object_or_404(TelegramUser, telegram_id=request.user) # request.user is set by TelegramAuthentication to be the telegram_id
+            print("telegram user: ", user)
+
+        if platform.lower() == 'whatsapp':
+            user = get_object_or_404(TelegramUser, whatsapp_id=request.user) # request.user is set by TelegramAuthentication to be the whatsapp_id
+            print("whatsapp user: ", user)
 
         membership_exists = RestaurantMembership.objects.filter(
             user=user,
@@ -711,8 +764,9 @@ class OrderBatchListCreateAPIView(APIView):
                 user=user,
                 service_mode=service_mode, 
                 table_number=table_number, 
-                delivery_info=delivery_info
-                )
+                delivery_info=delivery_info,
+                platform=platform
+            )
 
             if session and session.payment_in_progress:
                 print("payment in process BRO")
@@ -734,7 +788,9 @@ class OrderBatchListCreateAPIView(APIView):
                 telegram_user=user,
                 total_price=total_price,
                 status='pending', # kitchen status
-                payment_status='unpaid'  # payment workflow
+                payment_status='unpaid',  # payment workflow,
+                platform=platform,
+                dine_in_table_number=table_number if service_mode == 'dine_in' else None
             )
 
             # 6️⃣ Create OrderBatchItems
@@ -752,11 +808,16 @@ class OrderBatchListCreateAPIView(APIView):
             for i in range(5):
                 try:
                     # Send notification (don't fail order if this fails)
-                    send_order_notifications.delay(restaurant.rid, order_batch.bid, order_batch.telegram_user.telegram_id)
+                    send_order_notifications.delay(
+                        restaurant.rid,
+                        order_batch.bid, 
+                        order_batch.telegram_user.telegram_id
+                    )
                     break
                 except Exception as e:
-                    if i == 2:
+                    if i == 4:
                         logger.error(f"Failed to queue notification for order {order_batch.bid}: {e}")  
+                        break
                     time.sleep(5)      
             
             data = {
@@ -790,7 +851,7 @@ class OrderBatchListCreateAPIView(APIView):
             )
 
     # 3. In your order creation logic
-    def create_order_session(self, restaurant, user, service_mode, table_number=None, delivery_info=None):
+    def create_order_session(self, restaurant, user, service_mode, platform, delivery_info=None):
         
         # 🔥 NEW: Handle sessions based on service_mode
         if service_mode == 'delivery':
@@ -801,9 +862,9 @@ class OrderBatchListCreateAPIView(APIView):
                 telegram_user=user,
                 service_mode='delivery',
                 is_active=True,
-                payment_status='unpaid'
-            ).update(is_active=False) # ← Close old one
-                
+                payment_status='unpaid', 
+                platform=platform,
+            ).update(is_active=False) # ← Close old one        
             
             # Create a fresh session for delivery
             session = CheckoutSession.objects.create(
@@ -812,6 +873,8 @@ class OrderBatchListCreateAPIView(APIView):
                 service_mode='delivery',
                 is_active=True,
                 payment_status='unpaid',
+                platform=platform,
+
 
                 # delivery Info
                 delivery_full_name=delivery_info.get('fullName'),
@@ -822,27 +885,16 @@ class OrderBatchListCreateAPIView(APIView):
             )
             
         else:  # DINE_IN MODE
-            import re
-            clean_table_number = None
-            if table_number:
-                
-                # Extract only digits from the string (remove emoji)
-                digits_only = re.sub(r'\D', '', str(table_number))
-                if digits_only:
-                    clean_table_number = int(digits_only)
                         
             # Dine-in: Use existing active session OR create new one
             session = CheckoutSession.objects.filter(
                 restaurant=restaurant,
                 telegram_user=user,
                 service_mode='dine_in',
-                is_active=True
+                is_active=True,
+                payment_status='unpaid', 
             ).order_by('-date_created').first()
             
-            if session:
-                session.dine_in_table_number=clean_table_number
-                session.save(update_fields=['dine_in_table_number'])
-
             if not session:
                 session = CheckoutSession.objects.create(
                     restaurant=restaurant,
@@ -850,7 +902,7 @@ class OrderBatchListCreateAPIView(APIView):
                     service_mode='dine_in',
                     is_active=True,
                     payment_status='unpaid',
-                    dine_in_table_number=clean_table_number if table_number else None
+                    platform=platform,
                 )
         return session
 
@@ -916,6 +968,7 @@ class CheckSessionAPIView(APIView):
             telegram_user=user,
             restaurant=restaurant,
             is_active=True,
+            # service_mode='dine_in',
             payment_in_progress=True
         ).exists()
 

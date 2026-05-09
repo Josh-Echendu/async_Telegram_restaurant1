@@ -1,10 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
-from restaurants.models import Restaurant
 from django.utils import timezone
 from datetime import timedelta
 import secrets
-
+from orders.redis_client import redis_client
 
 
 class UserAccountManager(BaseUserManager):
@@ -102,29 +101,29 @@ class AuthToken(models.Model):
     )
 
     token = models.CharField(max_length=120, unique=True, db_index=True)
-
     user_id = models.CharField(max_length=100, db_index=True)
     platform = models.CharField(max_length=20, choices=PLATFORM_CHOICES)
-
-    restaurant = models.ForeignKey("Restaurant", on_delete=models.CASCADE)
-
+    restaurant = models.ForeignKey("restaurants.Restaurant", on_delete=models.CASCADE)
     expires_at = models.DateTimeField(db_index=True)
-    used = models.BooleanField(default=False)
-
+    is_used = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     mode = models.CharField(max_length=20, null=True, blank=True)
-    table_number = models.CharField(max_length=20, null=True, blank=True)
-
 
     def is_valid(self):
-        return (not self.used) and self.expires_at > timezone.now()
+        from django.utils import timezone
+        return (not self.is_used) and self.expires_at > timezone.now()
 
     def use(self):
-        self.used = True
-        self.save()
+        self.is_used = True
+        self.save(update_fields=['is_used'])
 
     @staticmethod
     def generate(user_id, platform, restaurant, mode=None, table_number=None):
+        import secrets
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # ✅ REMOVED Redis storage here - keep only DB
         return AuthToken.objects.create(
             token=secrets.token_urlsafe(32),
             user_id=user_id,

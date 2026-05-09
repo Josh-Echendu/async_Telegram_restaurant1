@@ -19,6 +19,15 @@
       } catch(e) {
           console.log('Not running in Telegram (likely WhatsApp)');
       }
+      
+  </script>
+    <script>
+    console.log('RAW TEMPLATE VALUES:', {
+      platform: '{{ platform }}',
+      user_id: '{{ user_id }}',
+      mode: '{{ mode }}',
+      table: '{{ table_number }}'
+    });
   </script>
 
   <script>
@@ -253,12 +262,12 @@
   restaurantId: window.location.pathname.split('/').filter(p => p)[2], 
   paymentSessionActive: false,
   telegramId: window.Telegram?.WebApp?.initDataUnsafe?.user?.id ?? 0, // ← FIX: Added comma
-  
-  // ========== WHATSAPP FIELDS (passed from Django) ==========
-  platform: '{{ platform }}',
+
+  platform: new URLSearchParams(window.location.search).get('platform') || '{{ platform }}',
   userId: '{{ user_id }}',
-  // ===========================================================
-  
+  mode: new URLSearchParams(window.location.search).get('mode') || '{{ mode }}',
+  table_number: new URLSearchParams(window.location.search).get('table') || '{{ table_number|default:'' }}', // ← FIX: Added comma
+
   cart: [], // ← FIX: Added comma
   activeCategory: 'all', // ← FIX: Added comma
   showCart: false, // ← FIX: Added comma
@@ -267,8 +276,6 @@
   orderId: 'ORD-' + Math.floor(800000 + Math.random()*200000), // ← FIX: Added comma
   
   // Add these after 'showCheckoutModal: false,'
-  mode: new URLSearchParams(window.location.search).get('mode') || 'dine_in',
-  table_number: new URLSearchParams(window.location.search).get('table') || null,
   showDeliveryForm: false,
   deliveryInfo: {
     fullName: '',
@@ -279,13 +286,25 @@
   },
   isSubmittingDelivery: false,
 
-  
+  // ========== TABLE SELECTION FOR WHATSAPP DINE-IN ==========
+  showTableModal: false,
+  selectedTable: null,
+  maxTables: {{ max_tables|default:10 }},
+  // ===========================================================
+
+  // ========== OTP VERIFICATION FOR DINE-IN ==========
+  showOtpModal: false,
+  otpCode: '',
+  isVerified: false,
+  isVerifying: false,
+  sessionId: null,
+  // ======================================
+
   // NEW: For price preview screen
   showPricePreview: false,
   priceBreakdown: {
       subtotal: 0,
       vat: 0,
-      delivery_fee: 0,
       total: 0,
       prep_time: 0,           // ← ADD THIS
       prep_time_display: ''   // ← ADD THIS
@@ -312,6 +331,52 @@
   }, // ← FIX: Added comma
 
 
+  // Add this utility function inside your x-data
+  async handleApiError(error, defaultMessage) {
+
+      if (error.response) {
+          // Check for session invalid response
+          if (error.response.data && error.response.data.session === false) {
+              const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
+              
+              const verifiedKey = `dine_in_verified_${userId}_${this.restaurantId}`;
+              const sessionIdKey = `dine_in_session_id_${userId}_${this.restaurantId}`;
+              const tableKey = `dine_in_table_${userId}_${this.restaurantId}`;
+              
+              this.sessionId = null;
+              this.isVerified = false;
+
+              localStorage.removeItem(verifiedKey);
+              localStorage.removeItem(sessionIdKey);
+              localStorage.removeItem(tableKey);
+              this.showOtpModal = true;
+              this.toast = { visible: true, message: 'Session expired. Please verify again.' };
+              setTimeout(() => this.toast.visible = false, 3000);
+              return true; // Handled
+          }
+          
+          // Check for 401 unauthorized
+          if (error.response.status === 401) {
+                          
+              const verifiedKey = `dine_in_verified_${userId}_${this.restaurantId}`;
+              const sessionIdKey = `dine_in_session_id_${userId}_${this.restaurantId}`;
+              const tableKey = `dine_in_table_${userId}_${this.restaurantId}`;
+              
+              this.sessionId = null;
+              this.isVerified = false;
+
+              localStorage.removeItem(verifiedKey);
+              localStorage.removeItem(sessionIdKey);
+              localStorage.removeItem(tableKey);
+              this.showOtpModal = true;
+              this.toast = { visible: true, message: error.response.data?.error || 'Session expired. Please verify again.' };
+              setTimeout(() => this.toast.visible = false, 3000);
+              return true; // Handled
+          }
+      }
+      return false; // Not handled
+  },
+
   async loadProducts(cid, retries = 3) {
       const pathParts = window.location.pathname.split('/').filter(p => p);
       const restaurantId = pathParts[2];
@@ -323,8 +388,20 @@
 
       for (let attempt = 1; attempt <= retries; attempt++) {
           try {
-              const url = `/api/restaurant/${restaurantId}/products/${cid}/`;
-              const response = await axios.get(url, { timeout: 10000 }); // 10s timeout
+              const url = `/api/restaurant/${restaurantId}/products/${cid}/?mode=${this.mode}`;
+
+              // 🔥 Build headers with session_id for dine-in users
+              const headers = {};
+              
+              // Only add session_id for dine-in mode (security)
+              if (this.mode === 'dine_in' && this.sessionId) {
+                  headers['X-Session-ID'] = this.sessionId;
+              }
+              
+              const response = await axios.get(url, { 
+                  timeout: 20000,
+                  headers: headers
+              });
 
               const categoryProducts = response.data.category_products;
               const allProducts = response.data.all;
@@ -355,6 +432,13 @@
               console.log('Error message:', error.message);
               console.log('Response data:', error.response?.data);
               console.log('Status code:', error.response?.status);
+
+              // 🔥 CHECK IF SESSION ERROR WAS HANDLED
+              const handled = await this.handleApiError(error, 'Failed to load Products');
+              if (handled) {
+                  this.loading = false;
+                  return;
+              }
 
               if (attempt === retries) {
                   // Max retries reached
@@ -392,16 +476,29 @@
 
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
+
+            // 🔥 Build headers with session_id for dine-in users
+            const headers = {};
+
+            // Only add session_id for dine-in mode (security)
+            if (this.mode === 'dine_in' && this.sessionId) {
+                headers['X-Session-ID'] = this.sessionId;
+            }
+
             const response = await axios.get(
-                `/api/restaurant/${restaurantId}/categories/`,
-                { timeout: 5000 }  // 5s timeout
+                `/api/restaurant/${restaurantId}/categories/?mode=${this.mode}`,
+                { 
+                  timeout: 20000, // 20s timeout
+                  headers: headers
+                }  
             );
+
 
             // ✅ CHANGE THIS LINE: Look inside response.data.categories
             const categoryData = response.data.categories;
             
             this.restaurantName = response.data.restaurant_name || 'Fork & Co.';
-            this.restaurantImage = response.data.restuarant_image || '';
+            this.restaurantImage = response.data.restaurant_image || '';
             
             this.categories = [
               { id: 'all', name: 'All' },
@@ -409,7 +506,7 @@
                   id: cat.cid, // Ensure this matches your serializer field
                   name: cat.title,
                   restaurant_name: response.data.restaurant_name, // Use the new data!
-                  restaurant_image: response.data.restuarant_image,
+                  restaurant_image: response.data.restaurant_image,
               }))
             ];
             
@@ -420,6 +517,12 @@
         } catch (error) {
             console.error(`Attempt ${attempt} failed:`, error);
 
+            // 🔥 CHECK IF SESSION ERROR WAS HANDLED
+            const handled = await this.handleApiError(error, 'Failed to load Category');
+              if (handled) {
+                  this.loading = false;
+                  return;
+              }
             if (attempt === retries) {
                 // Max retries reached
                 const message = error.response?.status === 404
@@ -460,7 +563,9 @@
 
     });
 
-    localStorage.setItem(`fork_cart_${this.telegramId}_${this.restaurantId}`, JSON.stringify(this.cart));
+    // Use the appropriate user identifier
+    const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
+    localStorage.setItem(`fork_cart_${userId}_${this.restaurantId}`, JSON.stringify(this.cart));
 
     console.log('Cart validated against ALL meals:', this.cart);
   }, // ← FIX: Added comma
@@ -489,8 +594,12 @@
   }, // ← FIX: Added comma
 
   saveCart() {
-    const key = `fork_cart_${this.telegramId}_${this.restaurantId}`;
-    localStorage.setItem(key, JSON.stringify(this.cart));
+      
+      // Use the appropriate user identifier based on platform
+      const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
+      const key = `fork_cart_${userId}_${this.restaurantId}`;
+      
+      localStorage.setItem(key, JSON.stringify(this.cart));
   }, // ← FIX: Added comma
     
   addToCart(meal) {
@@ -545,8 +654,108 @@
 
   clearCart() {
     this.cart = [];
-    localStorage.removeItem(`fork_cart_${this.telegramId}_${this.restaurantId}`);
+    
+    // Use the appropriate user identifier
+    const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
+    localStorage.removeItem(`fork_cart_${userId}_${this.restaurantId}`);
   },  // ← FIX: Added comma
+
+  initTableSelection() {
+    
+    console.log('Initializing table selection:', {
+      platform: this.platform,
+      mode: this.mode,
+      table_number: this.table_number
+    });
+
+    // Only show table modal for WhatsApp dine-in users who don't have a table yet
+    if (this.platform === 'whatsapp' && this.mode === 'dine_in' && !this.table_number) {
+        this.showTableModal = true;
+    }
+  },
+
+  async verifyOtp() {
+    if (!this.otpCode || this.otpCode.length !== 6) {
+        this.toast = { visible: true, message: '⚠️ Please enter a valid 6-digit OTP code' };
+        setTimeout(() => this.toast.visible = false, 3000);
+        return;
+    }
+    
+    this.isVerifying = true;
+    
+    try {
+        const payload = {
+            restaurant_id: this.restaurantId,
+            otp_code: this.otpCode,
+            platform: this.platform
+        };
+        
+        if (this.platform === 'telegram') {
+            payload.telegram_id = this.telegramId;
+        } else if (this.platform === 'whatsapp') {
+            payload.whatsapp_id = this.userId;
+        }
+        
+        const response = await axios.post('/restaurants/dine-in/verify-otp/', payload);
+        
+        if (response.data.success) {
+            this.isVerified = true;
+            this.sessionId = response.data.session_id;
+            this.table_number = response.data.table_number;
+            this.showOtpModal = false;
+            
+            // ✅ FIXED: Use user-specific keys
+            const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
+            const verifiedKey = `dine_in_verified_${userId}_${this.restaurantId}`;
+            const sessionIdKey = `dine_in_session_id_${userId}_${this.restaurantId}`;
+            const tableKey = `dine_in_table_${userId}_${this.restaurantId}`;
+            
+            localStorage.setItem(verifiedKey, 'true');
+            localStorage.setItem(tableKey, this.table_number);
+            localStorage.setItem(sessionIdKey, response.data.session_id);
+            
+            this.toast = { visible: true, message: `✅ Verified! Table ${this.table_number}` };
+            setTimeout(() => this.toast.visible = false, 3000);
+            
+            this.loadCategories();
+            this.loadProducts('all');
+        }
+    } catch (error) {
+        const errorMsg = error.response?.data?.error || 'Invalid OTP';
+        this.toast = { visible: true, message: `❌ ${errorMsg}` };
+        setTimeout(() => this.toast.visible = false, 4000);
+        this.otpCode = '';
+    } finally {
+        this.isVerifying = false;
+    }
+  },
+    
+
+  initOtpVerification() {
+
+
+      // ✅ Use user-specific keys
+      const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
+      const verifiedKey = `dine_in_verified_${userId}_${this.restaurantId}`;
+      const sessionIdKey = `dine_in_session_id_${userId}_${this.restaurantId}`;
+      const tableKey = `dine_in_table_${userId}_${this.restaurantId}`;
+
+      const verified = localStorage.getItem(verifiedKey);
+      const savedSessionId = localStorage.getItem(sessionIdKey);
+      const savedTable = localStorage.getItem(tableKey);
+      
+      if (verified === 'true' && savedSessionId && this.mode === 'dine_in') {
+          this.isVerified = true;
+          this.sessionId = savedSessionId;
+          this.table_number = savedTable;
+          console.log('all verified here, user is a dine_in and is verified')
+          return;
+      }
+      
+      if (this.mode === 'dine_in' && !this.isVerified) {
+          this.showOtpModal = true;
+      }
+  },
 
   placeOrder() {
 
@@ -633,7 +842,8 @@
           idempotency_key: 'ORD-' + Math.floor(800000 + Math.random() * 200000),
           mode: 'dine_in',
           table_number: this.table_number,
-          platform: this.platform  // ← ADD THIS
+          platform: this.platform,  // ← ADD THIS
+          session_id: this.sessionId
 
       };
       console.log('table_number: ', payload)
@@ -677,7 +887,11 @@
                   this.showCart = false;
                   this.clearCart();
 
-                  this.toast = { visible: true, message: '🍽️ Your order was placed successfully! Check Telegram for details.' };
+                  const successMessage = this.platform === 'telegram' 
+                    ? '🍽️ Your order was placed successfully 🎉🎉🎉! Check Telegram for details.' 
+                    : '🍽️ Your order was placed successfully 🎉🎉🎉! Check WhatsApp for details.';
+
+                  this.toast = { visible: true, message: successMessage };
                   setTimeout(() => this.toast.visible = false, 7200);
                   return data;
               }
@@ -707,6 +921,11 @@
 
           } catch (error) {
               console.warn(`Attempt ${attempt} failed:`, error);
+
+              console.log('Full error object:', error);
+              console.log('Error message:', error.message);
+              console.log('Response data:', error.response?.data);
+              console.log('Status code:', error.response?.status);
               
               // Handle 409 Conflict (lock conflict) - just show message and let user retry manually
               if (error.response?.status === 409) {
@@ -948,10 +1167,12 @@
           specialInstructions: ''
         };
         
-        this.toast = { 
-          visible: true, 
-          message: '🚚 Your delivery order was placed successfully! Check Telegram for details.' 
-        };
+        const successMessage = this.platform === 'telegram' 
+            ? '🚚 Your delivery order was placed successfully 🎉🎉🎉! Check Telegram for details.' 
+            : '🚚 Your delivery order was placed successfully 🎉🎉🎉! Check WhatsApp for details.';
+          
+        this.toast = { visible: true, message: successMessage };
+
         setTimeout(() => this.toast.visible = false, 7200);
         
       } else if (data.out_of_stock && data.product_ids?.length) {
@@ -1042,10 +1263,21 @@ x-init="
 
   const pathParts = window.location.pathname.split('/').filter(p => p);
   restaurantId = pathParts[2];
+  
+  console.log('platform:', platform);
+  console.log('userId:', userId);
+  console.log('telegramId:', telegramId);
+  console.log('table_number:', table_number);
+  console.log('mode:', mode);
 
-  const storageKey = `fork_cart_${telegramId}_${restaurantId}`;
+
+  // Determine user identifier based on platform
+  const cartUserId = platform === 'telegram' ? telegramId : userId;
+  const storageKey = `fork_cart_${cartUserId}_${restaurantId}`;
   const saved = localStorage.getItem(storageKey);
   
+  console.log('cartUserId: ', cartUserId);  // ✅ No 'this.' because it's a local variable
+  console.log('storageKey: ', storageKey);  // ✅ No 'this.' because it's a local variable
   
   if (saved) {
     try{
@@ -1057,9 +1289,23 @@ x-init="
     }
   }
 
-  loadCategories();
-  loadProducts('all');
-  checkPaymentSession(); // ✅ ADD THIS
+  initOtpVerification();  // ← ADD THIS BEFORE loading categories
+  //initTableSelection();
+
+  // Only load categories if verified or delivery mode
+  if (mode === 'delivery' || isVerified) {
+
+    console.log('about to load categories')
+    loadCategories();
+
+    console.log('about to load products')
+    loadProducts('all');
+  }
+
+  // ✅ Only check payment session for dine-in (delivery is pay-as-you-go)
+  if (mode === 'dine_in') {
+      checkPaymentSession();
+  }
 
 "
 class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
@@ -1689,6 +1935,131 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
       </div>
     </div>
     
+  </div>
+</div>
+
+<!-- ===== TABLE SELECTION MODAL (WhatsApp Dine-In) ===== -->
+<div x-show="showTableModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" @keydown.escape.window="showTableModal = false">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="showTableModal = false"></div>
+  <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl border border-[#eef2f8] overflow-y-auto max-h-[95vh]"
+       x-show="showTableModal" x-transition>
+    
+    <!-- Sticky Header -->
+    <div class="sticky top-0 bg-white z-10 px-5 pt-6 pb-3 border-b border-[#eef2f8]">
+      <div class="text-center">
+        <div class="w-16 h-16 bg-gradient-to-br from-[#1f2a3f] to-[#2b384f] rounded-2xl flex items-center justify-center mx-auto mb-3">
+          <i class="fas fa-chair text-2xl text-white"></i>
+        </div>
+        <h3 class="text-xl sm:text-2xl brand-italic font-bold">Select Your Table</h3>
+        <p class="text-xs text-[#6f7c91] mt-1">Please choose the table you're sitting at</p>
+      </div>
+    </div>
+    
+    <!-- Scrollable Table Grid -->
+    <div class="p-5">
+    <div class="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-6">
+      <template x-for="tableNum in maxTables" :key="tableNum">
+        <button
+          @click="selectedTable = tableNum"
+          :class="selectedTable === tableNum 
+            ? 'bg-green-500 text-white border-green-500 shadow-md' 
+            : 'bg-white border-gray-200 text-gray-700 hover:border-gray-400 hover:bg-gray-50'"
+          class="relative py-2 rounded-lg border text-sm font-medium transition-all duration-150"
+        >
+          <div class="flex flex-col items-center gap-0.5">
+            <i class="fas fa-chair text-xs" :class="selectedTable === tableNum ? 'text-white' : 'text-gray-400'"></i>
+            <span class="text-xs">Table <span x-text="tableNum"></span></span>
+          </div>
+          <div x-show="selectedTable === tableNum" class="absolute -top-1 -right-1 bg-green-600 rounded-full w-4 h-4 flex items-center justify-center">
+            <i class="fas fa-check text-white text-[8px]"></i>
+          </div>
+        </button>
+      </template>
+    </div>
+      
+      <!-- Confirmation Section -->
+      <div class="bg-blue-50 rounded-lg p-3 mb-4">
+        <div class="flex items-center gap-2">
+          <i class="fas fa-info-circle text-blue-400 text-sm"></i>
+          <p class="text-xs text-blue-700">Select the table you're sitting at</p>
+        </div>
+      </div>
+      
+      <!-- Selected Table Display -->
+    <div class="bg-green-50 rounded-lg p-2 mb-4" x-show="selectedTable">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-green-700">Selected Table:</span>
+        <span class="text-sm font-bold text-green-700">Table <span x-text="selectedTable"></span></span>
+      </div>
+    </div>
+      
+    <!-- Action Buttons -->
+    <div class="flex justify-center mt-4">
+      <button 
+        @click="
+          if(selectedTable) { 
+            table_number = selectedTable; 
+            showTableModal = false; 
+            toast = { visible: true, message: '✅ Table ' + selectedTable + ' confirmed! Start ordering.' }; 
+            setTimeout(() => toast.visible = false, 5000); 
+          } else { 
+            toast = { visible: true, message: '⚠️ Please select a table first' }; 
+            setTimeout(() => toast.visible = false, 5000); 
+          }
+        " 
+        :disabled="!selectedTable" 
+        :class="selectedTable 
+          ? 'bg-green-500 hover:bg-green-600 w-full' 
+          : 'bg-gray-300 cursor-not-allowed w-full'" 
+        class="py-2 rounded-lg text-white text-sm font-medium transition-all"
+      >
+        Confirm Table
+      </button>
+    </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== OTP MODAL (Dine-In Verification) ===== -->
+<div x-show="showOtpModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @keydown.escape.window="showOtpModal = false">
+  <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden">
+    
+    <div class="bg-gradient-to-r from-amber-500 to-orange-500 px-6 pt-8 pb-12 text-center">
+      <div class="absolute -bottom-6 left-1/2 transform -translate-x-1/2">
+        <div class="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-lg animate-bounce">
+          <i class="fas fa-key text-2xl text-amber-500"></i>
+        </div>
+      </div>
+      <h2 class="text-2xl font-bold text-white">Enter OTP Code</h2>
+      <p class="text-amber-100 text-sm mt-1">Ask your waiter for the code</p>
+    </div>
+    
+    <div class="px-6 pb-8 pt-8">
+      <div class="text-center mb-6">
+        <div class="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+          <i class="fas fa-concierge-bell text-3xl text-amber-600"></i>
+        </div>
+        <p class="text-gray-500 text-sm">Please call your waiter and ask for the 6-digit verification code</p>
+      </div>
+      
+      <input 
+        type="text" 
+        x-model="otpCode" 
+        maxlength="6" 
+        placeholder="000000"
+        class="w-full text-center text-2xl tracking-[0.5em] py-4 border border-gray-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition-all mb-5"
+        @keyup.enter="verifyOtp()"
+      >
+      
+      <button 
+        @click="verifyOtp()" 
+        :disabled="isVerifying"
+        :class="isVerifying ? 'bg-gray-400' : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:shadow-lg'"
+        class="w-full text-white py-3 rounded-xl font-semibold transition-all"
+      >
+        <span x-text="isVerifying ? 'Verifying...' : 'Verify & Start Ordering'"></span>
+      </button>
+    </div>
   </div>
 </div>
 

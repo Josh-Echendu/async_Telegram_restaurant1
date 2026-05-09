@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WhatsApp Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body class="bg-gray-100">
+    <div class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-6 max-w-md text-center">
+            <div class="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fab fa-whatsapp text-4xl text-white"></i>
+            </div>
+            <h1 class="text-2xl font-bold mb-2">WhatsApp Ordering</h1>
+            <p class="text-gray-600 mb-4">{{ message }}</p>
+            
+            <!-- QR Code -->
+            <div class="bg-white p-4 rounded-xl inline-block mx-auto mb-4">
+                <img src="{{ qr_code_url }}" alt="QR Code" class="w-48 h-48 mx-auto">
+            </div>
+            
+            <!-- Link -->
+            <div class="bg-gray-50 p-3 rounded-lg mb-4 break-all">
+                <p class="text-xs text-gray-500 mb-1">Or click the link:</p>
+                <a href="{{ whatsapp_link }}" class="text-green-600 text-sm font-medium break-all">{{ whatsapp_link }}</a>
+            </div>
+            
+            <p class="text-xs text-gray-400 mt-4">Link expires in 5 minutes</p>
+        </div>
+    </div>
+</body>
+</html>

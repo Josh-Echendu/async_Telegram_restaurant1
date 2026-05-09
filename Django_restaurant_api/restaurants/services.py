@@ -13,7 +13,7 @@ def register_telegram_webhook(restaurant):
     logger.info("token : %s", token)
     logger.info("token from function : %s", token_from_function)
 
-    webhook_url = restaurant.get_webhook_url()
+    webhook_url = restaurant.get_telegram_webhook_url()
 
     url = f"https://api.telegram.org/bot{token}/setWebhook"
 

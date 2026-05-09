@@ -15,9 +15,14 @@ from django.http import HttpResponse, JsonResponse
 from django.conf import settings 
 from django.shortcuts import redirect
 from django.http import HttpResponse
-
-
-
+from .models import AuthToken
+from django.conf import settings
+import secrets
+from django.utils import timezone
+from datetime import timedelta
+import json
+from orders.redis_client import redis_client
+from django.urls import reverse
 
 
 # Create your views here.
@@ -175,83 +180,273 @@ whatsapp_user_create_api_view = WhatsAppUserCreateAPIView.as_view()
 
 
 class CreateAuthTokenAPIView(APIView):
-
+    """
+    Enterprise-grade token creation:
+    - Rate limiting recommended
+    - Input validation
+    - No Redis storage needed (DB is sufficient)
+    """
+    
     def post(self, request):
+
+        # ✅ Input validation
         user_id = request.data.get("user_id")
         platform = request.data.get("platform")
         restaurant_id = request.data.get("restaurant_id")
-
+        
+        if not all([user_id, platform, restaurant_id]):
+            return Response(
+                {"error": "Missing required fields: user_id, platform, restaurant_id"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if platform not in ['whatsapp', 'telegram']:
+            return Response(
+                {"error": "Invalid platform. Must be 'whatsapp' or 'telegram'"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # ✅ Verify restaurant exists
         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
-
+        
+        # ✅ Generate token (DB only, no Redis)
         token = AuthToken.generate(
             user_id=user_id,
             platform=platform,
             restaurant=restaurant,
             mode=request.data.get("mode"),
-            table_number=request.data.get("table_number"),
         )
-
-        url = f"{settings.NGROK_DJANGO}/whatsapp/callback/{restaurant_id}/?token={token.token}"
+        
+        # ✅ Secure URL construction with NGROK_DJANGO
+        base_url = settings.NGROK_DJANGO.rstrip('/')
+        url = f"{base_url}/userauths/whatsapp/callback/{restaurant_id}/?token={token.token}"
         
         return Response({
             "token": token.token,
-            "url": url
-        })
+            "url": url,
+            "expires_in": 300  # 5 minutes in seconds
+        }, status=status.HTTP_201_CREATED)
     
 whatsapp_init_session_api_view = CreateAuthTokenAPIView.as_view()
 
 
-
 def whatsapp_callback_view(request, restaurant_id):
-
     token = request.GET.get("token")
-
-    # ✅ 1. reuse ONLY if same restaurant
-    if (
-        request.session.get("user_id") and
-        request.session.get("restaurant_id") == restaurant_id
-    ):
-        return redirect(f"/menu/{restaurant_id}/")
-
-    # ❌ require token otherwise
+    
     if not token:
-        return HttpResponse("Missing token", status=400)
 
+        # ✅ No hardcoded URL!
+        error_url = reverse('whatsapp_error', args=[restaurant_id])
+        return redirect(f"{error_url}?code=missing_token")
+    
+    # ✅ Validate token from DATABASE only
     try:
-        auth = AuthToken.objects.get(
+        auth = AuthToken.objects.select_related('restaurant').get(
             token=token,
             restaurant__rid=restaurant_id
         )
     except AuthToken.DoesNotExist:
-        return HttpResponse("Invalid token", status=400)
+
+        # ✅ No hardcoded URL!
+        error_url = reverse('whatsapp_error', args=[restaurant_id])
+        return redirect(f"{error_url}?code=invalid_token")
+
+
+    # ✅ Check existing session
+    if (
+        request.session.get("user_id") == auth.user_id and
+        request.session.get("restaurant_id") == restaurant_id and
+        request.session.get("mode") == auth.mode
+    ):
+        menu_url = reverse('orders:restaurant-detail', args=[restaurant_id])
+        print("ikecukwu menu url: ", menu_url)
+        return redirect(f"{menu_url}")
+
 
     if not auth.is_valid():
-        return HttpResponse("Token expired", status=400)
+        reverse_url = reverse('whatsapp_error', args=[restaurant_id])
+        return redirect(f"{reverse_url}?token={token}")  # ← FIXED
 
-    # 🔥 2. RESET if different user or restaurant
-    if (
-        request.session.get("user_id") != auth.user_id or
-        request.session.get("restaurant_id") != restaurant_id
-    ):
+    # ✅ Reset session if different user
+    if (request.session.get("user_id") != auth.user_id or
+        request.session.get("restaurant_id") != restaurant_id):
         request.session.flush()
 
-    # ✅ 3. CREATE NEW SESSION
+    # ✅ Create session
     request.session["user_id"] = auth.user_id
     request.session["platform"] = auth.platform
     request.session["restaurant_id"] = restaurant_id
     request.session["mode"] = auth.mode
-    request.session["table_number"] = auth.table_number
 
+    # ✅ Mark token as used (one-time use)
     auth.use()
 
-    return redirect(f"/menu/{restaurant_id}/")
+    restaurant_menu_url = reverse('orders:restaurant-detail', args=[restaurant_id])
+    return redirect(f"{restaurant_menu_url}")
 
 
-def whatsapp_login(request):
-    restaurant_id = request.GET.get('restaurant_id')
+def whatsapp_login(request, restaurant_id):
+    """
+    Enterprise-grade login view:
+    - Validates old token from DB only
+    - Creates new token linked to same user
+    - No Redis fallback (DB is source of truth)
+    """
+    old_token = request.GET.get("token")
+
+    if not old_token:
+        error_url = reverse('userauths:whatsapp_error', args=[restaurant_id])
+        return redirect(f"{error_url}?code=missing_token")
+    
+    # ✅ Validate old token from DATABASE only (source of truth)
+    try:
+        auth_data = AuthToken.objects.get(
+            token=old_token,
+            restaurant__rid=restaurant_id
+        )
+    except AuthToken.DoesNotExist:
+
+        # Token not in DB = invalid
+        error_url = reverse('userauths:whatsapp_error', args=[restaurant_id])
+        return redirect(f"{error_url}?code=invalid_token")
+
+    # ✅ Generate NEW token linked to same user
+    new_token = secrets.token_urlsafe(32)
+    expires_at = timezone.now() + timedelta(minutes=5)
+
+    restaurant = get_object_or_404(Restaurant, rid=restaurant_id)   
+    
+    AuthToken.objects.create(
+        user_id=auth_data.user_id,  # Same user
+        token=new_token,
+        platform='whatsapp',
+        restaurant=restaurant,
+        expires_at=expires_at,
+        is_used=False,
+        mode=auth_data.mode,
+    )
+    
+    # ✅ Mark old token as used (prevents replay)
+    auth_data.use()
+    
+    # Create the full link
+
+    # ✅ Create the full link by extracting your ngrok URL and removes any trailing slash.
+    base_url = settings.NGROK_DJANGO.rstrip('/')
+    callback_path = reverse('userauths:whatsapp_callback', args=[restaurant_id])
+    whatsapp_link = f"{base_url}{callback_path}?token={new_token}"
+    
+    # Generate QR code URL
+    qr_code_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={whatsapp_link}"
     
     context = {
         'restaurant_id': restaurant_id,
-        'message': 'Please scan the WhatsApp QR code to continue ordering.'
+        'qr_code_url': qr_code_url,
+        'whatsapp_link': whatsapp_link,
+        'message': 'Scan the QR code or click the link below to continue ordering.',
+        'expires_in_minutes': 5
     }
     return render(request, 'restaurant/whatsapp_login.html', context)
+
+
+def whatsapp_error_view(request, restaurant_id):
+    error_code = request.GET.get("code", "unknown")
+    
+    # Get restaurant details
+    try:
+        restaurant = Restaurant.objects.get(rid=restaurant_id)
+        whatsapp_link = restaurant.get_whatsapp_deep_url()  # Assuming you have this method to generate the WhatsApp link
+    except Restaurant.DoesNotExist:
+        whatsapp_link = "#"
+    
+    messages = {
+        "missing_token": {
+            "title": "🔐 Authentication Required",
+            "message": "No authentication token found. Please start over.",
+            "action": "Send 'order' to our WhatsApp bot to get a valid link."
+        },
+        "invalid_token": {
+            "title": "⚠️ Invalid Link",
+            "message": "The link you clicked is invalid or has been tampered with.",
+            "action": "Please send 'order' to our WhatsApp bot to get a fresh link."
+        },
+        "expired_token": {
+            "title": "⏰ Link Expired",
+            "message": "This link has expired or has already been used.",
+            "action": "Send 'order' to our WhatsApp bot to get a new link."
+        },
+
+        "unknown": {
+            "title": "❌ Something Went Wrong",
+            "message": "We couldn't process your request.",
+            "action": "Please try again by sending 'order' to our WhatsApp bot."
+        }
+    }
+    
+    info = messages.get(error_code, messages["unknown"])
+    
+    context = {
+        'restaurant_id': restaurant_id,
+        'error_title': info["title"],
+        'error_message': info["message"],
+        'action_message': info["action"],
+        'whatsapp_link': whatsapp_link,
+        'restaurant_name': restaurant.name if restaurant else "the restaurant",
+    }
+    
+    return render(request, 'restaurant/whatsapp_error.html', context)
+
+
+
+def admin_login_view(request):
+    if request.method == 'POST':
+
+        email = request.POST.get('email')
+        password = request.POST.get('password')
+
+        user = authenticate(request, email=email, password=password)
+        if user is not None and user.is_staff:
+
+            # Login successful
+            login(request, user)
+
+            return redirect("useradmin:dashboard")
+
+        else:
+            # Login failed
+            messages.error(request, 'Invalid login credentials. Please try again.')
+            return redirect("userauths:admin_login")
+
+    return render(request, 'userauths/admin_login.html')
+
+def admin_logout_view(request):
+    logout(request)
+    return redirect("userauths:admin_login")
+
+
+
+class TelegramUserListAPIView(ListAPIView):
+    queryset = TelegramUser.objects.all()
+    serializer_class = TelegramUserSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self, *args, **kwargs):
+        return TelegramUser.objects.all()
+    
+    # DRF will take the queryset returned by get_queryset(), pass it to the serializer, and then automatically generate the Response in the list() method.
+    def list(self, request, *args, **kwargs): # Override list() to ensure JSON + 200 status
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+telegram_list_api_view = TelegramUserListAPIView.as_view()
+
+# what do you mean here: Optional Enhancements
+
+# Make the link unique per user session → avoids conflicts if multiple users are ordering at the same time.
+
+# Send a dynamic receipt PDF via WhatsApp after checkout.
+
+# Use shortened links or QR codes in the restaurant to reduce typing friction.
+
+# Track click-through → order conversion for analytics.

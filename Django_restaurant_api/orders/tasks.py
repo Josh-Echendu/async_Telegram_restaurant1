@@ -106,7 +106,7 @@ def retry_unsent_orders_notifications():
 # | `countdown=3`              | Wait 3 seconds between retries |
 
 @shared_task(bind=True)
-def send_order_notifications(self, rid, order_bid, telegram_id):
+def send_order_notifications(self, rid, order_bid, telegram_id, platform, service_mode):
     """
     Sends messages to kitchen and user.
     Retries automatically.
@@ -135,7 +135,7 @@ def send_order_notifications(self, rid, order_bid, telegram_id):
 
     # 2. THE NETWORK CALL: Outside the lock
     try:
-        _send_order_notifications(order_data, telegram_id)
+        _send_order_notifications(order_data, telegram_id, platfrom, service_mode)
     except Exception as exc:
         if self.request.retries < 5:
             logger.info(f"Retrying order {order_bid} ({self.request.retries + 1}/5)...")
@@ -198,17 +198,19 @@ def send_to_kitchen_for_celery(order, TOKEN):
     
     # Build table number line separately
     table_line = ""
-    if order.checkout_session.dine_in_table_number:
-        table_line = f"📋 Table Number: {order.checkout_session.dine_in_table_number}\n\n"
+    service_mode = order.checkout_session.service_mode
 
+    if service_mode and service_mode.lower() == "dine_in":
+        table_line = f"📋 Table Number: {order.dine_in_table_number}\n\n"
 
     # Then use it
     kitchen_text = (
         f"🔥 NEW ORDER RECEIVED\n\n"
         f"👤 Customer: {order.telegram_user.first_name}\n"
         f"🆔 User ID: {order.telegram_user.telegram_id}\n\n"
+        f"📱 platform: {order.platform}\n\n" 
         f"🆔 BATCH ID: {order.bid}\n\n"
-        f"{table_line}"
+        f"{table_line}" if service_mode.lower() == 'dine_in' else ""
         f"📦 Items:\n" + "\n".join(lines) +
         f"\n\n——————————\n*Total: ₦{total}*\n\n"
         "⏳ Status: Pending"
@@ -659,8 +661,8 @@ def _send_weekly_reminder_to_restaurant(self, rid):
     
     users = list(
         TelegramUser.objects.filter(
-            restaurantmembership__restaurant=restaurant,
-            restaurantmembership__is_active=True
+            users__restaurant=restaurant,      # ← Use 'users' (related_name)
+            users__is_active=True              # ← Use 'users'
         )
         .order_by('id')
         .values_list('telegram_id', flat=True)
@@ -685,13 +687,6 @@ def _send_weekly_reminder_to_restaurant(self, rid):
             except Exception as e:
                 logger.error(f"Failed to send reminder to {telegram_id}: {e}")
                 raise self.retry(exc=e, countdown=2)
-
-
-
-
-
-
-
 
 
 

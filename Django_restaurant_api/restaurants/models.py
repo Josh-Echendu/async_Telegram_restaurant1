@@ -1,9 +1,12 @@
 import pytz
 from django.db import models
+from shortuuid import random
 from shortuuid.django_fields import ShortUUIDField
 from django.utils.html import mark_safe
 from decimal import Decimal
 import uuid
+from django.db.models import Q
+from django.db import IntegrityError, transaction
 from userAuths.models import TelegramUser
 from encrypted_model_fields.fields import EncryptedCharField
 from django.core.exceptions import ValidationError
@@ -13,6 +16,7 @@ from .services import register_telegram_webhook, delete_webhook
 from django.conf import settings
 from django.utils import timezone
 from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import OperationalError
 
 
 
@@ -215,6 +219,26 @@ class Restaurant(models.Model):
     def get_whatsapp_webhook_url(self):
         return f"{FAST_API_URL}/whatsapp-webhook/{self.rid}"
 
+    def get_telegram_deep_url(self):
+        return f"https://t.me/{self.bot_username}" if self.bot_username else None
+    
+    def get_whatsapp_deep_url(self):
+        if not self.whatsapp_business_phone:
+            return None
+        
+        # Clean the string: remove spaces, plus signs, or dashes
+        clean_phone = ''.join(filter(str.isdigit, self.whatsapp_business_phone))
+        
+        # Handle the Nigerian '0' prefix if the user saved it locally (e.g., 0703...)
+        if clean_phone.startswith('0') and len(clean_phone) == 11:
+            clean_phone = '234' + clean_phone[1:]
+        
+        # If it starts with 703 or 803 without a country code
+        elif not clean_phone.startswith('234') and len(clean_phone) == 10:
+            clean_phone = '234' + clean_phone
+
+        return f"https://wa.me/{clean_phone}"
+
     def restaurant_image(self):
         if self.image:
             return mark_safe(f'<img src="{self.image.url}" width="50" height="50" />')
@@ -352,6 +376,130 @@ def remove_restaurant_webhook(sender, instance, **kwargs):
     if instance.bot_token:
         delete_webhook(instance)
 
+
+# models.py
+from django.utils import timezone
+from datetime import timedelta
+import random
+from shortuuid.django_fields import ShortUUIDField
+
+
+class DineInOTPSession(models.Model):
+    """
+    Production-grade OTP session for restaurant dine-in verification
+    """
+    STATUS_CHOICES = (
+        ('pending', 'Waiting for waiter'),
+        ('verified', 'Customer verified'),
+        ('expired', 'OTP expired'),
+        ('cancelled', 'Cancelled by waiter'),
+    )
+    
+    # Core fields
+    session_id = ShortUUIDField(max_length=100, unique=True, db_index=True)
+    restaurant = models.ForeignKey('restaurants.Restaurant', on_delete=models.CASCADE, db_index=True)
+    user = models.ForeignKey('userAuths.TelegramUser', on_delete=models.CASCADE, db_index=True, null=True)    
+
+    # Verification fields
+    table_number = models.PositiveSmallIntegerField()
+    waiter_telegram_id = models.BigIntegerField(null=True, blank=True, db_index=True)
+    waiter_username = models.CharField(max_length=255, null=True, blank=True)
+    
+
+    # OTP fields
+    otp_code = models.CharField(max_length=10, null=True, blank=True)
+    otp_expires_at = models.DateTimeField(null=True, blank=True)
+    
+    # Timestamps & status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    
+    # Idempotency & security
+    retry_count = models.PositiveSmallIntegerField(default=0)
+    max_retries = models.PositiveSmallIntegerField(default=3)
+    
+    class Meta:
+        
+        indexes = [
+            models.Index(fields=['restaurant', 'status']),
+            models.Index(fields=['user', 'restaurant', 'status']),
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=['restaurant', 'otp_code'],
+                condition=Q(status='pending'),
+                name='unique_active_otp_per_restaurant'
+            )
+        ]
+
+    def generate_otp(self):
+
+        for _ in range(5):
+            code = str(random.randint(100000, 999999))
+
+            try:
+                with transaction.atomic():
+                    exists = DineInOTPSession.objects.select_for_update().filter(
+                        restaurant=self.restaurant,
+                        otp_code=code,
+                        status='pending'
+                    ).exists()
+
+                    if not exists:
+                        self.otp_code = code
+                        self.otp_expires_at = timezone.now() + timedelta(minutes=1)
+                        self.save(update_fields=['otp_code', 'otp_expires_at'])
+                        return code
+
+            except IntegrityError:
+                continue
+
+        raise Exception("Failed to generate unique OTP")
+    
+    def is_otp_valid(self, code):
+        """Check if OTP is valid and not expired"""
+        if self.otp_code != code:
+            return False
+        if self.otp_expires_at < timezone.now():
+            return False
+        return True
+    
+    def verify(self, active_user):
+        """Mark session as verified"""
+        self.user=active_user
+        self.status='verified'
+        self.verified_at=timezone.now()
+        self.save(update_fields=['status', 'verified_at', 'user'])
+    
+    def expire(self):
+        """Expire the session"""
+        self.status = 'expired'
+        self.save(update_fields=['status'])
+    
+    def increment_retry(self):
+        """Increment retry count and expire if exceeded"""
+        
+        self.retry_count += 1
+        if self.retry_count >= self.max_retries:
+            self.status = 'expired'
+        self.save(update_fields=['retry_count', 'status'])
+    
+    @classmethod
+    def create_session(cls, waiter_telegram_id, restaurant, table_number, waiter_username):
+        """Factory method to create a new session"""
+        
+        return cls.objects.create(
+            status='pending',
+            restaurant=restaurant,
+            table_number=table_number,
+            waiter_telegram_id=waiter_telegram_id,
+            waiter_username=waiter_username,
+        )
+    
+    def __str__(self):
+        return f"Table {self.table_number} - {self.status} - {self.session_id[:8]}"
 
 # 💬 IF YOU WANT NEXT
 
