@@ -12,6 +12,9 @@ REDIS_URL = os.getenv("REDIS_URL")
 NGROK_DJANGO = os.getenv("NGROK_DJANGO")
 NGROK_FAST_API = os.getenv("NGROK_FAST_API")
 
+# whatsapp verify token
+VERIFY_TOKEN = os.getenv('VERIFY_TOKEN')
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO

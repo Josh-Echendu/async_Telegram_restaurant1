@@ -53,34 +53,37 @@ async def handle_telegram_update(ctx, update_data: dict, restaurant: dict):
 
 
 
-logger = logging.getLogger(__name__)
-
-async def handle_whatsapp_update(ctx, update_data: dict, restaurant: dict):
+async def handle_whatsapp_update(
+    ctx,
+    update_data: dict,
+    raw_payload: bytes,
+    signature: str,
+    restaurant: dict,
+):
     """
     ARQ Task for handling WhatsApp updates.
     """
     print(f"🚀 Processing WhatsApp update for RID: {restaurant['rid']}")
-    
+
     # 🤖 1. Get the Pywa Client Instance
-    # The manager already has the handlers (start, echo, buttons) attached
+    # The client already has all handlers (message, buttons, etc.) attached
     wa_client = await get_wa_client(
-        phone_id=restaurant['wa_phone_id'], 
-        token=restaurant['wa_token']
+        phone_id=restaurant["wa_phone_id"],
+        token=restaurant["wa_token"],
     )
-    
-    # 🧠 2. Session Logic (Extract WAID from raw data)
-    # In WhatsApp, the user ID is their phone number (WAID)
+
+    # 🧠 2. Session Logic (Extract WAID from parsed JSON)
     try:
-        # Navigate the Meta JSON to find the sender's ID
-        # Webhook -> entry -> changes -> value -> messages or statuses
-        value = update_data['entry'][0]['changes'][0]['value']
-        
-        if 'messages' in value:
-            user_info = value['messages'][0]
-            wa_id = user_info['from'] # The 234... phone number
-            
+        # Webhook -> entry -> changes -> value
+        value = update_data["entry"][0]["changes"][0]["value"]
+
+        # Only process actual user messages
+        if "messages" in value:
+            user_info = value["messages"][0]
+            wa_id = user_info["from"]  # e.g. 2349063938743
+
             print(f"👤 User WAID: {wa_id}")
-            
+
             # Fetch and update session
             user_session = await get_user_session(wa_id)
             user_session.update({
@@ -92,21 +95,27 @@ async def handle_whatsapp_update(ctx, update_data: dict, restaurant: dict):
                 "time_zone": restaurant["time_zone"],
             })
 
-            # Check for table selection in button callbacks
-            if 'button' in user_info and user_info['button']['payload'].startswith("table_"):
-                table_number = user_info['button']['payload'].replace("table_", "")
+            # Handle table selection button payloads
+            if (
+                "button" in user_info
+                and user_info["button"]["payload"].startswith("table_")
+            ):
+                table_number = user_info["button"]["payload"].replace("table_", "")
                 user_session["table_number"] = table_number
 
             await save_user_session(wa_id, user_session)
 
     except (KeyError, IndexError):
-        # Statues (sent/delivered/read receipts) don't have user session logic
+        # Status updates (sent, delivered, read) do not contain message data
         pass
 
-    # ⚡ 3. Process the Handlers
-    # This triggers your start_handler, echo, or handle_order_buttons
+    # ⚡ 3. Process the Webhook Through pywa_async
+    # Since you created the client with server=None, use webhook_update_handler()
     try:
-        wa_client.handler(update_data)
+        await wa_client.webhook_update_handler(
+            update=raw_payload,
+            hmac_header=signature,
+        )
         print("✅ WhatsApp handlers executed successfully")
-    except Exception as e:
-        logger.error(f"❌ Error in Pywa handler: {e}")
+    except Exception:
+        logger.exception("❌ Error in Pywa handler")

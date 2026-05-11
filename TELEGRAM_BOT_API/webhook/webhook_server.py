@@ -1,18 +1,9 @@
-# Use getattr to prevent the bot from crashing if the attribute is missing
-# res = getattr(update, 'restaurant_context', None)
-
-# if not res:
-#     return # Or handle the error
-
-
 # webhook_server.py
 from fastapi import FastAPI, Request, HTTPException
-from telegram import Update
-from manager.bot_manager import get_bot
-from services.restaurant_cache import get_restaurant
+from TELEGRAM_BOT_API.services.restaurant_cache import get_restaurant
 import logging
 from datetime import datetime
-from core.config import *
+from TELEGRAM_BOT_API.core.config import *
 
 logger = logging.getLogger(__name__)
 

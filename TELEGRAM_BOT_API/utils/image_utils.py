@@ -1,5 +1,5 @@
 # utils/image_utils.py - EXACT COPY FROM ORIGINAL FILE
-from core.config import *
+from TELEGRAM_BOT_API.core.config import *
 import asyncio
 import httpx
 import logging

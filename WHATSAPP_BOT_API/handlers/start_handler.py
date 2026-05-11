@@ -3,96 +3,64 @@ import asyncio
 import logging
 from typing import Optional, Dict, Any
 
-# PyWa specific imports
 from pywa.types import Message
 from pywa import WhatsApp
-# For WhatsApp-specific buttons
-from pywa.types import (
-    ReplyButton,           # Like Telegram's ReplyKeyboardButton
-    InteractiveMessage,    # Like Telegram's InlineKeyboard but different
-    ListMessage,           # Another way to show options
-    Section,               # For organizing ListMessage
-    Row                    # For button rows
-)
-
-from core.config import get_restaurant_data_whatsapp
+from pywa.types import Message, Button
+from WHATSAPP_BOT_API.core.config import get_user_session
 
 
-# ============================================
-# 📊 LOGGER FUNCTION (Converted from your logger)
-# ============================================
+# =========================
+# 📊 LOGGER
+# =========================
 async def logger_whatsapp(client: WhatsApp, msg: Message):
-    """
-    Convert your existing logger function
-    Logs user interactions
-    """
-    user_name = msg.author.name or "Unknown"
-    whatsapp_id = msg.from_user.wa_id  # WhatsApp ID is usually the phone number
+    user_name = msg.from_user.name or "Unknown"
+    whatsapp_id = msg.from_user.wa_id
     message_text = msg.text or "[Non-text message]"
-    
+
     print(f"""
-    📱 WhatsApp Interaction Log
-    ━━━━━━━━━━━━━━━━━━━━━━━
-    User: {user_name}
-    WhatsApp ID: {whatsapp_id}
-    Message: {message_text}
-    Timestamp: {msg.timestamp}
-    ━━━━━━━━━━━━━━━━━━━━━━━
-    """)
+📱 WhatsApp Interaction Log
+━━━━━━━━━━━━━━━━━━━━━━━
+User: {user_name}
+WhatsApp ID: {whatsapp_id}
+Message: {message_text}
+Timestamp: {msg.timestamp}
+━━━━━━━━━━━━━━━━━━━━━━━
+""")
 
 
+# =========================
+# 🚀 START HANDLER
+# =========================
 async def start_handler(client: WhatsApp, msg: Message):
-    
-    # In PyWa: We'll adapt your logger function
     await logger_whatsapp(client, msg)
 
-    # In PTB: restaurant_data = await get_restaurant_data(update)
-    # In PyWa: Same function, just pass msg instead of update
-    restaurant_data = await get_restaurant_data_whatsapp(msg)
-    restaurant_id = restaurant_data.get('current_rid')
-    restaurant_name = restaurant_data.get('restaurant_name')
-    
+    user_id = msg.from_user.wa_id
+
+    restaurant_data = await get_user_session(user_id)
+    restaurant_id = restaurant_data.get("current_rid")
+    restaurant_name = restaurant_data.get("restaurant_name")
+
+    first_name = msg.from_user.name or "Customer"
+    user_phone = msg.from_user.wa_id
+
     print(f"🏪 Restaurant ID: {restaurant_id}")
     print(f"🏪 Restaurant Name: {restaurant_name}")
-
-    # PyWa way (CORRECT)
-    chat_id = msg.from_user.wa_id     # ✅ exists in PyWa
-    user_id = msg.from_user.wa_id      # ✅ exists in PyWa  
-    first_name = msg.author.name or "Customer"  # ✅ exists in PyWa
-    user_phone = msg.author.phone   # ✅ exists in PyWa
-
     print(f"👤 User: {first_name} ({user_phone})")
 
+    # =========================
+    # 🧩 WhatsApp Interactive Buttons (CORRECT FORMAT)
+    # =========================
+    # ✅ SIMPLE TEXT BUTTONS (THIS WORKS WITH PYWA)
+    buttons = [
+        Button(title="🍽 Order Food", callback_data="order_food"),
+        Button(title="📦 Track Order", callback_data="track_order"),
+        Button(title="🛍️ Checkout/Pay", callback_data="checkout"),
+    ]
 
-    interactive_buttons = InteractiveMessage.create(
-        body="👇 *Choose an option below*",  # This is like your "text" parameter
-        action=InteractiveMessage.Action(
-            buttons=[
-                ReplyButton(type="reply", reply=ReplyButton.Reply(id="order_food", title="🍽 Order Food")),
-                ReplyButton(type="reply", reply=ReplyButton.Reply(id="contact_staff", title="📞 Contact Staff")),
-                ReplyButton(type="reply", reply=ReplyButton.Reply(id="checkout_pay", title="🛍️✅💳 Checkout/Pay"))
-            ]
-        )
-    )
 
-    list_message = ListMessage.create(
-        body="👇 *Choose an option below*",  # This is like your "text"
-        action=ListMessage.Action(
-            button_title="Options",  # The text on the button that opens the list
-            sections=[
-                Section(
-                    title="Main Options",
-                    rows=[
-                        Row(id="order_food", title="🍽 Order Food", description="Browse our delicious meals"), # Helper text
-                        Row(id="contact_staff", title="📞 Contact Staff", description="Get in touch with our team"),
-                        Row(id="checkout_pay", title="🛍️✅💳 Checkout/Pay", description="Complete your purchase")
-                    ]
-                )
-            ]
-        )
-    )
-
-    # PyWa way:
+    # =========================
+    # 💬 Welcome Message
+    # =========================
     welcome_text = (
         f"👋 *Welcome to {restaurant_name}, {first_name}!*\n\n"
         f"━━━━━━━━━━━━━━\n\n"
@@ -101,32 +69,24 @@ async def start_handler(client: WhatsApp, msg: Message):
         f"🛍 Browse meals\n"
         f"🛒 View cart\n"
         f"📦 Track orders\n"
-        f"⚡ Enjoy fast and easy ordering\n\n"
-        f"━━━━━━━━━━━━━━\n"
-        f"👇 *Choose an option below*"
+        f"⚡ Fast ordering experience\n\n"
+        f"━━━━━━━━━━━━━━"
     )
 
-    # Send the welcome message with the ListMessage (dropdown)
-    # First send the text, then send the button menu
+    # =========================
+    # 📤 SEND MESSAGE + BUTTONS
+    # =========================
+    # ✅ SEND MESSAGE WITH BUTTONS (NO RAW GRAPH PAYLOADS)
     await client.send_message(
         to=user_id,
-        text=welcome_text
+        text=welcome_text,
+        buttons=buttons
     )
 
-    # Now send the interactive menu (the LIST)
-    await client.send_message(
-        to=user_id,
-        interactive=list_message
-    )
-
-    # You can choose to send either interactive_buttons or list_message based on your preference
-    await client.send_message(
-        to=user_id,
-        interactive=interactive_buttons
-    )
-
-    username = msg.author.name or f"user_{user_id[-4:]}"  # Create username from name or phone
-
+    # =========================
+    # 🧾 USER REGISTRATION
+    # =========================
+    username = first_name or f"user_{user_id[-4:]}"
 
     await whatsapp_registration(
         whatsapp_id=user_id,
@@ -135,6 +95,8 @@ async def start_handler(client: WhatsApp, msg: Message):
         phone_number=user_phone,
         restaurant_id=restaurant_id
     )
+
+
 
 # ============================================
 # 📝 REGISTRATION FUNCTION (Converted from telegram_registration)

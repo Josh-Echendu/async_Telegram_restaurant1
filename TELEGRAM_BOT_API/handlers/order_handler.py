@@ -1,7 +1,7 @@
 # handlers/order_handler.py - EXACT COPY FROM ORIGINAL FILE
-from core.config import *
-from utils.cart_utils import *
-from utils.image_utils import *
+from TELEGRAM_BOT_API.core.config import *
+from TELEGRAM_BOT_API.utils.cart_utils import *
+from TELEGRAM_BOT_API.utils.image_utils import *
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
@@ -55,7 +55,6 @@ async def choose_table(update, query):
     )
 
 async def order_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await logger(update, context)
     user_session = await get_user_session(update.effective_user.id)
     service_mode = user_session['service_mode'].lower()
     business_type = user_session['business_type'].lower()

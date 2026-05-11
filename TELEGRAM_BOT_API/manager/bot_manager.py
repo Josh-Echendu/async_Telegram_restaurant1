@@ -1,10 +1,10 @@
 # bot_manager.py
 
-from handlers.start_handler import start
-from handlers.echo_handler import echo, debug_chat
-from handlers.button_handler import button_click
-from core.config import *
-from handlers.kitchen_handler import waiter_generate_code
+from TELEGRAM_BOT_API.handlers.start_handler import start
+from TELEGRAM_BOT_API.handlers.echo_handler import echo, debug_chat
+from TELEGRAM_BOT_API.handlers.button_handler import button_click
+from TELEGRAM_BOT_API.core.config import *
+from TELEGRAM_BOT_API.handlers.kitchen_handler import waiter_generate_code
 
 # =========================
 # GLOBAL GUARD (UNCHANGED)

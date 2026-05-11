@@ -1,8 +1,7 @@
 # handlers/start_handler.py - EXACT COPY FROM ORIGINAL FILE
-from core.config import *
-from utils.cart_utils import *
-from utils.kitchen_utils import *
-import json
+from TELEGRAM_BOT_API.core.config import *
+from TELEGRAM_BOT_API.utils.cart_utils import *
+from TELEGRAM_BOT_API.utils.kitchen_utils import *
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):

@@ -1,5 +1,5 @@
-from core.config import *
-from core.config import get_user_session, save_user_session
+from TELEGRAM_BOT_API.core.config import *
+from TELEGRAM_BOT_API.core.config import get_user_session, save_user_session
 
 
 

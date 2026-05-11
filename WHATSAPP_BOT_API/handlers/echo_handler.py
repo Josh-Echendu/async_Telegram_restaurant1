@@ -4,6 +4,7 @@ from pywa.types import Message
 from pywa import WhatsApp
 from .order_handler import order_meal
 from .kitchen_handler import api_get_user_order_batches
+from .start_handler import start_handler
 
 async def debug_chat(client: WhatsApp, msg: Message):
     pass
@@ -11,21 +12,21 @@ async def debug_chat(client: WhatsApp, msg: Message):
     print("CHAT ID:", msg.from_user.phone)  # This is the user's phone number
     print("CHAT TYPE:", msg.chat_type)  # This will show if it's a private
     print("CHAT data structure:", type(msg.from_user.phone))
-    print("CHAT TYPE:", msg.author.name)  # This is the user's name
+    print("CHAT TYPE:", msg.from_user.name)  # This is the user's name
     print("CHAT:", msg)
 
 
 async def echo(client: WhatsApp, msg: Message):
     text = msg.text or "No text content"
 
-    user_id = msg.author.phone  # Changed from update.effective_user.id
+    user_id = msg.from_user.wa_id
     print(f"Echoing back to {user_id}: {text}")
 
     if text == "🍽 Order Food":
         await order_meal(client, msg)
 
-    elif text == "📞 Contact Staff":
-        first_name = msg.author.name or "Customer"
+    elif text == "📦 Track Order":
+        first_name = msg.from_user.name or "Customer"
 
         await client.send_message(
             to=msg.from_user,
@@ -64,7 +65,7 @@ async def echo(client: WhatsApp, msg: Message):
         summary = (
             "🧾 *Your Order Summary*\n\n"
             f"Restaurant 📜🍽️🍷: _{order['restaurant']}_\n"
-            f"👤 Customer: _{msg.author.name or 'Customer'}_\n\n"
+            f"👤 Customer: _{msg.from_user.name or 'Customer'}_\n\n"
             + "\n".join(lines)
             + f"\n\nTotal Price: ₦{grand_total:,}"
             + f"\nVAT Charges: ₦{vat:,}"
@@ -82,6 +83,10 @@ async def echo(client: WhatsApp, msg: Message):
             text="💰 Select your payment method:",  # Added text before buttons
             buttons=await payment_keyboard_whatsapp()  # This is correct for PyWa
         )
+
+    else:
+        await start_handler(client, msg)
+        return
 
 
 async def payment_keyboard_whatsapp():

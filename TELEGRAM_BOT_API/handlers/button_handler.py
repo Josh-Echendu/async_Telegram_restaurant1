@@ -1,12 +1,12 @@
 # handlers/button_handler.py - EXACT COPY FROM ORIGINAL FILE
 from datetime import timezone, datetime
 from datetime import time
-from services.restaurant_cache import get_restaurant
+from TELEGRAM_BOT_API.services.restaurant_cache import get_restaurant
 from .order_handler import choose_table
-from core.config import *
-from utils.cart_utils import *
-from utils.image_utils import *
-from utils.kitchen_utils import *
+from TELEGRAM_BOT_API.core.config import *
+from TELEGRAM_BOT_API.utils.cart_utils import *
+from TELEGRAM_BOT_API.utils.image_utils import *
+from TELEGRAM_BOT_API.utils.kitchen_utils import *
 from .kitchen_handler import api_get_user_order_batches, update_batch_table
 from .dynamic_virtual import generate_dynamic_virtual_account
 from .echo_handler import payment_keyboard

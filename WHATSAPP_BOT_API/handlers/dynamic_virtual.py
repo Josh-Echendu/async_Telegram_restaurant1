@@ -1,4 +1,4 @@
-from core.config import *
+from WHATSAPP_BOT_API.core.config import *
 
 
 async def generate_dynamic_virtual_account(update, max_retries=3):

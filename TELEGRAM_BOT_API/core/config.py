@@ -23,6 +23,6 @@ from telegram.ext import (
 
 from COMMON.config import *
 from COMMON.sessions import get_user_session, save_user_session
-from COMMON.redis import get_arq_redis
+from COMMON.redis import get_arq_redis, redis_client
 import httpx
 import asyncio

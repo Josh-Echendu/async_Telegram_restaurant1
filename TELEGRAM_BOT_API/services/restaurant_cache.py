@@ -3,7 +3,7 @@ import asyncio
 import pytz
 from datetime import datetime, timezone
 from cachetools import TTLCache
-from core.config import INTERNAL_API_KEY
+from TELEGRAM_BOT_API.core.config import INTERNAL_API_KEY
 
 # TTL: Time to Live, “How long something stays in memory before it disappears” i.e it last for 300 seconds (5 minutes)
 cache = TTLCache(maxsize=2000, ttl=30)  # cache 2000 restaurants

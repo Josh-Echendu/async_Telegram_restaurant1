@@ -1,15 +1,12 @@
-import platform
-from .order_handler import choose_table, EMOJI_NUMBERS
 from pywa import WhatsApp
 
-from services.restaurant_cache import get_restaurant
-from core.config import get_user_session, save_user_session
+from WHATSAPP_BOT_API.services.restaurant_cache import get_restaurant
+from WHATSAPP_BOT_API.core.config import get_user_session, save_user_session
 
 from pywa import filters # Standard way to access filters in pywa
 
-from pywa.types import CallbackButton, WhatsApp, Message
-from pywa.types import Button, ListMessage, Section, Row, CallbackButton
-from core.config import *
+from pywa.types import CallbackButton, Message
+from WHATSAPP_BOT_API.core.config import *
 
 import pytz
 from datetime import datetime, timezone, time
@@ -19,7 +16,6 @@ from datetime import datetime, timezone, time
 
 
 # Using .startswith is safer than matching the whole string for scalability
-@wa.on_callback_button(filters.callback_data.startswith("order_"))
 async def handle_order_buttons(client: WhatsApp, btn: CallbackButton):
     # btn.data is the property to access the callback data in PyWa
     data = btn.data 
@@ -28,9 +24,10 @@ async def handle_order_buttons(client: WhatsApp, btn: CallbackButton):
         user_session = await get_user_session(btn.from_user.wa_id)
         user_session['user_service_mode'] = 'dine_in'
         await save_user_session(btn.from_user.wa_id, user_session)
+
+        # Call the menu
+        await menu_keyboard_whatsapp(client, btn)
         
-        # Call the next function in your flow
-        await choose_table(client, btn)
     
     elif data == "order_delivery":
         restaurant_data = await get_user_session(btn.from_user.wa_id)

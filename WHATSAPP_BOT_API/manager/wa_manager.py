@@ -1,57 +1,44 @@
 import asyncio
-from pywa import WhatsApp
-from pywa.types import Message, CallbackButton
-from handlers.start_handler import start_handler
-from pywa import filters
-from handlers.echo_handler import echo
-from handlers.button_handler import handle_order_buttons
+# CHANGE: Use pywa_async instead of pywa
+from pywa_async import WhatsApp, filters, handlers
+from pywa_async.types import Message, CallbackButton
+from WHATSAPP_BOT_API.handlers.echo_handler import echo
+from WHATSAPP_BOT_API.handlers.button_handler import handle_order_buttons
+from WHATSAPP_BOT_API.core.config import *
 
-
-# This replaces your 'bots' dict
 wa_clients = {}
 lock = asyncio.Lock()
 
+# Fix your handler registration in get_wa_client()
 
 async def get_wa_client(phone_id: str, token: str):
-
     async with lock:
         if phone_id not in wa_clients:
 
             client = WhatsApp(
                 phone_id=phone_id,
                 token=token,
-                server=None 
+                server=None,
+                verify_token=VERIFY_TOKEN,
+                app_secret=APP_SECRET,
             )
 
-            # 1. REGISTER TEXT/REPLY BUTTON HANDLER (The "Echo")
-            # We use is_reply_button filter so it only handles the 3 main buttons
-            client.add_handlers(
-                Message(
-                    handler=echo, 
-                    filters=[filters.text.is_reply_button]
-                )
-            )
+            # ✅ IMPORTANT:
+            # Do NOT wrap filters in a list.
+            # Wrong: filters=[filters.text]
+            # Right: filters=filters.text
+            @client.on_message(filters=filters.text)
+            async def handle_text(client: WhatsApp, msg: Message):
+                await echo(client, msg)
 
-            # 2. REGISTER CALLBACK BUTTON HANDLER (The "Order Flow")
-            # This handles the "order_" callbacks from your payment/service logic
-            client.add_handlers(
-                CallbackButton(
-                    handler=handle_order_buttons,
-                    filters=[filters.callback_data.startswith("order_")]
-                )
-            )
-
-            # 3. REGISTER THE START HANDLER (Catch-all for new users)
-            # This handles everything else that isn't a button click
-            client.add_handlers(
-                Message(
-                    handler=start_handler,
-                    filters=[~filters.text.is_reply_button]
-                )
-            )
+            # ✅ IMPORTANT:
+            # Do NOT wrap filters in a list.
+            # Wrong: filters=[filters.startswith("order_")]
+            # Right: filters=filters.startswith("order_")
+            @client.on_callback_button(filters=filters.startswith("order_"))
+            async def handle_callback(client: WhatsApp, btn: CallbackButton):
+                await handle_order_buttons(client, btn)
 
             wa_clients[phone_id] = client
-            print(f"✅ Pywa client {phone_id} initialized with handlers.")
-            print("wa_client: ", wa_clients[phone_id])
-        
+
         return wa_clients[phone_id]

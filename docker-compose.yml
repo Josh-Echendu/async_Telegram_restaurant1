@@ -312,7 +312,9 @@ services:
 
     env_file: .env
     volumes:
-      - ./TELEGRAM_BOT_API:/app  # Mount the bot code for live updates
+      - ./TELEGRAM_BOT_API:/app/TELEGRAM_BOT_API # Mount the bot code for live updates
+      - ./COMMON:/app/COMMON
+      
     depends_on:
       redis:
         condition: service_started
@@ -333,7 +335,8 @@ services:
 
     env_file: .env
     volumes:
-      - ./WHATSAPP_BOT_API:/app   # ← WhatsApp code (overrides)
+      - ./WHATSAPP_BOT_API:/app/WHATSAPP_BOT_API   # ← WhatsApp code (overrides)
+      - ./COMMON:/app/COMMON
 
     depends_on:
       redis:
@@ -352,7 +355,7 @@ services:
     container_name: arq_worker
     restart: unless-stopped
 
-    command: python -m arq workers.worker.WorkerSettings
+    command: python -m arq workers.arq_worker.WorkerSettings
 
     env_file: .env
     

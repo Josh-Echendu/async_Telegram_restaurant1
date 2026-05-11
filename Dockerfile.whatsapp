@@ -1,7 +1,8 @@
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
 
 WORKDIR /app
 
@@ -9,59 +10,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# uv installer
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Install dependencies first
+# Install dependencies
 COPY WHATSAPP_BOT_API/requirements.txt .
 RUN uv pip install --system --no-cache -r requirements.txt
 
-# Copy shared code FIRST
+# Copy shared package
 COPY COMMON /app/COMMON
 
-# Copy whatsapp app
-COPY WHATSAPP_BOT_API/ .
-
-ENV PYTHONPATH=/app
+# Copy WhatsApp code
+COPY WHATSAPP_BOT_API/ /app/
 
 EXPOSE 8080
 
 CMD ["./entrypoint_whatsapp.sh"]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# FROM python:3.12-slim
-
-# ENV PYTHONDONTWRITEBYTECODE=1 \
-#     PYTHONUNBUFFERED=1
-
-# WORKDIR /app
-
-# RUN apt-get update && apt-get install -y --no-install-recommends \
-#     curl \
-#     && rm -rf /var/lib/apt/lists/*
-
-# COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-
-# # ✅ Use WhatsApp requirements
-# COPY WHATSAPP_BOT_API/requirements.txt .
-# RUN uv pip install --system --no-cache -r requirements.txt
-
-# # ✅ Copy WhatsApp code
-# COPY WHATSAPP_BOT_API/ .
-
-# EXPOSE 8080
-
-# CMD ["./entrypoint_whatsapp.sh"]

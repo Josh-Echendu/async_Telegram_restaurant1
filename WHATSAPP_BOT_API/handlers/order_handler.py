@@ -1,8 +1,5 @@
 # handlers/order_handler.py - CONVERTED TO PYWA
-from core.config import *
-from utils.cart_utils import *
-from utils.image_utils import *
-from pywa.types import CallbackButton, ListMessage, Section, Row
+from WHATSAPP_BOT_API.core.config import *
 from pywa import WhatsApp
 from .start_handler import logger_whatsapp
 from pywa.types import Button, Message

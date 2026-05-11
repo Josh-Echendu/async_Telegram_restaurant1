@@ -1,19 +1,13 @@
-from arq import Worker
-from arq.connections import RedisSettings
-from dotenv import load_dotenv
-from pathlib import Path    
-import os
-from workers.tasks import handle_telegram_update
+from tasks import handle_whatsapp_update, handle_telegram_update
+from COMMON.redis import redis_settings
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
-REDIS_URL = os.getenv("REDIS_URL")
 
 class WorkerSettings:
-    functions = [handle_telegram_update]
+    functions = [handle_whatsapp_update, handle_telegram_update]
 
     # ARQ will: parse the URL, extract host, port, db, password
     # configure connection automatically
-    redis_settings = RedisSettings.from_dsn(REDIS_URL)
+    redis_settings = redis_settings
 
     # 🔥 Production tuning
     max_jobs = 50              # concurrency
