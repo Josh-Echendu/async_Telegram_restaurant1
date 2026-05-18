@@ -315,7 +315,6 @@ class OrderBatch(models.Model):
     platform = models.CharField(max_length=100, choices=PLATFORM_CHOICES, null=True, blank=True, help_text="platform used for this checkout session", db_index=True)
 
 
-
     class Meta:
         indexes = [
             models.Index(fields=["telegram_user", "restaurant", "checkout_session"]),

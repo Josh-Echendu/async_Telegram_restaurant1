@@ -39,6 +39,10 @@ def get_restaurant_internal(request, platform, rid=None):
     elif platform == 'whatsapp':
         restaurant = Restaurant.objects.filter(whatsapp_phone_number_id=phone_id).first()
 
+    # ✅ CHECK FIRST BEFORE ACCESSING
+    if not restaurant:
+        return Response({}, status=404)
+    
     print('restaurant data: ', restaurant.rid)
     print('restaurant name: ', restaurant.name)
     print('restaurant username: ', restaurant.bot_username)

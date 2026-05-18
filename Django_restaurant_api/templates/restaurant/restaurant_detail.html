@@ -253,6 +253,55 @@
     .bg-gradient-to-r.from-green-50.to-emerald-50 {
         animation: pulse-gentle 1.5s ease-in-out infinite;
     }
+
+    /* Enterprise Product Card Enhancements */
+    .aspect-square {
+      aspect-ratio: 1 / 1;
+    }
+    
+    .group {
+      transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.3s ease;
+    }
+    
+    .group:hover {
+      box-shadow: 0 25px 40px -12px rgba(0, 0, 0, 0.15);
+    }
+    
+    /* Skeleton Loading Effect (optional) */
+    @keyframes shimmer {
+      0% {
+        background-position: -200% 0;
+      }
+      100% {
+        background-position: 200% 0;
+      }
+    }
+    
+    .shimmer {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    
+    /* Custom scrollbar for the entire page (optional) */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+      background: #a8a8a8;
+    }
   </style>
 </head>
 <body class="antialiased">
@@ -265,6 +314,7 @@
 
   platform: new URLSearchParams(window.location.search).get('platform') || '{{ platform }}',
   userId: '{{ user_id }}',
+  businessType: '{{ business_type }}',  // ← ADD after userId
   mode: new URLSearchParams(window.location.search).get('mode') || '{{ mode }}',
   table_number: new URLSearchParams(window.location.search).get('table') || '{{ table_number|default:'' }}', // ← FIX: Added comma
 
@@ -326,10 +376,13 @@
       category: categoryOverride ?? String(p.category),
       image: p.image,
       in_stock: p.in_stock !== false,
-      prep_time: p.prep_time_minutes || 15  // ← ADD THIS LINE
-    }));
-  }, // ← FIX: Added comma
 
+      // 🔥 SMART PREP TIME DETECTION
+      prep_time_minutes: p.prep_time_minutes || null,
+      prep_days: p.prep_days || null,
+      business_type: '{{ business_type }}'
+    }));
+  },
 
   // Add this utility function inside your x-data
   async handleApiError(error, defaultMessage) {
@@ -402,6 +455,7 @@
                   timeout: 20000,
                   headers: headers
               });
+              console.log('category_data: ', response.data)
 
               const categoryProducts = response.data.category_products;
               const allProducts = response.data.all;
@@ -732,29 +786,34 @@
     
 
   initOtpVerification() {
+    const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
+    const verifiedKey = `dine_in_verified_${userId}_${this.restaurantId}`;
+    const sessionIdKey = `dine_in_session_id_${userId}_${this.restaurantId}`;
+    const tableKey = `dine_in_table_${userId}_${this.restaurantId}`;
 
+    console.log('initOtpVerification - userId:', userId);
+    console.log('initOtpVerification - verifiedKey:', verifiedKey);
+    console.log('initOtpVerification - localStorage verified:', localStorage.getItem(verifiedKey));
+    console.log('initOtpVerification - mode:', this.mode);
 
-      // ✅ Use user-specific keys
-      const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
-      const verifiedKey = `dine_in_verified_${userId}_${this.restaurantId}`;
-      const sessionIdKey = `dine_in_session_id_${userId}_${this.restaurantId}`;
-      const tableKey = `dine_in_table_${userId}_${this.restaurantId}`;
-
-      const verified = localStorage.getItem(verifiedKey);
-      const savedSessionId = localStorage.getItem(sessionIdKey);
-      const savedTable = localStorage.getItem(tableKey);
-      
-      if (verified === 'true' && savedSessionId && this.mode === 'dine_in') {
-          this.isVerified = true;
-          this.sessionId = savedSessionId;
-          this.table_number = savedTable;
-          console.log('all verified here, user is a dine_in and is verified')
-          return;
-      }
-      
-      if (this.mode === 'dine_in' && !this.isVerified) {
-          this.showOtpModal = true;
-      }
+    const verified = localStorage.getItem(verifiedKey);
+    const savedSessionId = localStorage.getItem(sessionIdKey);
+    const savedTable = localStorage.getItem(tableKey);
+    
+    if (verified === 'true' && savedSessionId && this.mode === 'dine_in') {
+        this.isVerified = true;
+        this.sessionId = savedSessionId;
+        this.table_number = savedTable;
+        console.log('User already verified, skipping OTP modal');
+        return;
+    }
+    
+    if (this.mode === 'dine_in' && !this.isVerified) {
+        console.log('Showing OTP modal');
+        this.showOtpModal = true;
+    } else {
+        console.log('NOT showing OTP modal. mode:', this.mode, 'isVerified:', this.isVerified);
+    }
   },
 
   placeOrder() {
@@ -1051,14 +1110,17 @@
       
       // CASE 3: Success - all items in stock
       if (data.success === true) {
+        
         // Store the price breakdown from backend
         this.priceBreakdown = {
           subtotal: data.subtotal,
           vat: data.vat,
           delivery_fee: data.delivery_fee,
           total: data.total,
-          prep_time: data.prep_time_minutes,      // ← ADD THIS
-          prep_time_display: data.prep_time_display  // ← ADD THIS
+          prep_time: data.prep_time_minutes,
+          prep_time_display: data.prep_time_display,
+          prep_days: data.prep_days,  // ← ADD THIS
+          prep_days_display: data.prep_days_display  // ← ADD THIS
         };
         
         // Close delivery form, show price preview
@@ -1262,7 +1324,7 @@ x-init="
   activeCategory = 'all';
 
   const pathParts = window.location.pathname.split('/').filter(p => p);
-  restaurantId = pathParts[2];
+  restaurantId = pathParts[2] || '{{ restaurant_id }}';
   
   console.log('platform:', platform);
   console.log('userId:', userId);
@@ -1289,7 +1351,20 @@ x-init="
     }
   }
 
+  console.log('=== BEFORE initOtpVerification ===');
+  console.log('mode:', mode);
+  console.log('platform:', platform);
+  console.log('userId:', userId);
+  console.log('isVerified:', isVerified);
+  console.log('showOtpModal:', showOtpModal);
+
   initOtpVerification();  // ← ADD THIS BEFORE loading categories
+  
+  console.log('=== AFTER initOtpVerification ===');
+  console.log('isVerified:', isVerified);
+  console.log('showOtpModal:', showOtpModal);
+
+
   //initTableSelection();
 
   // Only load categories if verified or delivery mode
@@ -1404,71 +1479,132 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
   </template>
 </div>
 
-<!-- ===== MEALS GRID (beautiful cards) ===== -->
-<div x-ref="productsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+<!-- ===== PREMIUM MEALS GRID (Enterprise Grade) ===== -->
+<div x-ref="productsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
   <template x-for="meal in paginatedMeals" :key="meal.pid">
-  <div
-    class="meal-card p-4 flex flex-col relative"
-    :class="!meal.in_stock ? 'opacity-50 pointer-events-none' : ''"
-  >      
-    <!-- image container -->
-    <div class="img-wrapper w-full h-44 sm:h-48 bg-[#f5f7fb] rounded-2xl relative">
-      <img :src="meal.image" :alt="meal.name" class="w-full h-full object-cover">
+    <div 
+      class="group relative bg-white rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl"
+      :class="!meal.in_stock ? 'opacity-60' : ''"
+    >
       
-      <!-- Out of stock badge -->
-      <div
-        x-show="!meal.in_stock"
-        class="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow">
-        Out of stock
-      </div>
-      
-      <!-- 🔥 PREP TIME BADGE - Delivery only, with fire animation 🔥 -->
-      <div 
-        x-show="mode === 'delivery' && meal.prep_time" 
-        class="absolute bottom-2 right-2 bg-gradient-to-r from-orange-500 to-red-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg flex items-center gap-1"
-        style="animation: sparkle 1s ease-in-out infinite; box-shadow: 0 0 10px rgba(249,115,22,0.5);">
-        <i class="fas fa-fire text-xs" style="animation: gentle-pulse 0.8s ease-in-out infinite;"></i>
-        <span x-text="meal.prep_time + ' min'"></span>
-        <i class="fas fa-clock text-xs"></i>
-      </div>
-    </div>
-    
-    <!-- text -->
-    <div class="mt-3 flex-1">
-      <h3 class="text-sm font-semibold text-[#1a1e2b]" x-text="meal.name"></h3>
-      <p class="text-sm text-[#4b5565] mt-0.5 line-clamp-2" x-text="meal.desc"></p>
-      
-      <!-- price and action row -->
-      <div class="flex items-center justify-between mt-4">
-        <!-- dynamic if in cart -->
-        <template x-for="item in cart.filter(i => i.pid === meal.pid)" :key="item.pid">
-          <div class="flex items-center space-x-1 bg-[#f2f6fd] rounded-full border border-[#dee7f2] p-0.5">
-            <button @click="removeOne(meal.pid)" class="qty-btn w-8 h-8 text-sm"><i class="fas fa-minus"></i></button>
-            <span class="font-semibold w-6 text-center" x-text="item.quantity"></span>
-            <button @click="addToCart(meal)" class="qty-btn w-8 h-8 text-sm"><i class="fas fa-plus"></i></button>
-          </div>
-        </template>
-        
-        <button
-          x-show="!cart.some(i => i.pid === meal.pid)"
-          @click="if(meal.in_stock) addToCart(meal)"
-          :class="meal.in_stock
-            ? 'bg-[#1f2a3f] hover:bg-[#2b384f] text-white'
-            : 'bg-gray-400 cursor-not-allowed text-white'"
-          class="px-5 py-2.5 rounded-full text-sm font-medium shadow-md flex items-center gap-1 transition-all"
+      <!-- Image Container - Fixed height -->
+      <div class="relative h-48 sm:h-56 md:h-64 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
+        <img 
+          :src="meal.image" 
+          :alt="meal.name" 
+          class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
         >
-          <i class="fas fa-cart-plus"></i>
-          <span x-text="meal.in_stock ? 'Add' : 'Out of stock'"></span>
+        
+        <!-- Out of Stock Overlay -->
+        <div 
+          x-show="!meal.in_stock"
+          class="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center"
+        >
+          <span class="px-4 py-2 bg-red-500 text-white text-sm font-bold rounded-full">Out of Stock</span>
+        </div>
+        
+        <!-- Premium Badges -->
+        <div class="absolute top-3 left-3 flex flex-col gap-2">
+          <div class="px-2.5 py-1 bg-amber-400 text-amber-900 text-[10px] font-bold rounded-full shadow-lg flex items-center gap-1">
+            <i class="fas fa-crown text-[8px]"></i>
+            <span>BEST SELLER</span>
+          </div>
+        </div>
+        
+        <!-- Wishlist Button -->
+        <button class="absolute top-3 right-3 w-8 h-8 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center transition-all hover:bg-red-50 hover:scale-110">
+          <i class="far fa-heart text-gray-600 text-sm transition-all hover:text-red-500"></i>
         </button>
         
-        <span class="text-lg font-bold text-[#1f2a3f]">
-          ₦<span x-text="formatPrice(meal.price)"></span>
-        </span>
+        <!-- Delivery Prep Time Badge -->
+        <div 
+          x-show="mode === 'delivery'" 
+          class="absolute bottom-3 right-3 px-2.5 py-1 rounded-full text-[10px] font-bold shadow-lg flex items-center gap-1.5 backdrop-blur-md"
+          :class="businessType === 'restaurant' ? 'bg-orange-500 text-white' : 'bg-purple-600 text-white'"
+        >
+          <i class="fas" :class="businessType === 'restaurant' ? 'fa-fire' : 'fa-calendar-day'"></i>
+          <span x-show="businessType === 'restaurant' && meal.prep_time_minutes" x-text="meal.prep_time_minutes + ' min'"></span>
+          <span x-show="businessType === 'vendor' && meal.prep_days !== null">
+            <span x-text="meal.prep_days === 0 ? 'Same Day' : meal.prep_days + ' day' + (meal.prep_days > 1 ? 's' : '')"></span>
+          </span>
+        </div>
       </div>
+      
+      <!-- Product Info -->
+      <div class="p-4 space-y-3">
+        <!-- Category (fixed - no ternary) -->
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+            <span x-show="activeCategory === 'all'">FEATURED</span>
+            <span x-show="activeCategory !== 'all'" x-text="activeCategory.toUpperCase()"></span>
+          </span>
+        </div>
+        
+        <!-- Product Name -->
+        <h3 class="font-semibold text-gray-800 text-base leading-tight line-clamp-2 group-hover:text-orange-600 transition-colors" x-text="meal.name"></h3>
+        
+        <!-- Description -->
+        <p class="text-gray-500 text-xs leading-relaxed line-clamp-2" x-text="meal.desc || 'No description available'"></p>
+        
+        <!-- Ratings & Social Proof -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1.5">
+            <div class="flex items-center">
+              <i class="fas fa-star text-amber-400 text-[10px]"></i>
+              <i class="fas fa-star text-amber-400 text-[10px]"></i>
+              <i class="fas fa-star text-amber-400 text-[10px]"></i>
+              <i class="fas fa-star text-amber-400 text-[10px]"></i>
+              <i class="fas fa-star-half-alt text-amber-400 text-[10px]"></i>
+            </div>
+            <span class="text-[10px] font-medium text-gray-600">4.8</span>
+            <span class="text-[10px] text-gray-400">(1.2k+ reviews)</span>
+          </div>
+          
+          <!-- Scarcity Indicator -->
+          <div class="flex items-center gap-1" x-show="meal.stock_quantity && meal.stock_quantity < 10">
+            <i class="fas fa-bolt text-amber-500 text-[8px]"></i>
+            <span class="text-[9px] font-medium text-amber-600">Only <span x-text="meal.stock_quantity"></span> left</span>
+          </div>
+        </div>
+        
+        <!-- Price & Action Row -->
+        <div class="flex items-center justify-between pt-2 border-t border-gray-100">
+          <div class="flex flex-col">
+            <span class="text-xl font-bold text-gray-900">₦<span x-text="formatPrice(meal.price)"></span></span>
+            <span class="text-[10px] text-gray-400 line-through" x-show="meal.original_price">₦<span x-text="formatPrice(meal.original_price)"></span></span>
+          </div>
+          
+          <!-- Dynamic Cart Button -->
+          <template x-if="cart.some(i => i.pid === meal.pid)">
+            <div class="flex items-center gap-1.5 bg-gray-100 rounded-full p-1">
+              <button @click="removeOne(meal.pid)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-600 hover:bg-red-50 hover:text-red-500 transition-all">
+                <i class="fas fa-minus text-xs"></i>
+              </button>
+              <span class="w-5 text-center font-semibold text-sm" x-text="cart.find(i => i.pid === meal.pid).quantity"></span>
+              <button @click="addToCart(meal)" class="w-7 h-7 rounded-full bg-orange-500 shadow-sm flex items-center justify-center text-white hover:bg-orange-600 transition-all">
+                <i class="fas fa-plus text-xs"></i>
+              </button>
+            </div>
+          </template>
+          
+          <button 
+            x-show="!cart.some(i => i.pid === meal.pid)"
+            @click="if(meal.in_stock) addToCart(meal)"
+            :disabled="!meal.in_stock"
+            class="relative overflow-hidden group/btn px-4 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2 shadow-md"
+            :class="meal.in_stock ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white hover:shadow-lg hover:scale-105' : 'bg-gray-300 text-gray-500 cursor-not-allowed'"
+          >
+            <i class="fas fa-cart-plus text-xs"></i>
+            <span class="relative z-10">Add to Cart</span>
+            <div class="absolute inset-0 -translate-x-full group-hover/btn:translate-x-0 transition-transform duration-300 bg-gradient-to-r from-orange-600 to-red-600"></div>
+          </button>
+        </div>
+      </div>
+      
     </div>
-  </div>
   </template>
 </div>
+
 
 <!-- ===== PREMIUM PAGINATION ===== -->
 <div 
@@ -1857,19 +1993,37 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
           <span class="text-sm font-semibold text-blue-600 whitespace-nowrap ml-2">+₦<span x-text="formatPrice(priceBreakdown.delivery_fee)"></span></span>
         </div>
         
-        <!-- Preparation Time - ONLY for delivery mode -->
-        <div x-show="mode === 'delivery'" class="bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl p-3">
+        <!-- Preparation Time - ONLY for delivery mode (Restaurant = minutes, Vendor = days) -->
+        <div x-show="mode === 'delivery'" class="rounded-xl p-3" :class="businessType === 'restaurant' ? 'bg-gradient-to-r from-orange-50 to-amber-50' : 'bg-gradient-to-r from-purple-50 to-indigo-50'">
           <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <div class="flex items-center gap-2">
-              <i class="fas fa-fire text-orange-500 text-sm"></i>
-              <span class="text-sm font-medium text-orange-700">Preparation Time</span>
-              <span class="text-xs text-orange-500 hidden sm:inline">Kitchen prep + packing</span>
+              <i class="text-sm" :class="businessType === 'restaurant' ? 'fas fa-fire text-orange-500' : 'fas fa-calendar-week text-purple-500'"></i>
+              <span class="text-sm font-medium" :class="businessType === 'restaurant' ? 'text-orange-700' : 'text-purple-700'">Preparation Time</span>
+              <span class="text-xs hidden sm:inline" :class="businessType === 'restaurant' ? 'text-orange-500' : 'text-purple-500'">
+                <span x-show="businessType === 'restaurant'">Kitchen prep + packing</span>
+                <span x-show="businessType === 'vendor'">Processing + delivery</span>
+              </span>
             </div>
             <div class="flex items-center justify-between sm:justify-end gap-2">
-              <span class="text-xs text-orange-500 sm:hidden">Kitchen prep + packing</span>
+              <span class="text-xs sm:hidden" :class="businessType === 'restaurant' ? 'text-orange-500' : 'text-purple-500'">
+                <span x-show="businessType === 'restaurant'">Kitchen prep + packing</span>
+                <span x-show="businessType === 'vendor'">Processing + delivery</span>
+              </span>
               <div class="flex items-center gap-1 bg-white px-2 py-1 rounded-full shadow-sm">
-                <i class="fas fa-fire text-xs text-orange-500 animate-pulse"></i>
-                <span class="text-sm font-bold text-orange-600" x-text="priceBreakdown.prep_time_display || priceBreakdown.prep_time + ' min'"></span>
+                <!-- Restaurant: Show minutes -->
+                <template x-if="businessType === 'restaurant'">
+                  <div class="flex items-center gap-1">
+                    <i class="fas fa-fire text-xs text-orange-500 animate-pulse"></i>
+                    <span class="text-sm font-bold text-orange-600" x-text="priceBreakdown.prep_time_display || priceBreakdown.prep_time + ' min'"></span>
+                  </div>
+                </template>
+                <!-- Vendor: Show days -->
+                <template x-if="businessType === 'vendor'">
+                  <div class="flex items-center gap-1">
+                    <i class="fas fa-calendar-day text-xs text-purple-500"></i>
+                    <span class="text-sm font-bold text-purple-600" x-text="priceBreakdown.prep_days_display || (priceBreakdown.prep_days === 0 ? 'Same day' : priceBreakdown.prep_days + ' day' + (priceBreakdown.prep_days > 1 ? 's' : ''))"></span>
+                  </div>
+                </template>
               </div>
             </div>
           </div>

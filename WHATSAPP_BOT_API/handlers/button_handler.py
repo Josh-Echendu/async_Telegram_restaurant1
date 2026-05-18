@@ -5,7 +5,7 @@ from WHATSAPP_BOT_API.core.config import get_user_session, save_user_session
 
 from pywa import filters # Standard way to access filters in pywa
 
-from pywa.types import CallbackButton, Message
+from pywa.types import Button, CallbackButton, Message
 from WHATSAPP_BOT_API.core.config import *
 
 import pytz
@@ -55,6 +55,36 @@ async def handle_order_buttons(client: WhatsApp, btn: CallbackButton):
         # Call the menu
         await menu_keyboard_whatsapp(client, btn)
 
+    elif data == "order_food":
+        
+        # 1. Use .wa_id for session and identification
+        user_id = btn.from_user.wa_id
+        user_session = await get_user_session(user_id)
+        print("User session in order_food:", user_session)  # Debugging line
+        
+        # Use .get() with defaults to prevent KeyErrors if session is empty
+        service_mode = user_session.get('service_mode').lower()
+        business_type = user_session.get('business_type').lower()
+
+        buttons = []
+        
+        if business_type == "vendor":
+            buttons.append(Button(title="🚚 Delivery", callback_data="order_delivery"))
+        else:
+            # Check for Dine-in
+            if service_mode in ["dine_in", "both"]:
+                buttons.append(Button(title="🍽️ Dine-in", callback_data="order_dine_in"))
+            
+            # Check for Delivery
+            if service_mode in ["delivery", "both"]:
+                buttons.append(Button(title="🚚 Delivery", callback_data="order_delivery"))
+        
+        # 2. Use .reply() helper — it's faster and cleaner than client.send_message
+        await btn.reply(
+            text="How would you like to order today? 🍔",
+            buttons=buttons
+        )
+
 
 # Helper functions you need to adapt:
 async def is_delivery_available_whatsapp(update: CallbackButton | Message):
@@ -65,14 +95,17 @@ async def is_delivery_available_whatsapp(update: CallbackButton | Message):
     # Use .wa_id for consistency with your registration/session flow
     user_id = update.from_user.wa_id
     user_session = await get_user_session(user_id)
+    print(f"Checking delivery availability for user_id: {user_id}, session: {user_session}")
     
-    restaurant_id = user_session.get('current_rid')
-    if not restaurant_id:
+    phone_id = user_session.get('phone_id')
+    print(f"Checking delivery availability for phone_id: {phone_id}")
+    if not phone_id:
         return False, "Session expired. Please restart the order."
 
     # Fetch fresh data
-    restaurant_data = await get_restaurant(restaurant_id)
-    
+    restaurant_data = await get_restaurant(phone_id)
+    print(f"Restaurant data for {phone_id}: {restaurant_data}")
+
     if not restaurant_data:
         return False, "Restaurant data unavailable. Please try again."
     
@@ -140,7 +173,6 @@ async def menu_keyboard_whatsapp(client: WhatsApp, clb: CallbackButton | Message
         user_id=user_id, 
         platform=platform, 
         user_service_mode=user_service_mode, 
-        table_number=table_number
     )
 
     # WhatsApp Reality: You can't "Edit" the previous message.
@@ -159,14 +191,13 @@ async def menu_keyboard_whatsapp(client: WhatsApp, clb: CallbackButton | Message
         preview_url=True
     )
 
-async def whatsapp_init_session(restaurant_id: str, user_id: str, platform: str, user_service_mode: str = None, table_number: str = None):
+async def whatsapp_init_session(restaurant_id: str, user_id: str, platform: str, user_service_mode: str = None):
     # This is where you can initialize any session variables if needed
     
     payload = {
         "restaurant_id": restaurant_id,
         "user_id": user_id,
         "mode": user_service_mode,
-        "table_number": table_number,
         "platform": platform
     }
 

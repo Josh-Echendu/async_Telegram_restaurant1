@@ -69,7 +69,6 @@ async def whatsapp_webhook(request: Request):
         raise HTTPException(status_code=403, detail="Invalid signature")
 
     # Parse JSON from the raw bytes already read
-    import json
     data = json.loads(body)
 
     # 2. Extract phone_number_id
@@ -78,6 +77,12 @@ async def whatsapp_webhook(request: Request):
         phone_id = value["metadata"]["phone_number_id"]
     except (KeyError, IndexError):
         return {"status": "not a message event"}
+
+    # 🔥 🔥 🔥 ADD THIS FILTER RIGHT HERE 🔥 🔥 🔥
+    # Only process actual user messages, skip status updates
+    if "messages" not in value:
+        print("⏭️ Ignoring non-message webhook (status update, delivery receipt, etc.)")
+        return {"status": "ignored"}
 
     # 🧠 3. MULTI-TENANT LOAD
     restaurant = await get_restaurant(phone_id)
@@ -99,10 +104,103 @@ async def whatsapp_webhook(request: Request):
         raw_payload=body,          # raw bytes for pywa_async.webhook_update_handler()
         signature=signature,       # X-Hub-Signature-256 header
         restaurant=restaurant,
-        _queue_name="restaurant_jobs",
+        _queue_name="restaurant_jobs"
     )
 
     print("arq done.......................")
     print("Enqueued job:", job)
 
     return {"ok": True}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# @app.post("/whatsapp-webhook")
+# async def whatsapp_webhook(request: Request):
+#     print("whatsapp verification request: ", request)
+
+#     # Read raw bytes once
+#     body = await request.body()
+
+#     # Signature header from Meta
+#     signature = request.headers.get("X-Hub-Signature-256")
+
+#     # 🔐 1. SECURITY CHECK
+#     if not verify_signature(APP_SECRET, body, signature):
+#         raise HTTPException(status_code=403, detail="Invalid signature")
+
+#     # Parse JSON from the raw bytes already read
+#     import json
+#     data = json.loads(body)
+
+#     # 2. Extract phone_number_id
+#     try:
+#         value = data["entry"][0]["changes"][0]["value"]
+#         phone_id = value["metadata"]["phone_number_id"]
+#     except (KeyError, IndexError):
+#         return {"status": "not a message event"}
+
+#     # 🧠 3. MULTI-TENANT LOAD
+#     restaurant = await get_restaurant(phone_id)
+#     print("restaurant: ", restaurant)
+
+#     if not restaurant:
+#         raise HTTPException(status_code=404, detail="Restaurant not found")
+
+#     # 🚫 4. STATUS CHECK
+#     if not restaurant.get("is_wa_active"):
+#         return {"status": "whatsapp disabled"}
+
+#     # ⚙️ 5. ENQUEUE BACKGROUND JOB
+#     arq = await get_arq_redis()
+
+#     job = await arq.enqueue_job(
+#         "handle_whatsapp_update",
+#         update_data=data,          # parsed dict for session logic
+#         raw_payload=body,          # raw bytes for pywa_async.webhook_update_handler()
+#         signature=signature,       # X-Hub-Signature-256 header
+#         restaurant=restaurant,
+#         _queue_name="restaurant_jobs",
+#     )
+
+#     print("arq done.......................")
+#     print("Enqueued job:", job)
+
+#     return {"ok": True}

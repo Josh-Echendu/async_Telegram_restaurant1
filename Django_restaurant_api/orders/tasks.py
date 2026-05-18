@@ -18,13 +18,14 @@ from django.db.transaction import on_commit
 import uuid
 from celery.exceptions import SoftTimeLimitExceeded
 from .redis_client import redis_client
-
 from .virtual_account import initiate_dynamic_virtual_account
 from .errors import prefetch_webhooks, delete_webhook
 from .virtual_edit_duration import virtual_account_edit_amount_duration
-
 from django.db.models import OuterRef, Subquery, Sum, Value, F
 from django.core.cache import cache
+from pywa import WhatsApp  # ← synchronous version
+from pywa.types import Button
+
 
 import logging
 logger = logging.getLogger(__name__)
@@ -106,7 +107,7 @@ def retry_unsent_orders_notifications():
 # | `countdown=3`              | Wait 3 seconds between retries |
 
 @shared_task(bind=True)
-def send_order_notifications(self, rid, order_bid, telegram_id, platform, service_mode):
+def send_order_notifications(self, rid, order_bid, telegram_id):
     """
     Sends messages to kitchen and user.
     Retries automatically.
@@ -135,7 +136,7 @@ def send_order_notifications(self, rid, order_bid, telegram_id, platform, servic
 
     # 2. THE NETWORK CALL: Outside the lock
     try:
-        _send_order_notifications(order_data, telegram_id, platfrom, service_mode)
+        _send_order_notifications(order_data, telegram_id)
     except Exception as exc:
         if self.request.retries < 5:
             logger.info(f"Retrying order {order_bid} ({self.request.retries + 1}/5)...")
@@ -190,31 +191,81 @@ def _send_order_notifications(order, telegram_id):
 # -----------------------------------------
 def send_to_kitchen_for_celery(order, TOKEN):
     bot = Bot(token=TOKEN)
+
     lines = [
         f"{item.quantity}X - {item.product.title} - ₦{item.price * item.quantity}"
         for item in order.items.all()
     ]
     total = sum(item.price * item.quantity for item in order.items.all())
     
-    # Build table number line separately
-    table_line = ""
-    service_mode = order.checkout_session.service_mode
-
-    if service_mode and service_mode.lower() == "dine_in":
-        table_line = f"📋 Table Number: {order.dine_in_table_number}\n\n"
-
-    # Then use it
+    service_mode = order.checkout_session.service_mode.lower() if order.checkout_session.service_mode else None
+    
+    # Start building the message
     kitchen_text = (
         f"🔥 NEW ORDER RECEIVED\n\n"
         f"👤 Customer: {order.telegram_user.first_name}\n"
-        f"🆔 User ID: {order.telegram_user.telegram_id}\n\n"
-        f"📱 platform: {order.platform}\n\n" 
+        f"📱 Platform: {order.platform}\n\n" 
         f"🆔 BATCH ID: {order.bid}\n\n"
-        f"{table_line}" if service_mode.lower() == 'dine_in' else ""
+    )
+    
+    # 🔥 Add mode-specific information
+    if service_mode == "dine_in":
+        
+        # Dine-in: Add table number, NO delivery info
+        kitchen_text += f"📋 Table Number: {order.dine_in_table_number}\n\n"
+    
+    elif service_mode == "delivery":
+        
+        # Delivery: Add delivery info, NO table number
+        kitchen_text += (
+            f"🚚 Delivery Details\n"
+            f"   👤 Name: {order.checkout_session.delivery_full_name}\n"
+            f"   📞 Phone: {order.checkout_session.delivery_phone}\n"
+            f"   📍 Address: {order.checkout_session.delivery_address}\n"
+            f"    payment status: {order.checkout_session.payment_status}\n\n"
+        )
+
+        if order.checkout_session.delivery_landmark:
+            kitchen_text += f"   🗺️ Landmark: {order.checkout_session.delivery_landmark}\n"
+        if order.checkout_session.delivery_instructions:
+            kitchen_text += f"   📝 Instructions: {order.checkout_session.delivery_instructions}\n"
+        kitchen_text += "\n"
+    
+    # Add items and total
+    kitchen_text += (
         f"📦 Items:\n" + "\n".join(lines) +
         f"\n\n——————————\n*Total: ₦{total}*\n\n"
         "⏳ Status: Pending"
     )
+        
+    # Define chat IDs for different service modes
+    chat_ids = {
+        "dine_in": order.restaurant.kitchen_chat_id,
+        "delivery": order.restaurant.delivery_chat_id
+    }
+
+    # Get the correct chat ID based on service mode
+    chat_id = chat_ids.get(service_mode)
+
+    if not chat_id:
+        logger.error(f"No chat ID configured for service mode: {service_mode}")
+        return
+
+    # Add delivery-specific button if needed
+    if service_mode == "delivery":
+        delivery_kitchen_keyboard = [
+            [
+                InlineKeyboardButton("🚚 Mark as Out for Delivery", callback_data=f"out_for_delivery_{order.bid}_{order.restaurant.rid}")
+            ]
+        ]
+        
+        # Send the message
+        bot.send_message(
+            chat_id=chat_id,
+            text=kitchen_text,
+            reply_markup=InlineKeyboardMarkup(delivery_kitchen_keyboard)
+        )
+        return
 
     kitchen_keyboard = [
         [
@@ -222,36 +273,96 @@ def send_to_kitchen_for_celery(order, TOKEN):
         ]
     ]
 
+    # Send the message
     bot.send_message(
-        chat_id=order.restaurant.kitchen_chat_id,
+        chat_id=chat_id,
         text=kitchen_text,
         reply_markup=InlineKeyboardMarkup(kitchen_keyboard)
     )
+    
 
 def send_user_message_for_celery(order, telegram_id, TOKEN):
-    bot = Bot(token=TOKEN)
+
+    """
+    Send order confirmation to Telegram or WhatsApp.
+    This function is synchronous, so it works naturally inside Celery.
+    """
+
     lines = []
-    total_price = sum(item.price * item.quantity for item in order.items.all())
+    total_price = sum(Decimal(item.price) * item.quantity for item in order.items.all())
+
     for item in order.items.all():
         subtotal = Decimal(item.price) * item.quantity
-        lines.append(f"{item.quantity}X - {item.product.title} - ₦{subtotal:,}")
-    
+        lines.append(
+            f"{item.quantity}X - {item.product.title} - ₦{subtotal:,}"
+        )
+
     summary = (
         "🧾 *Your New Order Summary*\n\n"
         + "\n".join(lines)
-        + f"\n\n——————————\n*Total: ₦{total_price:,}*"
+        + f"\n\n——————————\n*Total: ₦{total_price:,}*\n\n"
+        + "🍽️ Order sent to the kitchen! 🎉🎉🎉\n\n"
+        + "What would you like to do next?"
     )
 
-    bot.send_message(
-        chat_id=telegram_id,
-        text=summary,
-    )
+    platform = (order.platform or "").lower()
 
-    bot.send_message(
-        chat_id=telegram_id,
-        text="🍽️ Order sent to the kitchen! 🎉🎉🎉\n\nWhat would you like to do next?",
-        reply_markup=None
-    )
+    # ==========================================================
+    # TELEGRAM
+    # ==========================================================
+    if platform == "telegram":
+        bot = Bot(token=TOKEN)
+        bot.send_message(
+            chat_id=telegram_id,
+            text=summary,
+            reply_markup=None,
+            parse_mode="Markdown",
+        )
+        logger.info(f"Telegram notification sent to {telegram_id}")
+
+    # ==========================================================
+    # WHATSAPP
+    # ==========================================================
+    elif platform == "whatsapp":
+        whatsapp_id = order.telegram_user.whatsapp_id
+
+        if not whatsapp_id:
+            logger.warning("No WhatsApp ID found for this user.")
+            return
+
+        try:
+            # Use the synchronous pywa client
+            wa = WhatsApp(
+                phone_id=order.restaurant.whatsapp_phone_number_id,
+                token=order.restaurant.whatsapp_access_token,
+            )
+
+            # ✅ SIMPLE TEXT BUTTONS (THIS WORKS WITH PYWA)
+            buttons = [
+                Button(title="🍽 Order Food", callback_data="order_food"),
+                Button(title="📦 Track Order", callback_data="track_order"),
+                Button(title="🛍️ Checkout/Pay", callback_data="checkout"),
+            ]
+
+            wa.send_message(
+                to=whatsapp_id,
+                text=summary,
+                buttons=buttons
+            )
+
+            logger.info(f"WhatsApp notification sent to {whatsapp_id}")
+
+        except Exception as e:
+            logger.exception(
+                f"Failed to send WhatsApp notification to {whatsapp_id}: {e}"
+            )
+
+    # ==========================================================
+    # UNKNOWN PLATFORM
+    # ==========================================================
+    else:
+        logger.warning(f"Unsupported platform: {platform}")
+
 
 
 @shared_task(bind=True, soft_time_limit=200, max_retries=10)

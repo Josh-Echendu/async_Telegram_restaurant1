@@ -118,7 +118,7 @@ class AuthToken(models.Model):
         self.save(update_fields=['is_used'])
 
     @staticmethod
-    def generate(user_id, platform, restaurant, mode=None, table_number=None):
+    def generate(user_id, platform, restaurant, mode=None):
         import secrets
         from django.utils import timezone
         from datetime import timedelta
@@ -130,7 +130,7 @@ class AuthToken(models.Model):
             platform=platform,
             restaurant=restaurant,
             mode=mode,
-            table_number=table_number,
+            is_used=False,
             expires_at=timezone.now() + timedelta(minutes=5),
         )
 

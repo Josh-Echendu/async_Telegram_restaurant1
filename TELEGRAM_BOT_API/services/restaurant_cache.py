@@ -6,7 +6,7 @@ from cachetools import TTLCache
 from TELEGRAM_BOT_API.core.config import INTERNAL_API_KEY
 
 # TTL: Time to Live, “How long something stays in memory before it disappears” i.e it last for 300 seconds (5 minutes)
-cache = TTLCache(maxsize=2000, ttl=30)  # cache 2000 restaurants
+cache = TTLCache(maxsize=2000, ttl=300)  # cache 2000 restaurants
 lock = asyncio.Lock()
 DRF_URL = "http://web:8000"
 

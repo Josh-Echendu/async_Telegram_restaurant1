@@ -8,7 +8,6 @@ from pywa import WhatsApp
 from pywa.types import Message, Button
 from WHATSAPP_BOT_API.core.config import get_user_session
 
-
 # =========================
 # 📊 LOGGER
 # =========================
@@ -50,6 +49,7 @@ async def start_handler(client: WhatsApp, msg: Message):
     # =========================
     # 🧩 WhatsApp Interactive Buttons (CORRECT FORMAT)
     # =========================
+    
     # ✅ SIMPLE TEXT BUTTONS (THIS WORKS WITH PYWA)
     buttons = [
         Button(title="🍽 Order Food", callback_data="order_food"),
@@ -74,16 +74,6 @@ async def start_handler(client: WhatsApp, msg: Message):
     )
 
     # =========================
-    # 📤 SEND MESSAGE + BUTTONS
-    # =========================
-    # ✅ SEND MESSAGE WITH BUTTONS (NO RAW GRAPH PAYLOADS)
-    await client.send_message(
-        to=user_id,
-        text=welcome_text,
-        buttons=buttons
-    )
-
-    # =========================
     # 🧾 USER REGISTRATION
     # =========================
     username = first_name or f"user_{user_id[-4:]}"
@@ -94,6 +84,16 @@ async def start_handler(client: WhatsApp, msg: Message):
         username=username,
         phone_number=user_phone,
         restaurant_id=restaurant_id
+    )
+
+    # =========================
+    # 📤 SEND MESSAGE + BUTTONS
+    # =========================
+    # ✅ SEND MESSAGE WITH BUTTONS (NO RAW GRAPH PAYLOADS)
+    await client.send_message(
+        to=user_id,
+        text=welcome_text,
+        buttons=buttons
     )
 
 

@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -11,9 +10,24 @@
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
   <script>
-      const tg = window.Telegram.WebApp;
-      const user = tg.initDataUnsafe.user;
-      tg.ready();
+      let tg = null;
+      let user = null;
+      try {
+          tg = window.Telegram.WebApp;
+          user = tg.initDataUnsafe.user;
+          tg.ready();
+      } catch(e) {
+          console.log('Not running in Telegram (likely WhatsApp)');
+      }
+      
+  </script>
+    <script>
+    console.log('RAW TEMPLATE VALUES:', {
+      platform: '{{ platform }}',
+      user_id: '{{ user_id }}',
+      mode: '{{ mode }}',
+      table: '{{ table_number }}'
+    });
   </script>
 
   <script>
@@ -175,13 +189,86 @@
     .meal-card:hover .img-wrapper img {
       transform: scale(1.05);
     }
+
+    /* Rainbow glow animation */
+    @keyframes rainbowGlow {
+      0% {
+        box-shadow: 0 0 20px rgba(255,0,0,0.6), 0 0 40px rgba(255,0,0,0.3);
+      }
+      25% {
+        box-shadow: 0 0 20px rgba(0,255,0,0.6), 0 0 40px rgba(0,255,0,0.3);
+      }
+      50% {
+        box-shadow: 0 0 20px rgba(0,0,255,0.6), 0 0 40px rgba(0,0,255,0.3);
+      }
+      75% {
+        box-shadow: 0 0 20px rgba(255,255,0,0.6), 0 0 40px rgba(255,255,0,0.3);
+      }
+      100% {
+        box-shadow: 0 0 20px rgba(255,0,0,0.6), 0 0 40px rgba(255,0,0,0.3);
+      }
+    }
+
+    @keyframes sparkle {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+      }
+    }
+    
+    .animate-sparkle {
+      animation: sparkle 1s ease-in-out infinite;
+    }
+
+    /* Smooth scrolling for modal */
+    .fixed.inset-0 .overflow-y-auto {
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 #f1f5f9;
+    }
+
+    .fixed.inset-0 .overflow-y-auto::-webkit-scrollbar {
+        width: 4px;
+    }
+
+    .fixed.inset-0 .overflow-y-auto::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 10px;
+    }
+
+    .fixed.inset-0 .overflow-y-auto::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
+    }
+
+    /* Animation for total amount */
+    @keyframes pulse-gentle {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.02); }
+    }
+
+    .bg-gradient-to-r.from-green-50.to-emerald-50 {
+        animation: pulse-gentle 1.5s ease-in-out infinite;
+    }
   </style>
 </head>
 <body class="antialiased">
 
 <!-- ALPINE STORE (frontend mock) - FIXED COMMAS -->
 <div x-data="{
+  restaurantId: window.location.pathname.split('/').filter(p => p)[2], 
+  paymentSessionActive: false,
   telegramId: window.Telegram?.WebApp?.initDataUnsafe?.user?.id ?? 0, // ← FIX: Added comma
+
+  platform: new URLSearchParams(window.location.search).get('platform') || '{{ platform }}',
+  userId: '{{ user_id }}',
+  businessType: '{{ business_type }}',  // ← ADD after userId
+  mode: new URLSearchParams(window.location.search).get('mode') || '{{ mode }}',
+  table_number: new URLSearchParams(window.location.search).get('table') || '{{ table_number|default:'' }}', // ← FIX: Added comma
+
   cart: [], // ← FIX: Added comma
   activeCategory: 'all', // ← FIX: Added comma
   showCart: false, // ← FIX: Added comma
@@ -189,12 +276,48 @@
   toast: { visible: false, message: '' }, // ← FIX: Added comma
   orderId: 'ORD-' + Math.floor(800000 + Math.random()*200000), // ← FIX: Added comma
   
+  // Add these after 'showCheckoutModal: false,'
+  showDeliveryForm: false,
+  deliveryInfo: {
+    fullName: '',
+    phone: '',
+    address: '',
+    landmark: '',
+    specialInstructions: ''
+  },
+  isSubmittingDelivery: false,
+
+  // ========== TABLE SELECTION FOR WHATSAPP DINE-IN ==========
+  showTableModal: false,
+  selectedTable: null,
+  maxTables: {{ max_tables|default:10 }},
+  // ===========================================================
+
+  // ========== OTP VERIFICATION FOR DINE-IN ==========
+  showOtpModal: false,
+  otpCode: '',
+  isVerified: false,
+  isVerifying: false,
+  sessionId: null,
+  // ======================================
+
+  // NEW: For price preview screen
+  showPricePreview: false,
+  priceBreakdown: {
+      subtotal: 0,
+      vat: 0,
+      total: 0,
+      prep_time: 0,           // ← ADD THIS
+      prep_time_display: ''   // ← ADD THIS
+  },
+  isPreviewLoading: false,
+
   // bright, aspirational menu (like Shopify frontpage)
   meals: [], // ← FIX: Added comma
   allmeals: [], // for 'all' category caching // ← FIX: Added comma
   currentPage: 1, // ← FIX: Added comma
   perPage: 3, // ← FIX: Added comma
-
+ 
   mapProducts(products, categoryOverride = null) {
     return products.map(p => ({
       pid: String(p.pid),
@@ -203,93 +326,224 @@
       price: parseFloat(p.price),
       category: categoryOverride ?? String(p.category),
       image: p.image,
-      in_stock: p.in_stock !== false
+      in_stock: p.in_stock !== false,
+
+      // 🔥 SMART PREP TIME DETECTION
+      prep_time_minutes: p.prep_time_minutes || null,
+      prep_days: p.prep_days || null,
+      business_type: '{{ business_type }}'
     }));
-  }, // ← FIX: Added comma
+  },
 
+  // Add this utility function inside your x-data
+  async handleApiError(error, defaultMessage) {
 
-  async loadProducts(cid) {
+      if (error.response) {
+          // Check for session invalid response
+          if (error.response.data && error.response.data.session === false) {
+              const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
+              
+              const verifiedKey = `dine_in_verified_${userId}_${this.restaurantId}`;
+              const sessionIdKey = `dine_in_session_id_${userId}_${this.restaurantId}`;
+              const tableKey = `dine_in_table_${userId}_${this.restaurantId}`;
+              
+              this.sessionId = null;
+              this.isVerified = false;
 
-    try {
+              localStorage.removeItem(verifiedKey);
+              localStorage.removeItem(sessionIdKey);
+              localStorage.removeItem(tableKey);
+              this.showOtpModal = true;
+              this.toast = { visible: true, message: 'Session expired. Please verify again.' };
+              setTimeout(() => this.toast.visible = false, 3000);
+              return true; // Handled
+          }
+          
+          // Check for 401 unauthorized
+          if (error.response.status === 401) {
+                          
+              const verifiedKey = `dine_in_verified_${userId}_${this.restaurantId}`;
+              const sessionIdKey = `dine_in_session_id_${userId}_${this.restaurantId}`;
+              const tableKey = `dine_in_table_${userId}_${this.restaurantId}`;
+              
+              this.sessionId = null;
+              this.isVerified = false;
 
+              localStorage.removeItem(verifiedKey);
+              localStorage.removeItem(sessionIdKey);
+              localStorage.removeItem(tableKey);
+              this.showOtpModal = true;
+              this.toast = { visible: true, message: error.response.data?.error || 'Session expired. Please verify again.' };
+              setTimeout(() => this.toast.visible = false, 3000);
+              return true; // Handled
+          }
+      }
+      return false; // Not handled
+  },
+
+  async loadProducts(cid, retries = 3) {
       const pathParts = window.location.pathname.split('/').filter(p => p);
       const restaurantId = pathParts[2];
 
-      const url = `/api/restaurant/${restaurantId}/products/${cid}/`;
+      if (!restaurantId) {
+          this.toast = { visible: true, message: 'Restaurant ID missing. Please scan QR again.' };
+          return;
+      }
 
-      const response = await axios.get(url);
+      for (let attempt = 1; attempt <= retries; attempt++) {
+          try {
+              const url = `/api/restaurant/${restaurantId}/products/${cid}/?mode=${this.mode}`;
 
-      console.log('API response:', response.data);
+              // 🔥 Build headers with session_id for dine-in users
+              const headers = {};
+              
+              // Only add session_id for dine-in mode (security)
+              if (this.mode === 'dine_in' && this.sessionId) {
+                  headers['X-Session-ID'] = this.sessionId;
+              }
+              
+              const response = await axios.get(url, { 
+                  timeout: 20000,
+                  headers: headers
+              });
+              console.log('category_data: ', response.data)
 
-      const categoryProducts = response.data.category_products;
-      const allProducts = response.data.all;
+              const categoryProducts = response.data.category_products;
+              const allProducts = response.data.all;
 
-      // Always update ALL meals cache
-      this.allmeals = this.mapProducts(allProducts);
+              // Always update ALL meals cache
+              this.allmeals = this.mapProducts(allProducts);
 
-      // Update current visible meals
-      this.meals = this.mapProducts(
-        categoryProducts,
-        cid === 'all' ? null : String(cid)
-      );
-      console.log('Mapped meals:', this.meals);
+              // Update current visible meals
+              this.meals = this.mapProducts(
+                  categoryProducts,
+                  cid === 'all' ? null : String(cid)
+              );
 
-      // Sort current meals
-      this.meals.sort((a, b) => b.in_stock - a.in_stock);
+              // Sort by in_stock descending
+              this.meals.sort((a, b) => b.in_stock - a.in_stock);
 
-      // 🔥 IMPORTANT: validate cart against ALL products (not category only)
-      this.validateCart();
+              // Validate cart against all products
+              this.validateCart();
 
-    } catch (error) {
+              console.log('Loaded products successfully:', this.meals);
+              return; // success, exit retry loop
 
-      console.error('Failed to load products:', error);
-      this.meals = [];
+          } catch (error) {
+              console.warn(`Attempt ${attempt} failed to load products:`, error);
+
+              // Most common ways to read errors:
+              console.log('Full error object:', error);
+              console.log('Error message:', error.message);
+              console.log('Response data:', error.response?.data);
+              console.log('Status code:', error.response?.status);
+
+              // 🔥 CHECK IF SESSION ERROR WAS HANDLED
+              const handled = await this.handleApiError(error, 'Failed to load Products');
+              if (handled) {
+                  this.loading = false;
+                  return;
+              }
+
+              if (attempt === retries) {
+                  // Max retries reached
+                  this.meals = [];
+                  const message = error.response?.status === 404
+                      ? 'Products not found. Please scan QR again.'
+                      : 'Network error. Please try again later.';
+                  this.toast = { visible: true, message };
+              } else {
+                  // Retry after a short delay (1s, 2s, 3s)
+                  await new Promise(r => setTimeout(r, 1000 * attempt));
+              }
+          }
       }
   }, // ← FIX: Added comma
-
   
-  categories: [], // ← FIX: Added comma
+  categories: [], 
+  restaurantName: 'Fork & Co.', // Default value
+  restaurantImage: '',
+  loading: false,
 
-  async loadCategories() {
-    try {
-      const pathParts = window.location.pathname.split('/').filter(p => p);
-      const restaurantId = pathParts[2]; // this gives 'res533f34g214'
-      console.log('Loading categories for restaurant ID:', restaurantId);
+  async loadCategories(retries = 3) {
+    const pathParts = window.location.pathname.split('/').filter(p => p);
+    const restaurantId = pathParts[2];
 
-      const response = await axios.get(
-        `/api/restaurant/${restaurantId}/categories/`
-      );
-      console.log('Categories loaded:', response.data);
-
-      this.categories = [
-        { id: 'all', name: 'All' },
-        ...response.data.map(cat => ({
-          id: cat.cid,
-          name: cat.title
-        }))
-      ];
-
-    } catch (error) {
-
-        console.error('Full error:', error);
-
-        if (error.response && error.response.status === 404) {
-
-            this.toast = {
-                visible: true,
-                message: 'Restaurant not found. Please scan QR again.'
-            };
-
-        } else {
-
-            this.toast = {
-                visible: true,
-                message: 'Network error. Please try again.'
-            };
-
-        }
-
+    if (!restaurantId) {
+        this.toast = {
+            visible: true,
+            message: 'Restaurant is missing. Please scan QR again.'
+        };
+        return;
     }
+
+    this.loading = true;
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+
+            // 🔥 Build headers with session_id for dine-in users
+            const headers = {};
+
+            // Only add session_id for dine-in mode (security)
+            if (this.mode === 'dine_in' && this.sessionId) {
+                headers['X-Session-ID'] = this.sessionId;
+            }
+
+            const response = await axios.get(
+                `/api/restaurant/${restaurantId}/categories/?mode=${this.mode}`,
+                { 
+                  timeout: 20000, // 20s timeout
+                  headers: headers
+                }  
+            );
+
+
+            // ✅ CHANGE THIS LINE: Look inside response.data.categories
+            const categoryData = response.data.categories;
+            
+            this.restaurantName = response.data.restaurant_name || 'Fork & Co.';
+            this.restaurantImage = response.data.restaurant_image || '';
+            
+            this.categories = [
+              { id: 'all', name: 'All' },
+              ...categoryData.map(cat => ({
+                  id: cat.cid, // Ensure this matches your serializer field
+                  name: cat.title,
+                  restaurant_name: response.data.restaurant_name, // Use the new data!
+                  restaurant_image: response.data.restaurant_image,
+              }))
+            ];
+            
+            this.loading = false;
+            console.log('success......', this.categories)
+            return; // success, exit retry loop
+
+        } catch (error) {
+            console.error(`Attempt ${attempt} failed:`, error);
+
+            // 🔥 CHECK IF SESSION ERROR WAS HANDLED
+            const handled = await this.handleApiError(error, 'Failed to load Category');
+              if (handled) {
+                  this.loading = false;
+                  return;
+              }
+            if (attempt === retries) {
+                // Max retries reached
+                const message = error.response?.status === 404
+                    ? 'Restaurant not found. Please scan QR again.'
+                    : 'Network error. Please try again later.';
+
+                this.toast = { visible: true, message };
+            } else {
+                // Retry after a short delay
+                await new Promise(r => setTimeout(r, 1000 * attempt));
+                console.log('retrying.........');
+            }
+        }
+    }
+
+    this.loading = false;
   }, // ← FIX: Added comma
 
   validateCart() {
@@ -314,7 +568,9 @@
 
     });
 
-    localStorage.setItem(`fork_cart_${this.telegramId}`, JSON.stringify(this.cart));
+    // Use the appropriate user identifier
+    const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
+    localStorage.setItem(`fork_cart_${userId}_${this.restaurantId}`, JSON.stringify(this.cart));
 
     console.log('Cart validated against ALL meals:', this.cart);
   }, // ← FIX: Added comma
@@ -339,14 +595,29 @@
   }, // ← FIX: Added comma
   
   get cartTotal() {
-    return this.cart.reduce((acc, i) => acc + (i.price * i.quantity), 0).toFixed(2);
+    return this.cart.reduce((acc, i) => acc + (i.price * i.quantity), 0);
   }, // ← FIX: Added comma
 
   saveCart() {
-    localStorage.setItem(`fork_cart_${this.telegramId}`, JSON.stringify(this.cart));
+      
+      // Use the appropriate user identifier based on platform
+      const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
+      const key = `fork_cart_${userId}_${this.restaurantId}`;
+      
+      localStorage.setItem(key, JSON.stringify(this.cart));
   }, // ← FIX: Added comma
-  
+    
   addToCart(meal) {
+
+    // stop if payment in session
+    if (this.paymentSessionActive) {
+      this.toast = {
+        visible: true,
+        message: '⚠️ You have a pending payment. Complete it before ordering again.'
+      };
+      setTimeout(() => this.toast.visible = false, 10000);
+      return;
+    }
 
     // STOP if out of stock
     if (!meal.in_stock) {
@@ -385,13 +656,122 @@
 
     this.saveCart();
   }, // ← FIX: Added comma
-  
+
   clearCart() {
     this.cart = [];
-    localStorage.removeItem(`fork_cart_${this.telegramId}`);
-  }, // ← FIX: Added comma
-  
+    
+    // Use the appropriate user identifier
+    const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
+    localStorage.removeItem(`fork_cart_${userId}_${this.restaurantId}`);
+  },  // ← FIX: Added comma
+
+  initTableSelection() {
+    
+    console.log('Initializing table selection:', {
+      platform: this.platform,
+      mode: this.mode,
+      table_number: this.table_number
+    });
+
+    // Only show table modal for WhatsApp dine-in users who don't have a table yet
+    if (this.platform === 'whatsapp' && this.mode === 'dine_in' && !this.table_number) {
+        this.showTableModal = true;
+    }
+  },
+
+  async verifyOtp() {
+    if (!this.otpCode || this.otpCode.length !== 6) {
+        this.toast = { visible: true, message: '⚠️ Please enter a valid 6-digit OTP code' };
+        setTimeout(() => this.toast.visible = false, 3000);
+        return;
+    }
+    
+    this.isVerifying = true;
+    
+    try {
+        const payload = {
+            restaurant_id: this.restaurantId,
+            otp_code: this.otpCode,
+            platform: this.platform
+        };
+        
+        if (this.platform === 'telegram') {
+            payload.telegram_id = this.telegramId;
+        } else if (this.platform === 'whatsapp') {
+            payload.whatsapp_id = this.userId;
+        }
+        
+        const response = await axios.post('/restaurants/dine-in/verify-otp/', payload);
+        
+        if (response.data.success) {
+            this.isVerified = true;
+            this.sessionId = response.data.session_id;
+            this.table_number = response.data.table_number;
+            this.showOtpModal = false;
+            
+            // ✅ FIXED: Use user-specific keys
+            const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
+            const verifiedKey = `dine_in_verified_${userId}_${this.restaurantId}`;
+            const sessionIdKey = `dine_in_session_id_${userId}_${this.restaurantId}`;
+            const tableKey = `dine_in_table_${userId}_${this.restaurantId}`;
+            
+            localStorage.setItem(verifiedKey, 'true');
+            localStorage.setItem(tableKey, this.table_number);
+            localStorage.setItem(sessionIdKey, response.data.session_id);
+            
+            this.toast = { visible: true, message: `✅ Verified! Table ${this.table_number}` };
+            setTimeout(() => this.toast.visible = false, 3000);
+            
+            this.loadCategories();
+            this.loadProducts('all');
+        }
+    } catch (error) {
+        const errorMsg = error.response?.data?.error || 'Invalid OTP';
+        this.toast = { visible: true, message: `❌ ${errorMsg}` };
+        setTimeout(() => this.toast.visible = false, 4000);
+        this.otpCode = '';
+    } finally {
+        this.isVerifying = false;
+    }
+  },
+    
+
+  initOtpVerification() {
+
+
+      // ✅ Use user-specific keys
+      const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
+      const verifiedKey = `dine_in_verified_${userId}_${this.restaurantId}`;
+      const sessionIdKey = `dine_in_session_id_${userId}_${this.restaurantId}`;
+      const tableKey = `dine_in_table_${userId}_${this.restaurantId}`;
+
+      const verified = localStorage.getItem(verifiedKey);
+      const savedSessionId = localStorage.getItem(sessionIdKey);
+      const savedTable = localStorage.getItem(tableKey);
+      
+      if (verified === 'true' && savedSessionId && this.mode === 'dine_in') {
+          this.isVerified = true;
+          this.sessionId = savedSessionId;
+          this.table_number = savedTable;
+          console.log('all verified here, user is a dine_in and is verified')
+          return;
+      }
+      
+      if (this.mode === 'dine_in' && !this.isVerified) {
+          this.showOtpModal = true;
+      }
+  },
+
   placeOrder() {
+
+    if (this.paymentSessionActive) {
+      this.toast = {
+        visible: true,
+        message: '⚠️ You have a pending payment. Complete it before ordering again.'
+      };
+      setTimeout(() => this.toast.visible = false, 10000);
+      return;
+    }
 
     // FIRST: block if out of stock exists
     if (this.cart.some(item => !item.in_stock)) {
@@ -422,76 +802,466 @@
     // THIRD: allow checkout
     this.orderId = 'ORD-' + Math.floor(800000 + Math.random()*200000);
     this.showCheckoutModal = true;
+
+    // Check mode: if delivery, show delivery form first
+    if (this.mode === 'delivery') {
+      this.showCheckoutModal = false;
+      this.showDeliveryForm = true;
+    } else {
+      // Dine-in: show checkout modal directly
+      this.showCheckoutModal = true;
+    }
   }, // ← FIX: Added comma
 
   get hasOutOfStockItems() {
     return this.cart.some(item => !item.in_stock);
   }, // ← FIX: Added comma
+
+  formatPrice(value) {
+    // Convert float to integer (no decimals) and add commas
+    return Number(value).toLocaleString('en-NG', { maximumFractionDigits: 0 });
+  },
   
 
-  async confirmOrder() {
-    try {
+  async confirmOrder(maxRetries = 5, baseDelay = 800) {
 
-        const pathParts = window.location.pathname.split('/').filter(p => p);
-        const restaurantId = pathParts[2]; // this gives 'res533f34g214'
-        console.log('Submitting order for restaurant ID:', restaurantId);
-
-        // Send order to backend
-        const response = await axios.post(`/api/order_batches/${restaurantId}/`, {
-            cart_items: this.cart.map(i => ({pid: i.pid, quantity: i.quantity})),
-            idempotency_key: 'ORD-' + Math.floor(800000 + Math.random() * 200000),
-            init_data: window.Telegram.WebApp.initData
-
-        });
-
-        const data = response.data;
-        console.log(data)
-        console.log(data)
-
-
-        if (data.success) {
-            // ✅ Order fully successful
-            this.showCheckoutModal = false;
-            this.showCart = false;
-            this.clearCart();
-
-            this.toast = {
-                visible: true,
-                message: '🍽️ Your order was placed successfully! Check WhatsApp for details.'
-            };
-            setTimeout(() => this.toast.visible = false, 7200);
-            
-
-        } else if (data.out_of_stock && data.product_ids && data.product_ids.length > 0) {
-            // ⚠️ Some items out of stock
-            this.cart = this.cart.map(item => {
-                if (data.product_ids.includes(item.pid)) {
-                    return { ...item, in_stock: false };
-                }
-                return item;
-            });
-
-            this.saveCart();
-            this.loadProducts(this.activeCategory);
-
-            // Keep cart open so user sees changes
-            this.showCheckoutModal = false;
-            this.showCart = true;
-
-            this.toast = {
-                visible: true,
-                message: '⚠️ Some items are out of stock and have been disabled in your cart.'
-            };
-            setTimeout(() => this.toast.visible = false, 10000);
-        }
-
-    } catch (error) {
-        console.error('Order submission failed:', error);
+      if (this.paymentSessionActive) {
         this.toast = {
-            visible: true,
-            message: '❌ Failed to place order. Please try again.'
+          visible: true,
+          message: '⚠️ You have a pending payment. Complete it before ordering again.'
         };
-        setTimeout(() => this.toast.visible = false, 7000);
+        setTimeout(() => this.toast.visible = false, 10000);
+        return;
+      }
+
+      const pathParts = window.location.pathname.split('/').filter(p => p);
+      const restaurantId = pathParts[2];
+      if (!restaurantId) {
+          this.toast = { visible: true, message: 'Restaurant ID missing. Please scan QR again.' };
+          return;
+      }
+
+      // Prepare payload
+      const payload = {
+          cart_items: this.cart.map(i => ({ pid: i.pid, quantity: i.quantity })),
+          idempotency_key: 'ORD-' + Math.floor(800000 + Math.random() * 200000),
+          mode: 'dine_in',
+          table_number: this.table_number,
+          platform: this.platform,  // ← ADD THIS
+          session_id: this.sessionId
+
+      };
+      console.log('table_number: ', payload)
+
+      // Add platform-specific authentication
+      if (this.platform === 'telegram') {
+          payload.init_data = window.Telegram.WebApp.initData;
+      } else if (this.platform === 'whatsapp') {
+          payload.user_id = this.userId;  // From Django template
+      }
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+              console.log(`Submitting order, attempt ${attempt}...`);
+
+              const response = await axios.post(
+                  `/api/order_batches/${restaurantId}/`,
+                  payload,
+                  { timeout: 10000 } // 8s timeout
+              );
+
+              const data = response.data;
+              console.log(data)
+
+              // ✅ Handle blocked (payment in progress)
+              if (data.blocked) {
+                this.paymentSessionActive = true;
+
+                this.toast = {
+                  visible: true,
+                  message: '⚠️ You have a pending payment. Complete it before ordering again.'
+                };
+
+                setTimeout(() => this.toast.visible = false, 10000);
+                return data;
+              }
+
+              // ✅ Handle fully successful order
+              if (data.success) {
+                  this.showCheckoutModal = false;
+                  this.showCart = false;
+                  this.clearCart();
+
+                  const successMessage = this.platform === 'telegram' 
+                    ? '🍽️ Your order was placed successfully 🎉🎉🎉! Check Telegram for details.' 
+                    : '🍽️ Your order was placed successfully 🎉🎉🎉! Check WhatsApp for details.';
+
+                  this.toast = { visible: true, message: successMessage };
+                  setTimeout(() => this.toast.visible = false, 7200);
+                  return data;
+              }
+
+              // ⚠️ Handle partially out-of-stock items
+              if (data.out_of_stock && data.product_ids?.length) {
+                  this.cart = this.cart.map(item => {
+                      if (data.product_ids.includes(item.pid)) return { ...item, in_stock: false };
+                      return item;
+                  });
+
+                  this.saveCart();
+                  this.loadProducts(this.activeCategory); // reload to show updated stock
+                  
+                  // Keep cart open so user sees changes
+
+                  this.showCheckoutModal = false;
+                  this.showCart = true;
+
+                  this.toast = { visible: true, message: '⚠️ Some items are out of stock and have been disabled in your cart.' };
+                  setTimeout(() => this.toast.visible = false, 10000);
+                  return data;
+              }
+
+              // If we get here, server returned some other failure
+              throw new Error('Unexpected server response');
+
+          } catch (error) {
+              console.warn(`Attempt ${attempt} failed:`, error);
+
+              console.log('Full error object:', error);
+              console.log('Error message:', error.message);
+              console.log('Response data:', error.response?.data);
+              console.log('Status code:', error.response?.status);
+              
+              // Handle 409 Conflict (lock conflict) - just show message and let user retry manually
+              if (error.response?.status === 409) {
+                  const message = error.response?.data?.message || 'Another order is being processed. Please wait and try again.';
+                  this.toast = { visible: true, message };
+                  setTimeout(() => this.toast.visible = false, 5000);
+                  return; // Stop here, don't retry automatically
+              }
+
+              // Check if error is network-related
+              const isNetworkError = !error.response || error.code === 'ECONNABORTED';
+
+              if (attempt === maxRetries || !isNetworkError) {
+                  // Max retries reached or server error (e.g., 400, 403)
+                  this.toast = { visible: true, message: '❌ Failed to place order. Please try again.' };
+                  setTimeout(() => this.toast.visible = false, 7000);
+                  console.error('Final error:', error);
+                  return null;
+              }
+
+              // 🔹 Graceful retry: exponential backoff + jitter
+              const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 500;
+              console.log(`Retrying in ${Math.floor(delay)}ms...`);
+              await new Promise(r => setTimeout(r, delay));
+          }
+      }
+  },
+
+  // REPLACED: Now calls preview first, then shows price screen
+  async submitDeliveryOrder() {
+    if (this.isSubmittingDelivery) return;
+    
+    // Validate delivery info
+    if (!this.deliveryInfo.fullName.trim()) {
+      this.toast = { visible: true, message: 'Please enter your full name' };
+      setTimeout(() => this.toast.visible = false, 3000);
+      return;
+    }
+    
+    if (!this.deliveryInfo.phone.trim()) {
+      this.toast = { visible: true, message: 'Please enter your phone number' };
+      setTimeout(() => this.toast.visible = false, 3000);
+      return;
+    }
+    
+    if (!this.deliveryInfo.address.trim()) {
+      this.toast = { visible: true, message: 'Please enter your delivery address' };
+      setTimeout(() => this.toast.visible = false, 3000);
+      return;
+    }
+    
+    this.isPreviewLoading = true;
+    
+    try {
+      const pathParts = window.location.pathname.split('/').filter(p => p);
+      const restaurantId = pathParts[2];
+      
+      // Step 1: Call PREVIEW API to get calculated prices
+      const previewPayload = {
+        cart_items: this.cart.map(i => ({ pid: i.pid, quantity: i.quantity, price: i.price })),
+      };
+      
+      const previewResponse = await axios.post(
+        `/api/preview-order/${restaurantId}/`,
+        previewPayload,
+        { timeout: 10000 }
+      );
+      
+      const data = previewResponse.data;
+      
+      // CASE 1: Empty cart
+      if (data.empty_cart === true) {
+        // Close delivery form
+        this.showDeliveryForm = false;
+        
+        // Show toast message
+        this.toast = { 
+          visible: true, 
+          message: '🛒 Your cart is empty! Add some items before checkout.' 
+        };
+        setTimeout(() => this.toast.visible = false, 4000);
+        
+        // Close delivery form and don't proceed
+        return;
+      }
+      
+      // CASE 2: Out of stock items detected
+      if (data.out_of_stock === true && data.product_ids) {
+        // Update cart to mark out-of-stock items
+        this.cart = this.cart.map(item => {
+          if (data.product_ids.includes(item.pid)) {
+            return { ...item, in_stock: false };
+          }
+          return item;
+        });
+        
+        // Save the updated cart
+        this.saveCart();
+        
+        // Reload products to refresh stock status
+        this.loadProducts(this.activeCategory);
+        
+        // Close delivery form
+        this.showDeliveryForm = false;
+        
+        // Open cart drawer so user sees the disabled items
+        this.showCart = true;
+        
+        // Show toast with details
+        const removedItems = data.removed_items || [];
+        const message = removedItems.length > 0 
+          ? `⚠️ ${removedItems.join(', ')} ${removedItems.length === 1 ? 'is' : 'are'} out of stock and disabled in your cart.`
+          : '⚠️ Some items are out of stock and have been disabled in your cart.';
+        
+        this.toast = { 
+          visible: true, 
+          message: message
+        };
+        setTimeout(() => this.toast.visible = false, 10000);
+        
+        return;
+      }
+      
+      // CASE 3: Success - all items in stock
+      if (data.success === true) {
+        
+        // Store the price breakdown from backend
+        this.priceBreakdown = {
+          subtotal: data.subtotal,
+          vat: data.vat,
+          delivery_fee: data.delivery_fee,
+          total: data.total,
+          prep_time: data.prep_time_minutes,
+          prep_time_display: data.prep_time_display,
+          prep_days: data.prep_days,  // ← ADD THIS
+          prep_days_display: data.prep_days_display  // ← ADD THIS
+        };
+        
+        // Close delivery form, show price preview
+        this.showDeliveryForm = false;
+        this.showPricePreview = true;
+        return;
+      }
+      
+      // CASE 4: Any other error
+      throw new Error('Unexpected response from preview API');
+      
+    } catch (error) {
+      console.error('Preview failed:', error);
+
+      // Handle 409 Conflict (lock conflict) - just show message and let user retry manually
+      if (error.response?.status === 409) {
+          const message = error.response?.data?.message || 'Another order is being processed. Please wait and try again.';
+          this.toast = { visible: true, message };
+          setTimeout(() => this.toast.visible = false, 5000);
+          return; // Stop here, don't retry automatically
+      }
+      
+      // 🔥 USE your getErrorMessage function to get backend error messages
+      const errorMessage = this.getErrorMessage(error);
+      
+      this.toast = { 
+        visible: true, 
+        message: errorMessage  // ← Now shows actual backend error!
+      };
+      setTimeout(() => this.toast.visible = false, 7000);
+    } finally {
+      this.isPreviewLoading = false;
+    }
+  },
+
+  getErrorMessage(error) {
+    // Network error (no response from server)
+    if (error.request && !error.response) {
+        return '📡 Unable to connect. Please check your internet connection.';
+    }
+    
+    // Server responded with an error
+    if (error.response && error.response.data) {
+        const data = error.response.data;
+        
+        // ✅ ONLY show user-friendly .message
+        if (data.message) {
+            return data.message;
+        }
+ 
+        return '❌ Error just occured. Please try again.';
+    }
+    
+    // Any other error
+    return 'Something went wrong. Please check your connection and try again.';
+},
+
+
+  async confirmDeliveryOrder() {      
+
+    if (this.isSubmittingDelivery) return;
+    
+    this.isSubmittingDelivery = true;
+    
+    try {
+      const pathParts = window.location.pathname.split('/').filter(p => p);
+      const restaurantId = pathParts[2];
+      
+      const payload = {
+        cart_items: this.cart.map(i => ({ pid: i.pid, quantity: i.quantity })),
+        idempotency_key: 'ORD-' + Math.floor(800000 + Math.random() * 200000),
+        delivery_info: this.deliveryInfo,
+        mode: 'delivery',
+        price_breakdown: this.priceBreakdown,  // Send the preview data
+        platform: this.platform, // Pass through platform and userId for backend processing
+      };
+
+      // Add platform-specific authentication
+      if (this.platform === 'telegram') {
+          payload.init_data = window.Telegram.WebApp.initData;
+      } else if (this.platform === 'whatsapp') {
+          payload.user_id = this.userId;  // From Django template
+      }
+      
+      const response = await axios.post(
+        `/api/order_batches/${restaurantId}/`,
+        payload,
+        { timeout: 10000 }
+      );
+      
+      const data = response.data;
+      
+      if (data.success) {
+        this.showPricePreview = false;
+        this.showDeliveryForm = false;
+        this.showCheckoutModal = false;
+        this.showCart = false;
+        this.clearCart();
+        
+        // Reset delivery form
+        this.deliveryInfo = {
+          fullName: '',
+          phone: '',
+          address: '',
+          landmark: '',
+          specialInstructions: ''
+        };
+        
+        const successMessage = this.platform === 'telegram' 
+            ? '🚚 Your delivery order was placed successfully 🎉🎉🎉! Check Telegram for details.' 
+            : '🚚 Your delivery order was placed successfully 🎉🎉🎉! Check WhatsApp for details.';
+          
+        this.toast = { visible: true, message: successMessage };
+
+        setTimeout(() => this.toast.visible = false, 7200);
+        
+      } else if (data.out_of_stock && data.product_ids?.length) {
+        this.cart = this.cart.map(item => {
+          if (data.product_ids.includes(item.pid)) return { ...item, in_stock: false };
+          return item;
+        });
+        this.saveCart();
+        this.loadProducts(this.activeCategory);
+        this.showPricePreview = false;
+        this.showCart = true;
+        
+        this.toast = { 
+          visible: true, 
+          message: '⚠️ Some items are out of stock and have been disabled in your cart.' 
+        };
+        setTimeout(() => this.toast.visible = false, 10000);
+      } else if (data.blocked) {
+        this.paymentSessionActive = true;
+        this.showPricePreview = false;
+        this.toast = {
+          visible: true,
+          message: '⚠️ You have a pending payment. Complete it before ordering again.'
+        };
+        setTimeout(() => this.toast.visible = false, 10000);
+      }
+      
+    } catch (error) {
+      console.error('Delivery order failed:', error);
+
+    // Handle 409 Conflict (lock conflict) - just show message and let user retry manually
+    if (error.response?.status === 409) {
+        const message = error.response?.data?.message || 'Another order is being processed. Please wait and try again.';
+        this.toast = { visible: true, message };
+        setTimeout(() => this.toast.visible = false, 5000);
+        return; // Stop here, don't retry automatically
+    }
+      
+      // Most common ways to read errors:
+      console.log('Full error object:', error);
+      console.log('Error message:', error.message);
+      console.log('Response data:', error.response?.data);
+      console.log('Status code:', error.response?.status);
+        
+      // Get error message using helper function
+      const message = this.getErrorMessage(error);
+      
+      this.toast = { 
+          visible: true, 
+          message: message
+      };
+      setTimeout(() => this.toast.visible = false, 7000);
+
+    } finally {
+      this.isSubmittingDelivery = false;
+    }
+  },
+
+  async checkPaymentSession() {
+    try {
+      const pathParts = window.location.pathname.split('/').filter(p => p);
+      const restaurantId = pathParts[2];
+
+      const res = await axios.post('/api/check-session/', {
+        telegram_id: this.telegramId,
+        restaurant_id: restaurantId
+      });
+
+      if (res.data.has_active_payment) {
+        this.paymentSessionActive = true;
+
+        this.toast = {
+          visible: true,
+          message: '⚠️ You have a pending payment. Complete it before ordering again.'
+        };
+
+        setTimeout(() => this.toast.visible = false, 5000);
+      }
+
+    } catch (err) {
+      console.error('Session check failed', err);
     }
   }
 }"
@@ -499,8 +1269,24 @@
 x-init="
   activeCategory = 'all';
 
-  const saved = localStorage.getItem(`fork_cart_${telegramId}`);
+  const pathParts = window.location.pathname.split('/').filter(p => p);
+  restaurantId = pathParts[2];
+  
+  console.log('platform:', platform);
+  console.log('userId:', userId);
+  console.log('telegramId:', telegramId);
+  console.log('table_number:', table_number);
+  console.log('mode:', mode);
 
+
+  // Determine user identifier based on platform
+  const cartUserId = platform === 'telegram' ? telegramId : userId;
+  const storageKey = `fork_cart_${cartUserId}_${restaurantId}`;
+  const saved = localStorage.getItem(storageKey);
+  
+  console.log('cartUserId: ', cartUserId);  // ✅ No 'this.' because it's a local variable
+  console.log('storageKey: ', storageKey);  // ✅ No 'this.' because it's a local variable
+  
   if (saved) {
     try{
       // REMOVE 'this.' - Alpine maps these directly to your data object
@@ -511,8 +1297,24 @@ x-init="
     }
   }
 
-  loadCategories();
-  loadProducts('all');
+  initOtpVerification();  // ← ADD THIS BEFORE loading categories
+  //initTableSelection();
+
+  // Only load categories if verified or delivery mode
+  if (mode === 'delivery' || isVerified) {
+
+    console.log('about to load categories')
+    loadCategories();
+
+    console.log('about to load products')
+    loadProducts('all');
+  }
+
+  // ✅ Only check payment session for dine-in (delivery is pay-as-you-go)
+  if (mode === 'dine_in') {
+      checkPaymentSession();
+  }
+
 "
 class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
 >
@@ -520,14 +1322,77 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
 <!-- ===== HEADER (sticky, bright) ===== -->
 <header class="sticky top-0 z-40 sticky-bright py-3 sm:py-4 flex items-center justify-between rounded-2xl px-3">
   <div class="flex items-center gap-2">
-    <i class="fas fa-utensils text-3xl text-[#1f2a3f]"></i>
-    <span class="text-2xl sm:text-3xl brand-italic font-bold">fork & co.</span>
+    <!-- <i class="fas fa-utensils text-3xl text-[#1f2a3f]"></i> -->
+    <template x-if="restaurantImage">
+      <img 
+        :src="restaurantImage"
+        class="w-16 h-16 sm:w-16 sm:h-16 rounded-full object-cover shadow-xl border-2 border-white ring-2 ring-[#e9ecf2]">
+    </template>
+
+    <template x-if="!restaurantImage">
+      <i class="fas fa-utensils text-3xl text-[#1f2a3f]"></i>
+    </template>
+
+  <span 
+  class="text-2xl sm:text-3xl brand-italic font-bold"
+  x-text="restaurantName"
+  ></span>    
   </div>
+
   <button @click="showCart = true" class="relative p-2.5 rounded-full bg-white shadow-sm border border-[#e9ecf2]">
     <i class="fas fa-bag-shopping text-xl text-[#1f2a3f]"></i>
     <span x-show="cartCount > 0" x-cloak class="absolute -top-1 -right-1 bg-[#1f2a3f] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">{{ cartCount }}</span>
   </button>
 </header>
+
+<!-- 👇👇👇 ULTRA SPARKLING BADGE CODE (Rainbow Shine) 👇👇👇 -->
+<div class="flex justify-center mt-4 mb-3">
+  <div class="inline-flex items-center gap-4">
+    
+    <!-- DELIVERY MODE BADGE (Ultra Sparkling) -->
+    <span 
+      x-show="mode === 'delivery'"
+      class="relative bg-gradient-to-r from-green-500 to-emerald-600 text-white text-base font-bold px-6 py-2.5 rounded-full flex items-center gap-2"
+      style="border: 2px solid white; box-shadow: 0 0 20px rgba(34,197,94,0.8), 0 0 40px rgba(34,197,94,0.4), inset 0 0 20px rgba(255,255,255,0.3); animation: sparkle 1.5s ease-in-out infinite, rainbowGlow 3s linear infinite;"
+    >
+      <i class="fas fa-truck text-xl"></i>
+      <span>🚚 Delivery</span>
+      
+      <!-- Multiple sparkle stars -->
+      <i class="fas fa-star text-yellow-300 text-xs absolute -top-3 -right-3 animate-bounce" style="filter: drop-shadow(0 0 6px gold);"></i>
+      <i class="fas fa-star text-yellow-300 text-xs absolute -bottom-3 -left-3 animate-bounce" style="animation-delay: 0.5s; filter: drop-shadow(0 0 6px gold);"></i>
+      <i class="fas fa-star text-yellow-300 text-[8px] absolute top-1 right-1 animate-ping" style="animation-delay: 0.2s;"></i>
+      <i class="fas fa-star text-yellow-300 text-[8px] absolute bottom-1 left-1 animate-ping" style="animation-delay: 0.7s;"></i>
+      
+      <!-- Sparkle emojis -->
+      <span class="absolute -top-4 -right-4 text-xl animate-spin" style="animation-duration: 2s;">✨</span>
+      <span class="absolute -bottom-4 -left-4 text-xl animate-spin" style="animation-duration: 2s; animation-delay: 1s;">✨</span>
+    </span>
+    
+    <!-- DINE IN MODE BADGE (Ultra Sparkling) -->
+    <span 
+      x-show="mode === 'dine_in'"
+      class="relative bg-gradient-to-r from-[#1f2a3f] to-[#2b384f] text-white text-base font-bold px-6 py-2.5 rounded-full flex items-center gap-2"
+      style="border: 2px solid white; box-shadow: 0 0 20px rgba(31,42,63,0.8), 0 0 40px rgba(31,42,63,0.4), inset 0 0 20px rgba(255,255,255,0.3); animation: sparkle 1.5s ease-in-out infinite, rainbowGlow 3s linear infinite;"
+    >
+      <i class="fas fa-utensils text-xl"></i>
+      <span>🍽️ Dine In</span>
+      
+      <!-- Multiple sparkle stars -->
+      <i class="fas fa-star text-yellow-300 text-xs absolute -top-3 -right-3 animate-bounce" style="filter: drop-shadow(0 0 6px gold);"></i>
+      <i class="fas fa-star text-yellow-300 text-xs absolute -bottom-3 -left-3 animate-bounce" style="animation-delay: 0.5s; filter: drop-shadow(0 0 6px gold);"></i>
+      <i class="fas fa-star text-yellow-300 text-[8px] absolute top-1 right-1 animate-ping" style="animation-delay: 0.2s;"></i>
+      <i class="fas fa-star text-yellow-300 text-[8px] absolute bottom-1 left-1 animate-ping" style="animation-delay: 0.7s;"></i>
+      
+      <!-- Sparkle emojis -->
+      <span class="absolute -top-4 -right-4 text-xl animate-spin" style="animation-duration: 2s;">✨</span>
+      <span class="absolute -bottom-4 -left-4 text-xl animate-spin" style="animation-duration: 2s; animation-delay: 1s;">✨</span>
+    </span>
+    
+  </div>
+</div>
+<!-- 👆👆👆 END OF ULTRA SPARKLING BADGE CODE 👆👆👆 -->
+
 
 <!-- ===== CATEGORY PILLS (horizontal scroll) ===== -->
 <div class="my-4 flex flex-wrap gap-2 pb-3 no-scrollbar md:justify-start">
@@ -551,37 +1416,65 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
 <div x-ref="productsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
   <template x-for="meal in paginatedMeals" :key="meal.pid">
   <div
-    class="meal-card p-4 flex flex-col"
+    class="meal-card p-4 flex flex-col relative"
     :class="!meal.in_stock ? 'opacity-50 pointer-events-none' : ''"
   >      
     <!-- image container -->
-     <div class="img-wrapper w-full h-44 sm:h-48 bg-[#f5f7fb] rounded-2xl relative">
-        <img :src="meal.image" :alt="meal.name" class="w-full h-full object-cover">
+    <div class="img-wrapper w-full h-44 sm:h-48 bg-[#f5f7fb] rounded-2xl relative">
+      <img :src="meal.image" :alt="meal.name" class="w-full h-full object-cover">
       
-        <!-- ADD THIS BADGE -->
-        <div
-          x-show="!meal.in_stock"
-          class="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow">
-            Out of stock
-        </div>
+      <!-- Out of stock badge -->
+      <div
+        x-show="!meal.in_stock"
+        class="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow">
+        Out of stock
       </div>
       
-      <!-- text -->
-      <div class="mt-3 flex-1">
-        <h3 class="text-sm font-semibold text-[#1a1e2b]" x-text="meal.name"></h3>
-        <p class="text-sm text-[#4b5565] mt-0.5 line-clamp-2" x-text="meal.desc"></p>
+      <!-- 🔥 PREP TIME BADGE - Delivery only, with smart display (Restaurant = minutes, Vendor = days) -->
+      <div 
+        x-show="mode === 'delivery'" 
+        class="absolute bottom-2 right-2 rounded-full shadow-lg flex items-center gap-1 px-2 py-1 text-xs font-bold"
+        :class="businessType === 'restaurant' ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white' : 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white'"
+        style="animation: sparkle 1s ease-in-out infinite; box-shadow: 0 0 10px rgba(249,115,22,0.5);"
+      >
+        <!-- Restaurant: Show minutes -->
+        <template x-if="businessType === 'restaurant' && meal.prep_time_minutes">
+          <div class="flex items-center gap-1">
+            <i class="fas fa-fire text-xs" style="animation: gentle-pulse 0.8s ease-in-out infinite;"></i>
+            <span x-text="meal.prep_time_minutes + ' min'"></span>
+            <i class="fas fa-clock text-xs"></i>
+          </div>
+        </template>
         
-        <!-- price and action row -->
-        <div class="flex items-center justify-between mt-4">
-          <!-- dynamic if in cart -->
-          <template x-for="item in cart.filter(i => i.pid === meal.pid)" :key="item.pid">
-            <div class="flex items-center space-x-1 bg-[#f2f6fd] rounded-full border border-[#dee7f2] p-0.5">
-              <button @click="removeOne(meal.pid)" class="qty-btn w-8 h-8 text-sm"><i class="fas fa-minus"></i></button>
-              <span class="font-semibold w-6 text-center" x-text="item.quantity"></span>
-              <button @click="addToCart(meal)" class="qty-btn w-8 h-8 text-sm"><i class="fas fa-plus"></i></button>
-            </div>
-          </template>
-          
+        <!-- Vendor: Show days -->
+        <template x-if="businessType === 'vendor' && meal.prep_days !== null">
+          <div class="flex items-center gap-1">
+            <i class="fas fa-calendar-day text-xs"></i>
+            <span x-text="meal.prep_days === 0 ? 'Same day' : meal.prep_days + ' day' + (meal.prep_days > 1 ? 's' : '')"></span>
+            <i class="fas fa-hourglass-half text-xs"></i>
+          </div>
+        </template>
+      </div>
+
+      
+    </div>
+    
+    <!-- text -->
+    <div class="mt-3 flex-1">
+      <h3 class="text-sm font-semibold text-[#1a1e2b]" x-text="meal.name"></h3>
+      <p class="text-sm text-[#4b5565] mt-0.5 line-clamp-2" x-text="meal.desc"></p>
+      
+      <!-- price and action row -->
+      <div class="flex items-center justify-between mt-4">
+        <!-- dynamic if in cart -->
+        <template x-for="item in cart.filter(i => i.pid === meal.pid)" :key="item.pid">
+          <div class="flex items-center space-x-1 bg-[#f2f6fd] rounded-full border border-[#dee7f2] p-0.5">
+            <button @click="removeOne(meal.pid)" class="qty-btn w-8 h-8 text-sm"><i class="fas fa-minus"></i></button>
+            <span class="font-semibold w-6 text-center" x-text="item.quantity"></span>
+            <button @click="addToCart(meal)" class="qty-btn w-8 h-8 text-sm"><i class="fas fa-plus"></i></button>
+          </div>
+        </template>
+        
         <button
           x-show="!cart.some(i => i.pid === meal.pid)"
           @click="if(meal.in_stock) addToCart(meal)"
@@ -593,13 +1486,13 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
           <i class="fas fa-cart-plus"></i>
           <span x-text="meal.in_stock ? 'Add' : 'Out of stock'"></span>
         </button>
-          
-          <span class="text-lg font-bold text-[#1f2a3f]">
-            ₦<span x-text="meal.price.toFixed(2)"></span>
-          </span>
-        </div>
+        
+        <span class="text-lg font-bold text-[#1f2a3f]">
+          ₦<span x-text="formatPrice(meal.price)"></span>
+        </span>
       </div>
     </div>
+  </div>
   </template>
 </div>
 
@@ -692,7 +1585,7 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
             <!-- ADD THIS WARNING TEXT -->
             <p
               x-show="!item.in_stock"
-              class="text-red-500 text-sm font-medium"
+              class="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full inline-block mt-1"
             >
               Out of stock
             </p>
@@ -729,7 +1622,7 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
 
                 <span
                   class="font-bold text-[#1f2a3f]"
-                  x-text="'₦' + (item.price * item.quantity).toFixed(2)"
+                  x-text="'₦' + formatPrice(item.price * item.quantity)"
                 ></span>
 
                 <!-- REMOVE BUTTON -->
@@ -760,7 +1653,7 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
     <div class="border-t border-[#eef2f8] p-5 bg-white/80">
       <div class="flex justify-between text-xl font-bold mb-4">
         <span>Total</span>
-        <span class="text-[#1f2a3f]" x-text="'₦' + cartTotal"></span>
+        <span class="text-[#1f2a3f]" x-text="'₦' + formatPrice(cartTotal)"></span>
       </div>
       <button
         @click="if(!hasOutOfStockItems) placeOrder()"
@@ -790,20 +1683,425 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
       <template x-for="item in cart" :key="item.pid">
         <div class="flex justify-between items-center border-b border-[#edf2f9] pb-2">
           <span><span class="font-bold" x-text="item.quantity"></span> × <span x-text="item.name"></span></span>
-          <span class="font-semibold" x-text="'₦' + (item.price * item.quantity).toFixed(2)"></span>
+          <span class="font-semibold" x-text="'₦' + formatPrice(item.price * item.quantity)"></span>
         </div>
       </template>
     </div>
     
     <div class="flex justify-between text-xl font-bold border-t border-[#dde3ed] pt-3">
       <span>total</span>
-      <span x-text="'₦' + cartTotal"></span>
+      <span x-text="'₦' + formatPrice(cartTotal)"></span>
     </div>
     
     <div class="flex gap-3 mt-6">
       <button @click="showCheckoutModal = false" class="flex-1 py-3 border border-[#cfdbe9] rounded-xl text-[#1f2a3f] font-medium">back</button>
       <button @click="confirmOrder()" class="flex-1 bg-[#1f2a3f] text-white py-3 rounded-xl font-semibold shadow flex items-center justify-center gap-2">
         <i class="fab fa-whatsapp"></i> confirm
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DELIVERY FORM MODAL (beautiful delivery info form) ===== -->
+<div x-show="showDeliveryForm" class="fixed inset-0 z-50 flex items-center justify-center p-4" @keydown.escape.window="showDeliveryForm = false">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" @click="showDeliveryForm = false"></div>
+  <div class="relative bg-white max-w-md w-full rounded-3xl p-6 shadow-2xl border border-[#eef2f8] max-h-[90vh] overflow-y-auto"
+       x-show="showDeliveryForm" x-transition>
+    
+    <!-- Header -->
+    <div class="text-center mb-6">
+      <div class="w-16 h-16 bg-gradient-to-br from-[#1f2a3f] to-[#2b384f] rounded-2xl flex items-center justify-center mx-auto mb-3">
+        <i class="fas fa-truck text-3xl text-white"></i>
+      </div>
+      <h3 class="text-2xl brand-italic font-bold">Delivery Details</h3>
+      <p class="text-sm text-[#6f7c91] mt-1">Where should we send your order?</p>
+    </div>
+    
+    <!-- Form Fields -->
+    <div class="space-y-4">
+      <!-- Full Name -->
+      <div>
+        <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
+          <i class="fas fa-user mr-2"></i>Full Name
+        </label>
+        <input 
+          type="text" 
+          x-model="deliveryInfo.fullName"
+          placeholder="Enter your full name"
+          class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all"
+        >
+      </div>
+      
+      <!-- Phone Number -->
+      <div>
+        <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
+          <i class="fas fa-phone mr-2"></i>Phone Number
+        </label>
+        <input 
+          type="tel" 
+          x-model="deliveryInfo.phone"
+          placeholder="e.g., 08012345678"
+          class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all"
+        >
+      </div>
+      
+<!-- Delivery Address -->
+<div>
+  <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
+    <i class="fas fa-location-dot mr-2"></i>Delivery Address
+  </label>
+  <textarea 
+    x-model="deliveryInfo.address"
+    rows="2"
+    placeholder="Street name, building number, area..."
+    class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all resize-none"
+  ></textarea>
+</div>
+
+<!-- Landmark (Optional) -->
+<div>
+  <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
+    <i class="fas fa-map-pin mr-2"></i>Landmark (Optional)
+  </label>
+  <input 
+    type="text" 
+    x-model="deliveryInfo.landmark"
+    placeholder="Near the church, opposite the mall..."
+    class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all"
+  >
+</div>
+
+<!-- Special Instructions -->
+<div>
+  <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
+    <i class="fas fa-pen mr-2"></i>Special Instructions (Optional)
+  </label>
+  <textarea 
+    x-model="deliveryInfo.specialInstructions"
+    rows="2"
+    placeholder="Gate code, buzzer number, etc..."
+    class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all resize-none"
+  ></textarea>
+</div>
+</div>
+
+<!-- Order Summary Preview -->
+<div class="mt-6 p-4 bg-[#f8fafd] rounded-xl">
+<div class="flex justify-between text-sm mb-2">
+  <span class="text-[#6f7c91]">Items:</span>
+  <span class="font-semibold" x-text="cartCount + ' item(s)'"></span>
+</div>
+<div class="flex justify-between text-lg font-bold">
+  <span>Total:</span>
+  <span class="text-[#1f2a3f]" x-text="'₦' + formatPrice(cartTotal)"></span>
+</div>
+</div>
+
+<!-- Action Buttons -->
+<div class="flex gap-3 mt-6">
+<button 
+  @click="showDeliveryForm = false" 
+  class="flex-1 py-3 border-2 border-[#dee7f2] rounded-xl text-[#1f2a3f] font-semibold hover:bg-gray-50 transition-all"
+>
+  <i class="fas fa-arrow-left mr-2"></i>Back
+</button>
+<button 
+  @click="submitDeliveryOrder()" 
+  :disabled="isSubmittingDelivery"
+  :class="isSubmittingDelivery ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg transform hover:scale-[1.02]'"
+  class="flex-1 bg-gradient-to-r from-[#1f2a3f] to-[#2b384f] text-white py-3 rounded-xl font-semibold shadow-md flex items-center justify-center gap-2 transition-all"
+>
+  <i class="fas" :class="isSubmittingDelivery ? 'fa-spinner fa-pulse' : 'fa-check-circle'"></i>
+  <span x-text="isSubmittingDelivery ? 'Placing Order...' : 'Confirm Delivery'"></span>
+</button>
+</div>
+</div>
+</div>
+
+<!-- ===== PRICE PREVIEW MODAL (Shows VAT, Delivery Fee, Total) ===== -->
+<!-- ===== PRICE PREVIEW MODAL (Fully Responsive) ===== -->
+<div x-show="showPricePreview" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" @keydown.escape.window="showPricePreview = false">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" @click="showPricePreview = false"></div>
+  <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl border border-[#eef2f8] overflow-y-auto max-h-[95vh]"
+       x-show="showPricePreview" x-transition>
+    
+    <!-- Sticky Header -->
+    <div class="sticky top-0 bg-white z-10 px-5 pt-6 pb-3 border-b border-[#eef2f8]">
+      <div class="text-center">
+        <div class="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3 animate-pulse" style="box-shadow: 0 0 20px rgba(34,197,94,0.5);">
+          <i class="fas fa-receipt text-2xl sm:text-3xl text-white"></i>
+        </div>
+        <h3 class="text-xl sm:text-2xl brand-italic font-bold">Order Summary</h3>
+        <p class="text-xs text-[#6f7c91] mt-1">Review your charges before payment</p>
+      </div>
+    </div>
+    
+    <!-- Scrollable Content -->
+    <div class="px-5 py-4 space-y-3">
+      
+      <!-- Loading State -->
+      <div x-show="isPreviewLoading" class="text-center py-10">
+        <i class="fas fa-spinner fa-pulse text-3xl text-[#1f2a3f]"></i>
+        <p class="mt-2 text-sm text-[#6f7c91]">Calculating your total...</p>
+      </div>
+      
+      <!-- Price Breakdown -->
+      <div x-show="!isPreviewLoading" class="space-y-3">
+        
+        <!-- Cart Items Summary -->
+        <div class="bg-gray-50 rounded-xl p-3">
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-2">
+              <i class="fas fa-shopping-bag text-[#1f2a3f] text-sm"></i>
+              <span class="text-sm font-medium text-[#6f7c91]">Items (<span x-text="cartCount"></span>)</span>
+            </div>
+            <span class="text-base font-bold text-[#1f2a3f]">₦<span x-text="formatPrice(priceBreakdown.subtotal)"></span></span>
+          </div>
+        </div>
+        
+        <!-- VAT (7.5%) -->
+        <div class="flex justify-between items-center py-2 border-b border-[#eef2f8]">
+          <div class="flex items-center gap-2">
+            <i class="fas fa-percent text-amber-500 text-sm w-5"></i>
+            <div>
+              <span class="text-sm font-medium text-gray-700">VAT (7.5%)</span>
+              <span class="text-xs text-[#6f7c91] block sm:inline sm:ml-2">Value Added Tax</span>
+            </div>
+          </div>
+          <span class="text-sm font-semibold text-amber-600 whitespace-nowrap ml-2">+₦<span x-text="formatPrice(priceBreakdown.vat)"></span></span>
+        </div>
+        
+        <!-- Delivery Fee -->
+        <div class="flex justify-between items-center py-2 border-b border-[#eef2f8]">
+          <div class="flex items-center gap-2">
+            <i class="fas fa-truck text-blue-500 text-sm w-5"></i>
+            <div>
+              <span class="text-sm font-medium text-gray-700">Delivery Fee</span>
+              <span class="text-xs text-[#6f7c91] block sm:inline sm:ml-2">Based on your location</span>
+            </div>
+          </div>
+          <span class="text-sm font-semibold text-blue-600 whitespace-nowrap ml-2">+₦<span x-text="formatPrice(priceBreakdown.delivery_fee)"></span></span>
+        </div>
+        
+        <!-- Preparation Time - ONLY for delivery mode (Restaurant = minutes, Vendor = days) -->
+        <div x-show="mode === 'delivery'" class="rounded-xl p-3" :class="businessType === 'restaurant' ? 'bg-gradient-to-r from-orange-50 to-amber-50' : 'bg-gradient-to-r from-purple-50 to-indigo-50'">
+          <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+            <div class="flex items-center gap-2">
+              <i class="text-sm" :class="businessType === 'restaurant' ? 'fas fa-fire text-orange-500' : 'fas fa-calendar-week text-purple-500'"></i>
+              <span class="text-sm font-medium" :class="businessType === 'restaurant' ? 'text-orange-700' : 'text-purple-700'">Preparation Time</span>
+              <span class="text-xs hidden sm:inline" :class="businessType === 'restaurant' ? 'text-orange-500' : 'text-purple-500'">
+                <span x-show="businessType === 'restaurant'">Kitchen prep + packing</span>
+                <span x-show="businessType === 'vendor'">Processing + delivery</span>
+              </span>
+            </div>
+            <div class="flex items-center justify-between sm:justify-end gap-2">
+              <span class="text-xs sm:hidden" :class="businessType === 'restaurant' ? 'text-orange-500' : 'text-purple-500'">
+                <span x-show="businessType === 'restaurant'">Kitchen prep + packing</span>
+                <span x-show="businessType === 'vendor'">Processing + delivery</span>
+              </span>
+              <div class="flex items-center gap-1 bg-white px-2 py-1 rounded-full shadow-sm">
+                <!-- Restaurant: Show minutes -->
+                <template x-if="businessType === 'restaurant'">
+                  <div class="flex items-center gap-1">
+                    <i class="fas fa-fire text-xs text-orange-500 animate-pulse"></i>
+                    <span class="text-sm font-bold text-orange-600" x-text="priceBreakdown.prep_time_display || priceBreakdown.prep_time + ' min'"></span>
+                  </div>
+                </template>
+                <!-- Vendor: Show days -->
+                <template x-if="businessType === 'vendor'">
+                  <div class="flex items-center gap-1">
+                    <i class="fas fa-calendar-day text-xs text-purple-500"></i>
+                    <span class="text-sm font-bold text-purple-600" x-text="priceBreakdown.prep_days_display || (priceBreakdown.prep_days === 0 ? 'Same day' : priceBreakdown.prep_days + ' day' + (priceBreakdown.prep_days > 1 ? 's' : ''))"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Divider -->
+        <div class="relative my-2">
+          <div class="border-t-2 border-dashed border-[#eef2f8]"></div>
+          <div class="absolute left-1/2 -top-2 -translate-x-1/2 bg-white px-2">
+            <i class="fas fa-star text-yellow-400 text-xs"></i>
+          </div>
+        </div>
+        
+        <!-- Grand Total -->
+        <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4">
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-2">
+              <i class="fas fa-calculator text-green-600 text-base"></i>
+              <span class="text-base font-bold text-[#1f2a3f]">Total Amount</span>
+            </div>
+            <div class="text-right">
+              <span class="text-xl sm:text-2xl font-bold text-green-600">₦<span x-text="formatPrice(priceBreakdown.total)"></span></span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Delivery Info Summary -->
+        <div class="bg-gray-50 rounded-xl p-3 mt-2">
+          <div class="flex items-start gap-2">
+            <i class="fas fa-map-marker-alt text-[#1f2a3f] text-sm mt-0.5"></i>
+            <div class="flex-1">
+              <p class="text-xs font-semibold text-[#1f2a3f]">📦 Delivering to:</p>
+              <p class="text-sm font-medium text-gray-800" x-text="deliveryInfo.fullName"></p>
+              <p class="text-xs text-[#6f7c91] mt-0.5" x-text="deliveryInfo.address"></p>
+            </div>
+          </div>
+        </div>
+        
+      </div>
+      
+    </div>
+    
+    <!-- Sticky Footer with Buttons -->
+    <div class="sticky bottom-0 bg-white border-t border-[#eef2f8] p-4">
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button 
+          @click="showPricePreview = false; showDeliveryForm = true;" 
+          class="order-2 sm:order-1 flex-1 py-3 border-2 border-[#dee7f2] rounded-xl text-[#1f2a3f] font-semibold hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+        >
+          <i class="fas fa-arrow-left"></i>
+          <span>Back</span>
+        </button>
+        <button 
+          @click="confirmDeliveryOrder()" 
+          :disabled="isSubmittingDelivery"
+          :class="isSubmittingDelivery ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg transform hover:scale-[1.02]'"
+          class="order-1 sm:order-2 flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 rounded-xl font-semibold shadow-md flex items-center justify-center gap-2 transition-all"
+          style="animation: rainbowGlow 3s linear infinite;"
+        >
+          <i class="fas" :class="isSubmittingDelivery ? 'fa-spinner fa-pulse' : 'fa-credit-card'"></i>
+          <span x-text="isSubmittingDelivery ? 'Processing...' : 'Pay Now'"></span>
+        </button>
+      </div>
+    </div>
+    
+  </div>
+</div>
+
+<!-- ===== TABLE SELECTION MODAL (WhatsApp Dine-In) ===== -->
+<div x-show="showTableModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" @keydown.escape.window="showTableModal = false">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="showTableModal = false"></div>
+  <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl border border-[#eef2f8] overflow-y-auto max-h-[95vh]"
+       x-show="showTableModal" x-transition>
+    
+    <!-- Sticky Header -->
+    <div class="sticky top-0 bg-white z-10 px-5 pt-6 pb-3 border-b border-[#eef2f8]">
+      <div class="text-center">
+        <div class="w-16 h-16 bg-gradient-to-br from-[#1f2a3f] to-[#2b384f] rounded-2xl flex items-center justify-center mx-auto mb-3">
+          <i class="fas fa-chair text-2xl text-white"></i>
+        </div>
+        <h3 class="text-xl sm:text-2xl brand-italic font-bold">Select Your Table</h3>
+        <p class="text-xs text-[#6f7c91] mt-1">Please choose the table you're sitting at</p>
+      </div>
+    </div>
+    
+    <!-- Scrollable Table Grid -->
+    <div class="p-5">
+    <div class="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-6">
+      <template x-for="tableNum in maxTables" :key="tableNum">
+        <button
+          @click="selectedTable = tableNum"
+          :class="selectedTable === tableNum 
+            ? 'bg-green-500 text-white border-green-500 shadow-md' 
+            : 'bg-white border-gray-200 text-gray-700 hover:border-gray-400 hover:bg-gray-50'"
+          class="relative py-2 rounded-lg border text-sm font-medium transition-all duration-150"
+        >
+          <div class="flex flex-col items-center gap-0.5">
+            <i class="fas fa-chair text-xs" :class="selectedTable === tableNum ? 'text-white' : 'text-gray-400'"></i>
+            <span class="text-xs">Table <span x-text="tableNum"></span></span>
+          </div>
+          <div x-show="selectedTable === tableNum" class="absolute -top-1 -right-1 bg-green-600 rounded-full w-4 h-4 flex items-center justify-center">
+            <i class="fas fa-check text-white text-[8px]"></i>
+          </div>
+        </button>
+      </template>
+    </div>
+      
+      <!-- Confirmation Section -->
+      <div class="bg-blue-50 rounded-lg p-3 mb-4">
+        <div class="flex items-center gap-2">
+          <i class="fas fa-info-circle text-blue-400 text-sm"></i>
+          <p class="text-xs text-blue-700">Select the table you're sitting at</p>
+        </div>
+      </div>
+      
+      <!-- Selected Table Display -->
+    <div class="bg-green-50 rounded-lg p-2 mb-4" x-show="selectedTable">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-green-700">Selected Table:</span>
+        <span class="text-sm font-bold text-green-700">Table <span x-text="selectedTable"></span></span>
+      </div>
+    </div>
+      
+    <!-- Action Buttons -->
+    <div class="flex justify-center mt-4">
+      <button 
+        @click="
+          if(selectedTable) { 
+            table_number = selectedTable; 
+            showTableModal = false; 
+            toast = { visible: true, message: '✅ Table ' + selectedTable + ' confirmed! Start ordering.' }; 
+            setTimeout(() => toast.visible = false, 5000); 
+          } else { 
+            toast = { visible: true, message: '⚠️ Please select a table first' }; 
+            setTimeout(() => toast.visible = false, 5000); 
+          }
+        " 
+        :disabled="!selectedTable" 
+        :class="selectedTable 
+          ? 'bg-green-500 hover:bg-green-600 w-full' 
+          : 'bg-gray-300 cursor-not-allowed w-full'" 
+        class="py-2 rounded-lg text-white text-sm font-medium transition-all"
+      >
+        Confirm Table
+      </button>
+    </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== OTP MODAL (Dine-In Verification) ===== -->
+<div x-show="showOtpModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @keydown.escape.window="showOtpModal = false">
+  <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden">
+    
+    <div class="bg-gradient-to-r from-amber-500 to-orange-500 px-6 pt-8 pb-12 text-center">
+      <div class="absolute -bottom-6 left-1/2 transform -translate-x-1/2">
+        <div class="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-lg animate-bounce">
+          <i class="fas fa-key text-2xl text-amber-500"></i>
+        </div>
+      </div>
+      <h2 class="text-2xl font-bold text-white">Enter OTP Code</h2>
+      <p class="text-amber-100 text-sm mt-1">Ask your waiter for the code</p>
+    </div>
+    
+    <div class="px-6 pb-8 pt-8">
+      <div class="text-center mb-6">
+        <div class="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+          <i class="fas fa-concierge-bell text-3xl text-amber-600"></i>
+        </div>
+        <p class="text-gray-500 text-sm">Please call your waiter and ask for the 6-digit verification code</p>
+      </div>
+      
+      <input 
+        type="text" 
+        x-model="otpCode" 
+        maxlength="6" 
+        placeholder="000000"
+        class="w-full text-center text-2xl tracking-[0.5em] py-4 border border-gray-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition-all mb-5"
+        @keyup.enter="verifyOtp()"
+      >
+      
+      <button 
+        @click="verifyOtp()" 
+        :disabled="isVerifying"
+        :class="isVerifying ? 'bg-gray-400' : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:shadow-lg'"
+        class="w-full text-white py-3 rounded-xl font-semibold transition-all"
+      >
+        <span x-text="isVerifying ? 'Verifying...' : 'Verify & Start Ordering'"></span>
       </button>
     </div>
   </div>

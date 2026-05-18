@@ -23,6 +23,9 @@ from datetime import timedelta
 import json
 from orders.redis_client import redis_client
 from django.urls import reverse
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Create your views here.
@@ -200,15 +203,28 @@ class CreateAuthTokenAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        if platform not in ['whatsapp', 'telegram']:
+        platform = (platform or "").lower()
+
+        if platform not in ['whatsapp']:
             return Response(
                 {"error": "Invalid platform. Must be 'whatsapp' or 'telegram'"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        active_user = get_object_or_404(TelegramUser, whatsapp_id=user_id)
         
         # ✅ Verify restaurant exists
         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
-        
+
+        # Check membership
+        if not RestaurantMembership.objects.filter(
+            user=active_user,
+            restaurant=restaurant
+        ).exists():
+            return Response({"error": "User not linked to this restaurant"}, status=status.HTTP_403_FORBIDDEN)
+       
+        print("i am a member of this restaurant........")
+
         # ✅ Generate token (DB only, no Redis)
         token = AuthToken.generate(
             user_id=user_id,
@@ -216,6 +232,11 @@ class CreateAuthTokenAPIView(APIView):
             restaurant=restaurant,
             mode=request.data.get("mode"),
         )
+
+        # 🔥 ADD THIS DEBUG
+        print(f"🔐 NEW TOKEN CREATED: {token.token}")
+        print(f"   is_used: {token.is_used}")
+        print(f"   expires_at: {token.expires_at}")
         
         # ✅ Secure URL construction with NGROK_DJANGO
         base_url = settings.NGROK_DJANGO.rstrip('/')
@@ -231,12 +252,24 @@ whatsapp_init_session_api_view = CreateAuthTokenAPIView.as_view()
 
 
 def whatsapp_callback_view(request, restaurant_id):
+    
+    # 🔥 Block Facebook crawler immediately
+    user_agent = request.META.get('HTTP_USER_AGENT', '')
+    if 'facebookexternalhit' in user_agent:
+        print("🚫 Blocked Facebook crawler access")
+        return HttpResponse("VibeFlow - Restaurant Ordering System", status=200)
+    
     token = request.GET.get("token")
+    print(f"🔥 CALLBACK CALLED at {timezone.now()}")
+    print(f"   Token: {request.GET.get('token')}")
+    print(f"   Request path: {request.path}")
+    print(f"   User agent: {request.META.get('HTTP_USER_AGENT')}")
+
     
     if not token:
 
         # ✅ No hardcoded URL!
-        error_url = reverse('whatsapp_error', args=[restaurant_id])
+        error_url = reverse('userauths:whatsapp_error', args=[restaurant_id])
         return redirect(f"{error_url}?code=missing_token")
     
     # ✅ Validate token from DATABASE only
@@ -248,9 +281,9 @@ def whatsapp_callback_view(request, restaurant_id):
     except AuthToken.DoesNotExist:
 
         # ✅ No hardcoded URL!
-        error_url = reverse('whatsapp_error', args=[restaurant_id])
+        error_url = reverse('userauths:whatsapp_error', args=[restaurant_id])
+        logger.info('Invalid token provided for restaurant_id %s', restaurant_id)
         return redirect(f"{error_url}?code=invalid_token")
-
 
     # ✅ Check existing session
     if (
@@ -258,19 +291,29 @@ def whatsapp_callback_view(request, restaurant_id):
         request.session.get("restaurant_id") == restaurant_id and
         request.session.get("mode") == auth.mode
     ):
+        print("reuse existing session..........")
         menu_url = reverse('orders:restaurant-detail', args=[restaurant_id])
-        print("ikecukwu menu url: ", menu_url)
+        logger.info("Existing session found for restaurant_id %s", restaurant_id)
         return redirect(f"{menu_url}")
 
-
+    print("no existing session, validating token..........")
     if not auth.is_valid():
-        reverse_url = reverse('whatsapp_error', args=[restaurant_id])
-        return redirect(f"{reverse_url}?token={token}")  # ← FIXED
+        # if request.session.get("user_id") == auth.user_id:
+        #     reverse_url = reverse('whatsapp_login', args=[restaurant_id])
+        #     return redirect(f"{reverse_url}?token={token}")  # ← FIXED
+        
+        reverse_url = reverse('userauths:whatsapp_error', args=[restaurant_id])
+        print('Expired or used token provided for restaurant_id', restaurant_id)
+        return redirect(f"{reverse_url}?code=invalid_token")  # ← FIXED
+    
 
     # ✅ Reset session if different user
     if (request.session.get("user_id") != auth.user_id or
         request.session.get("restaurant_id") != restaurant_id):
+        logger.info('Session reset for restaurant_id %s', restaurant_id)
+        print("session flushed..........")
         request.session.flush()
+
 
     # ✅ Create session
     request.session["user_id"] = auth.user_id
@@ -281,6 +324,7 @@ def whatsapp_callback_view(request, restaurant_id):
     # ✅ Mark token as used (one-time use)
     auth.use()
 
+    logger.info('Token used successfully for restaurant_id %s', restaurant_id)
     restaurant_menu_url = reverse('orders:restaurant-detail', args=[restaurant_id])
     return redirect(f"{restaurant_menu_url}")
 

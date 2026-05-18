@@ -83,7 +83,8 @@ def restaurant_detail(request, restaurant_id):
         "restaurant_id": restaurant_id,
         "table_number": table_number,
         "user_id": user_id,
-        'max_tables': restaurant.max_tables or 10  # ✅ Now restaurant always exists!
+        'max_tables': restaurant.max_tables or 10,  # ✅ Now restaurant always exists!
+        'business_type': restaurant.business_type  # ✅ Now restaurant always exists!
     }
     print("context: ", context)
 
@@ -165,20 +166,21 @@ class CategoryProductsApiView(ListAPIView):
     permission_classes = [AllowAny]
             
     def list(self, request, *args, **kwargs):
-
         mode = request.GET.get('mode')
-        
         if mode:
             mode = mode.lower()
 
         session_id = request.headers.get("X-Session-ID")
+        print('session_id: ', session_id)
         restaurant_id = self.kwargs.get("restaurant_id")
         category_id = self.kwargs.get("category_id")
 
         if not restaurant_id:
             raise Http404("Restaurant ID missing")
 
-      # Session validation for dine-in
+        restaurant = get_object_or_404(Restaurant.objects.only('rid', 'business_type'), rid=restaurant_id)
+
+        # Session validation for dine-in
         if mode == 'dine_in':
             if not session_id:
                 return Response({
@@ -196,15 +198,15 @@ class CategoryProductsApiView(ListAPIView):
                 return Response({
                     "error": "Invalid or expired session",
                     "session": False
-                    },status=401)
+                }, status=401)
 
-        # Get all products with prep_time from category
+        # ✅ Get all products with BOTH annotations
         all_products = Product.objects.filter(
-            restaurant__rid=restaurant_id
+            restaurant=restaurant
         ).select_related('category').order_by('-date').annotate(
-            prep_time_minutes=F('category__prep_time_minutes')
+            prep_time_minutes=F('category__prep_time_minutes'),
+            prep_days=F('category__prep_day'),
         )
-        print("annotted vallues: ", [ i.prep_time_minutes for i in all_products ])
 
         # Serialize all products
         all_data = ProductSerializer(all_products, many=True).data
@@ -225,6 +227,7 @@ class CategoryProductsApiView(ListAPIView):
             "category_products": category_data,
             "all": all_data
         })
+        
     
 category_product_api_view = CategoryProductsApiView.as_view()
     
@@ -568,13 +571,22 @@ class OrderPreviewAPIView(APIView):
             # 4️⃣ Calculate total price from DB prices
             total_price = Decimal('0.00')
             prep_times = []
+            prep_days = []
 
             for item in safe_items:
                 product = product_map.get(item.get('pid'))
                 qty = max(1, int(item.get("quantity", 1)))
                 price = product.price
                 total_price += price * qty
-                prep_times.append(product.category.prep_time_minutes)
+                
+                # 🔥 Restaurant logic (prioritize minutes)
+                if product.category.prep_time_minutes:
+                    prep_times.append(product.category.prep_time_minutes)
+                    continue
+                
+                # 🔥 Vendor logic
+                if product.category.prep_day:
+                    prep_days.append(product.category.prep_day)
 
             # 7️⃣ Calculate VAT (7.5%) and round to 2 decimals
             vat = total_price * Decimal('0.075')  # 7.5% VAT
@@ -588,7 +600,18 @@ class OrderPreviewAPIView(APIView):
             
             # 🔟 Calculate max prep time
             max_prep_time = max(prep_times) if prep_times else restaurant.average_preparation_time
-
+            
+            max_prep_days = max(prep_days) if prep_days else 0
+            
+            prep_days_display = None
+            
+            if max_prep_days == 0:
+                prep_days_display = "Same day"
+            elif max_prep_days == 1:
+                prep_days_display = "1 day"
+            elif max_prep_days > 1:
+                prep_days_display = f"{max_prep_days} days"
+            
             print("sucess")
             data = {
                 "success": True,
@@ -596,9 +619,16 @@ class OrderPreviewAPIView(APIView):
                 "subtotal": total_price,
                 "vat": vat_rounded,
                 "total": grand_price,
+
+                # Restaurant Fields
                 "prep_time_minutes": max_prep_time,
-                "prep_time_display": f"{max_prep_time} min"
+                "prep_time_display": f"{max_prep_time} min",
+
+                # Vendor Fields
+                "prep_days": max_prep_days,
+                "prep_days_display": prep_days_display
             }
+            print("preview data: ", data)
             return Response(data, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -632,7 +662,7 @@ class OrderBatchListCreateAPIView(APIView):
             idempotency_key = str(request.data.get('idempotency_key'))
             service_mode = str(request.data.get("mode"))
             table_number = str(request.data.get("table_number")) if service_mode == "dine_in" else None
-            delivery_info = request.data.get("delivery_info")  # ← NEW for delivery            
+            delivery_info = request.data.get("delivery_info")   # ← NEW for delivery            
             platform = request.data.get('platform')
 
         except (TypeError, ValueError) as e:
@@ -644,6 +674,7 @@ class OrderBatchListCreateAPIView(APIView):
 
         if service_mode:
             service_mode = service_mode.lower()
+                    
         if service_mode == "dine_in" and not table_number: return Response({"message": "Missing table number for dine-in order"}, status=status.HTTP_400_BAD_REQUEST)
         if service_mode == "delivery" and delivery_info is None: return Response({"message": "Missing Delivery information for a delivery order"})
 
@@ -763,7 +794,6 @@ class OrderBatchListCreateAPIView(APIView):
                 restaurant=restaurant,
                 user=user,
                 service_mode=service_mode, 
-                table_number=table_number, 
                 delivery_info=delivery_info,
                 platform=platform
             )

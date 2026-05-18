@@ -88,20 +88,13 @@ async def handle_whatsapp_update(
             user_session = await get_user_session(wa_id)
             user_session.update({
                 "current_rid": restaurant["rid"],
+                "phone_id": restaurant["wa_phone_id"],
                 "restaurant_name": restaurant["bot_name"],
                 "business_type": restaurant["business_type"],
                 "service_mode": restaurant["service_mode"],
                 "max_tables": restaurant["max_tables"],
                 "time_zone": restaurant["time_zone"],
             })
-
-            # Handle table selection button payloads
-            if (
-                "button" in user_info
-                and user_info["button"]["payload"].startswith("table_")
-            ):
-                table_number = user_info["button"]["payload"].replace("table_", "")
-                user_session["table_number"] = table_number
 
             await save_user_session(wa_id, user_session)
 
