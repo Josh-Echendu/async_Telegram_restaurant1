@@ -1,5 +1,6 @@
 from datetime import timedelta
 import time
+from unicodedata import name
 from django.utils import timezone
 import pytz
 from decimal import Decimal, ROUND_HALF_UP
@@ -7,6 +8,9 @@ from django.shortcuts import render
 import uuid
 import requests
 from django.shortcuts import redirect
+
+from restaurants.services import sync_terminal_address
+
 from .utils import is_delivery_available
 from .authentication import TelegramWhatsappAuthentication
 from restaurants.models import RestaurantDeliveryOpeningHours, RestaurantMembership
@@ -37,6 +41,7 @@ from dateutil import parser
 from .squad_signature_helper import verify_squad_signature
 from django.conf import settings
 from restaurants.models import DineInOTPSession
+import secrets
 
 import logging
 logger = logging.getLogger(__name__)
@@ -84,7 +89,8 @@ def restaurant_detail(request, restaurant_id):
         "table_number": table_number,
         "user_id": user_id,
         'max_tables': restaurant.max_tables or 10,  # ✅ Now restaurant always exists!
-        'business_type': restaurant.business_type  # ✅ Now restaurant always exists!
+        'business_type': restaurant.business_type,  # ✅ Now restaurant always exists!
+        "locationiq_key": settings.LOCATIONIQ_KEY,  # ✅ Pass the LocationIQ key to the template
     }
     print("context: ", context)
 
@@ -563,30 +569,27 @@ class OrderPreviewAPIView(APIView):
                     "message": "All selected products are unavailable",
                     "product_ids": product_pids,
                 }, status=status.HTTP_200_OK)
-            
+
+            # create the address_id for customers orders
+            # delivery_address_data = sync_terminal_address(city, country="NG", state, first_name, last_name, phone, line1)
+            delivery_address_id = delivery_address_data.get("address_id")
+
+            packaging_id = settings.TERMINAL_DEFAULT_PACKAGING_ID
+            if not packaging_id:
+                
+                # Get item packaging ID (for delivery orders) 
+                packaging_id = create_package()
+                print("Terminal Package ID: ", packaging_id)
+                
             # 3️⃣ Rebuild cart_items safely from DB truth
             safe_items = [ item for item in cart_items if item.get('pid') in product_map ]
             print("safe_items: ", safe_items)
 
-            # 4️⃣ Calculate total price from DB prices
-            total_price = Decimal('0.00')
-            prep_times = []
-            prep_days = []
+            # 4️⃣ Calculate total price from DB prices and create parcel
+            prep_days, prep_times, total_price, parcel_id = create_parcel_and_calculate_price_and_prep_time(safe_items=safe_items, product_map=product_map, packaging_id=packaging_id)
 
-            for item in safe_items:
-                product = product_map.get(item.get('pid'))
-                qty = max(1, int(item.get("quantity", 1)))
-                price = product.price
-                total_price += price * qty
-                
-                # 🔥 Restaurant logic (prioritize minutes)
-                if product.category.prep_time_minutes:
-                    prep_times.append(product.category.prep_time_minutes)
-                    continue
-                
-                # 🔥 Vendor logic
-                if product.category.prep_day:
-                    prep_days.append(product.category.prep_day)
+            # Get shipping rates from Terminal API
+            shipment_rates = get_shipping_rates(restaurant=restaurant, delivery_address_id=delivery_address_id, parcel_id=parcel_id)
 
             # 7️⃣ Calculate VAT (7.5%) and round to 2 decimals
             vat = total_price * Decimal('0.075')  # 7.5% VAT
@@ -612,7 +615,7 @@ class OrderPreviewAPIView(APIView):
             elif max_prep_days > 1:
                 prep_days_display = f"{max_prep_days} days"
             
-            print("sucess")
+            print("success")
             data = {
                 "success": True,
                 "delivery_fee": delivery_fee,
@@ -1541,6 +1544,243 @@ class UserOrderBatchesAPIView(APIView):
         return Response(data)
     
 batch_list_api_view = UserOrderBatchesAPIView.as_view()
+
+
+def create_package(max_retries=5):
+    """
+        /create_package
+    """
+
+    BASE_URL = "https://sandbox.terminal.africa/v1"
+
+    headers = {
+        "Authorization": f"Bearer {settings.TERMINAL_SECRET_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    payload = {
+        "name": "Standard Food Package",
+        "type": "soft-packaging",
+        "length": 30,
+        "width": 25,
+        "height": 10,
+        "size_unit": "cm",
+        "weight": 0.05,
+        "weight_unit": "kg"
+    }
+
+    for attempt in range(max_retries):  # Retry up to 5 times
+        try:
+            response = requests.post(f"{BASE_URL}/packaging", headers=headers, json=payload, timeout=30)
+            response.raise_for_status()  # Raise an exception for HTTP errors
+            
+            if response.status_code in (201, 200):
+                data = response.json()
+                print("Terminal API response for package: ", data)
+                return data.get("data", {}).get("packaging_id")  # Return the package ID for later use
+        
+        except requests.exceptions.Timeout as e:
+            logger.error(f"timeout error for attempt {attempt + 1}/{max_retries}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to timeouts.")
+
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"connection error for attempt {attempt + 1}/{max_retries}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to Connection errors.")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Terminal API error for attempt {attempt +1 }/{max_retries}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to Terminal API errors.")
+                
+        except Exception as e:
+            logger.error(f"Unexpected error for attempt {attempt + 1}/{max_retries}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to unexpected errors.")
+
+    return None
+
+
+def get_shipping_rates(restaurant, delivery_address_id, parcel_id, max_retries=5):
+    """
+        /get_shipping_rates
+    """
+
+    BASE_URL = "https://sandbox.terminal.africa/v1"
+
+    headers = {
+        "Authorization": f"Bearer {settings.TERMINAL_SECRET_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    url = f"{BASE_URL}/rates/shipment"
+
+
+    payload = {
+        "pickup_address": restaurant.pickup_address_id,
+        "delivery_address": delivery_address_id,
+        "currency": "NGN",
+        "parcel_id": parcel_id,
+        "cash_on_delivery": False
+    }
+
+    for attempt in range(max_retries):  # Retry up to 5 times
+        try:
+            response = requests.get(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()  # Raise an exception for HTTP errors
+            
+            if response.status_code in (201, 200):
+                data = response.json()
+                print("Terminal API response for package: ", data)
+                return data.get("data", [])  # Return the package ID for later use
+        
+        except requests.exceptions.Timeout as e:
+            logger.error(f"timeout error for attempt {attempt + 1}/{max_retries}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to timeouts.")
+
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"connection error for attempt {attempt + 1}/{max_retries}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to Connection errors.")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Terminal API error for attempt {attempt +1 }/{max_retries}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to Terminal API errors.")
+                
+        except Exception as e:
+            logger.error(f"Unexpected error for attempt {attempt + 1}/{max_retries}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to unexpected errors.")
+
+    return None
+
+
+
+def create_parcel_and_calculate_price_and_prep_time(safe_items, product_map, packaging_id, max_retries):
+    """
+        /create_parcel
+    """
+
+    BASE_URL = "https://sandbox.terminal.africa/v1"
+
+    headers = {
+        "Authorization": f"Bearer {settings.TERMINAL_SECRET_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    total_price = Decimal('0.00')
+    prep_times = []
+    prep_days = []
+    items = []
+
+    for item in safe_items:
+
+        product = product_map.get(item.get('pid'))
+        qty = max(1, int(item.get("quantity", 1)))
+        price = product.price
+        total_price += qty * price
+
+        items.extend([
+            {
+                "currency": "NGN",
+                "quantity": qty,
+                "value": total_price,
+                "name": product.title,
+                "description": product.description,
+                "weight": product.weight or 0.5,  # default weight if not provided
+                "type": "parcel"
+            }
+        ])
+
+        # 🔥 Restaurant logic (prioritize minutes)
+        if product.category.prep_time_minutes:
+            prep_times.append(product.category.prep_time_minutes)
+            continue
+        
+        # 🔥 Vendor logic
+        if product.category.prep_day:
+            prep_days.append(product.category.prep_day)
+
+    print("items for parcel: ", items)
+    print("packaging_id for parcel: ", packaging_id)
+    print("prep_days for parcel: ", prep_days)
+    print("prep_times for parcel: ", prep_times)
+    print("total_price for parcel: ", total_price)
+
+    payload = {
+        "items": items,
+        "packaging": packaging_id,
+        "weight_unit": "kg",
+        "meta_data": {
+            "restaurant_id": product.restaurant.rid,
+            "restaurant_name": product.restaurant.name,
+        }   
+    }
+    for attempt in range(max_retries):  # Retry up to max_retries times
+        try:
+            response = requests.post(f"{BASE_URL}/parcels", headers=headers, json=payload, timeout=30)
+            response.raise_for_status()  # Raise an exception for HTTP errors
+
+            if response.status_code in (201, 200):
+                data = response.json()
+                print("Terminal API response for parcel: ", data)
+                parcel_id = data.get("data", {}).get("parcel_id")
+                return prep_days, prep_times, total_price, parcel_id
+
+        except requests.exceptions.Timeout as e:
+            logger.error(f"timeout error for attempt {attempt + 1}/{max_retries}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to timeouts.")
+
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"connection error for attempt {attempt + 1}/{max_retries}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to Connection errors.")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Terminal API error for attempt {attempt + 1}/{max_retries}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to Terminal API errors.")
+                
+        except Exception as e:
+            logger.error(f"Unexpected error for attempt {attempt + 1}/{max_retries}: {str(e)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to unexpected errors.")
+
+    return None
+
+
+
+
+
+class TerminalLogisticsAPIView(APIView):
+
+    def post(self, request, *args, **kwargs):
+        """
+            /addresses
+            /parcels
+            /rates/shipment
+            /shipments
+            /pickups
+            /webhooks
+        """
+        # Business name
+        # Street address
+        # Area or district
+        # City
+        # State
+        # Country
+        # Contact phone number
+        # Latitude and longitude
+        # Delivery instructions (optional)
+
+        return Response({"message": "Terminal logistics integration not implemented yet"}, status=501)
+
 
 
 # Break it into layers:

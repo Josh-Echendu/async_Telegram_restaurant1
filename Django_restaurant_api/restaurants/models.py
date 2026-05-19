@@ -17,31 +17,13 @@ from django.conf import settings
 from django.utils import timezone
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import OperationalError
+from datetime import time, timedelta
+import random
+from .tasks import create_or_update_restaurant_terminal_address
+import logging
 
 
-
-# To differentiate between dine-in and remote users in a Telegram bot without QR codes, use Telegram’s native "Share Location" feature to check proximity, require table number entry, or use deep-linking via Wi-Fi/NFC for automatic detection. These methods ensure accurate order routing to kitchen (dine-in) or delivery systems. 
-# Landbot
-# Landbot
-#  +2
-# Here are the best methods to differentiate without QR codes:
-# Telegram Location Sharing (Geofencing): Prompt the user to "Share Location" within the bot. If the coordinates are within a predefined radius of the restaurant (e.g., 50 meters), tag them as "Dine-In".
-# Table Number/Passcode Entry: Upon starting the bot, immediately ask the user to enter a table number or a dynamic, frequently changing code displayed in the restaurant. Without this, they are defaulted to "Remote".
-# Telegram Web App with Geolocation API: If your bot uses a Mini App (embedded web page), use the browser's Geolocation API to check if the user is on-site before loading the menu.
-# Unique URL/Deep-linking: Create a specific link (e.g., t.me/RestaurantBot?start=table1) and place it on physical table signs, a NFC tap-point, or a Wi-Fi captive portal page. Users who use this link are automatically recognized as diners. 
-# BistroStack
-# BistroStack
-#  +4
-# Dine-In vs. Remote Workflow Example:
-# Start: User initiates the bot.
-# Detection: Bot asks: "Are you here?"
-# Yes: Triggers "Share Location" or asks for Table #. -> Dine-in Menu/Service.
-# No: Defaults to delivery/pickup. -> Delivery Menu.
-# Order Processing: If dine-in, require a table number to submit the order. 
-# BistroStack
-# BistroStack
-#  +1
-
+logger = logging.getLogger(__name__)
 
 
 FAST_API_URL = settings.NGROK_FAST_API
@@ -88,51 +70,51 @@ class Restaurant(models.Model):
     name = models.CharField(max_length=250)
     description = models.TextField(blank=True, null=True)
     image = models.ImageField(upload_to=resturant_image_path, blank=True, null=True)
+
+    first_name = models.CharField(max_length=100, null=True, blank=True)
+    last_name = models.CharField(max_length=100, null=True, blank=True)
+    
+    address = models.CharField(max_length=355, null=True, blank=True,
+        help_text="Physical address of the restaurant"
+    )
+
+    city = models.CharField(max_length=100, null=True, blank=True, 
+                            help_text="City where the restaurant is located"
+    )
+    state = models.CharField(max_length=100, null=True, blank=True, 
+                             help_text="State or region where the restaurant is located"
+    )
+
+    # Terminal API address ID for delivery logistics
+    pick_up_address_id  = models.CharField(max_length=255, null=True, blank=True,
+        help_text="Terminal API address ID for delivery logistics"
+    )
     
     # ========== TELEGRAM BOT FIELDS ==========
     bot_username = models.CharField(max_length=100, blank=True, null=True)
     bot_token = EncryptedCharField(max_length=255, null=True)
-    webhook_secret_token = models.CharField(
-            max_length=255, 
-            default=uuid.uuid4, 
-            help_text="X-Telegram-Bot-Api-Secret-Token", 
-            null=True, 
-            blank=True
-        )    
     is_bot_active = models.BooleanField(default=True, db_index=True)
+    webhook_secret_token = models.CharField(max_length=255, default=uuid.uuid4, null=True, blank=True,
+        help_text="X-Telegram-Bot-Api-Secret-Token"
+    )    
     
     # ========== WHATSAPP BUSINESS FIELDS ==========
-    whatsapp_business_account_id = models.CharField(
-        max_length=255, 
-        null=True, 
-        blank=True,
+    whatsapp_business_account_id = models.CharField(max_length=255, null=True, blank=True,
         help_text="WhatsApp Business Account ID (WABA ID)"
     )
-    whatsapp_phone_number_id = models.CharField(
-        max_length=255, 
-        null=True, 
-        blank=True,
+    whatsapp_phone_number_id = models.CharField(max_length=255, null=True, blank=True,
         help_text="WhatsApp Phone Number ID for sending messages"
     )
-    whatsapp_access_token = EncryptedCharField(
-        max_length=500, 
-        null=True, 
-        blank=True,
+    whatsapp_access_token = EncryptedCharField(max_length=500, null=True, blank=True,
         help_text="WhatsApp Cloud API access token"
     )
-    whatsapp_business_phone = models.CharField(
-        max_length=20, 
-        null=True, 
-        blank=True,
+    whatsapp_business_phone = models.CharField(max_length=20, null=True, blank=True,
         help_text="WhatsApp business phone number (e.g., +2348123456789)"
     )
-    whatsapp_webhook_verified = models.BooleanField(
-        default=False,
+    whatsapp_webhook_verified = models.BooleanField(default=False,
         help_text="Whether WhatsApp webhook has been verified"
     )
-    is_whatsapp_active = models.BooleanField(
-        default=False, 
-        db_index=True,
+    is_whatsapp_active = models.BooleanField(default=False, db_index=True,
         help_text="Whether WhatsApp bot is active"
     )
     
@@ -140,44 +122,34 @@ class Restaurant(models.Model):
     # Real-world use cases: Restaurant closed, Kitchen busy, Maintenance mode
     is_accepting_orders = models.BooleanField(default=True)
     
-    kitchen_chat_id = models.BigIntegerField(
-        null=True, blank=True,
-        help_text="Telegram kitchen group chat ID OR WhatsApp group ID"
+    kitchen_chat_id = models.BigIntegerField(null=True, blank=True,
+        help_text="Telegram Dine-in kitchen group chat ID OR WhatsApp group ID"
     )
     created_at = models.DateTimeField(auto_now_add=True, null=True)
 
     # Delivery support fields
-    delivery_chat_id = models.BigIntegerField(
-        null=True, blank=True, 
+    delivery_chat_id = models.BigIntegerField(null=True, blank=True, 
         help_text="Telegram delivery group chat ID (if supports_delivery is True) OR WhatsApp delivery group ID"
     )
-    service_mode = models.CharField(
-        max_length=20, 
-        choices=SERVICE_MODE_CHOICES, 
+
+    service_mode = models.CharField(max_length=20, choices=SERVICE_MODE_CHOICES, db_index=True,
         help_text="Primary service mode of the business", 
-        db_index=True
     )
-    max_tables = models.PositiveSmallIntegerField(
-        default=0, 
+
+    max_tables = models.PositiveSmallIntegerField(default=0, 
         help_text="Amount of tables a restaurant has for dine-in orders"
     )
     
-    average_preparation_time = models.PositiveIntegerField(
-        default=30, 
+    average_preparation_time = models.PositiveIntegerField(default=30, 
         help_text="Minutes - How long food usually takes before it is ready"
     )
     delivery_fee = models.DecimalField(max_digits=1000, decimal_places=2, default=0)
 
-    business_type = models.CharField(
-        max_length=20, 
-        choices=BUSINESS_TYPE, 
+    business_type = models.CharField(max_length=20, choices=BUSINESS_TYPE, db_index=True,
         help_text="Type of business: Restaurant or Vendor", 
-        db_index=True
     )
 
-    timezone = models.CharField(
-        max_length=50,
-        default='Africa/Lagos',
+    timezone = models.CharField(max_length=50,default='Africa/Lagos',
         choices=[(tz, tz) for tz in pytz.common_timezones],
         help_text="Restaurant's local timezone"
     )
@@ -216,13 +188,11 @@ class Restaurant(models.Model):
     def get_telegram_webhook_url(self):
         return f"{FAST_API_URL}/telegram-webhook/{self.rid}"
     
-    def get_whatsapp_webhook_url(self):
-        return f"{FAST_API_URL}/whatsapp-webhook/{self.rid}"
 
     def get_telegram_deep_url(self):
         return f"https://t.me/{self.bot_username}" if self.bot_username else None
     
-    def get_whatsapp_deep_url(self):
+    def get_whatsapp_deep_url_or_clean_phone(self, terminal=None):
         if not self.whatsapp_business_phone:
             return None
         
@@ -237,7 +207,10 @@ class Restaurant(models.Model):
         elif not clean_phone.startswith('234') and len(clean_phone) == 10:
             clean_phone = '234' + clean_phone
 
-        return f"https://wa.me/{clean_phone}"
+        if not terminal:
+            return f"https://wa.me/{clean_phone}"
+        else:
+            return clean_phone
 
     def restaurant_image(self):
         if self.image:
@@ -252,36 +225,60 @@ class Restaurant(models.Model):
             platform.append("WhatsApp")
         platform_str = f" ({'+'.join(platform)})" if platform else ""
         return f"{self.name}{platform_str}"
- 
-# 🧠 YOUR FINAL DESIGN (CLEAN & CORRECT)
-# 🟢 RESTAURANT
 
-# 👉 Focus: instant / same-day service
 
-# Modes:
-# Dine-in only
-# serve immediately in restaurant 🍽️
-# no delivery
-# Delivery only
-# instant / same-day delivery 🚚
-# no scheduling
-# Hybrid (both)
-# dine-in + instant delivery
+@receiver(post_save, sender=Restaurant)
+def manage_restaurant_webhook(sender, instance, created, **kwargs):
 
-# 👉 ❌ No delayed orders
-# 👉 ❌ No scheduling
+    # 1. Telegram webhook
+    if instance.is_bot_active and instance.bot_token:
+        register_telegram_webhook(instance)
 
-# 🔵 VENDOR
+    location_changed = False
 
-# 👉 Focus: flexible delivery (instant + delayed)
+    # 2. Get old instance (ONLY if updating)
+    if not created:
+        try:
+            old_instance = Restaurant.objects.only(
+                'city', 'state', 'address'
+            ).get(pk=instance.pk)
+        except Restaurant.DoesNotExist:
+            return
 
-# delivery only 🚚
-# supports:
-# instant
-# delayed (24h, 48h…)
-# scheduled delivery
+        location_changed = (
+            old_instance.city != instance.city or
+            old_instance.state != instance.state or
+            old_instance.address != instance.address
+        )
+    else:
+        location_changed = True
 
-# 👉 ❌ No dine-in
+    # 3. Skip if nothing changed
+    if instance.pick_up_address_id and not location_changed:
+        return
+
+    # 4. Trigger Celery task
+    create_or_update_restaurant_terminal_address.delay(
+        restaurant_id=instance.rid,
+        address_id=instance.pick_up_address_id,
+        city=instance.city,
+        country="NG",
+        state=instance.state,
+        first_name=instance.first_name,
+        last_name=instance.last_name,
+        phone=instance.get_whatsapp_deep_url_or_clean_phone(terminal=True),
+        line1=instance.address,
+    )
+
+
+
+@receiver(post_delete, sender=Restaurant)
+def remove_restaurant_webhook(sender, instance, **kwargs):
+    """
+    Handles Deletion.
+    """
+    if instance.bot_token:
+        delete_webhook(instance)
 
 class RestaurantDeliveryOpeningHours(models.Model):
     restaurant = models.ForeignKey(Restaurant, db_index=True, on_delete=models.CASCADE, related_name='delivery_opening_hours')
@@ -325,6 +322,7 @@ class RestaurantMembership(models.Model):
         # one user per resturant
         unique_together = ('user', 'restaurant')
 
+
     # ASK YOURSELF WHO OWNS WHO FIRST
 
     # 🧠 FINAL ANSWER (VERY CLEAR)
@@ -348,41 +346,36 @@ class RestaurantMembership(models.Model):
     # 👉 MANY
     # (many customers)
 
-@receiver(post_save, sender=Restaurant)
-def manage_restaurant_webhook(sender, instance, created, **kwargs):
-    """
-    Handles both Creation and Updates.
-    """
-    if created:
-        # Scenario: New Restaurant created with an active bot
-        if instance.is_bot_active and instance.bot_token:
-            register_telegram_webhook(instance)
-    else:
-        # Scenario: Update to existing Restaurant
-        # We trigger the webhook setup if the bot is active. 
-        # Telegram's setWebhook is idempotent, so calling it again 
-        # just refreshes the configuration.
-        if instance.is_bot_active and instance.bot_token:
-            register_telegram_webhook(instance)
-        # else:
-        #     # If bot was deactivated during update, clean up the webhook
-        #     delete_webhook(instance)
 
-@receiver(post_delete, sender=Restaurant)
-def remove_restaurant_webhook(sender, instance, **kwargs):
-    """
-    Handles Deletion.
-    """
-    if instance.bot_token:
-        delete_webhook(instance)
+# 🧠 YOUR FINAL DESIGN (CLEAN & CORRECT)
+# 🟢 RESTAURANT
 
+# 👉 Focus: instant / same-day service
 
-# models.py
-from django.utils import timezone
-from datetime import timedelta
-import random
-from shortuuid.django_fields import ShortUUIDField
+# Modes:
+# Dine-in only
+# serve immediately in restaurant 🍽️
+# no delivery
+# Delivery only
+# instant / same-day delivery 🚚
+# no scheduling
+# Hybrid (both)
+# dine-in + instant delivery
 
+# 👉 ❌ No delayed orders
+# 👉 ❌ No scheduling
+
+# 🔵 VENDOR
+
+# 👉 Focus: flexible delivery (instant + delayed)
+
+# delivery only 🚚
+# supports:
+# instant
+# delayed (24h, 48h…)
+# scheduled delivery
+
+# 👉 ❌ No dine-in
 
 class DineInOTPSession(models.Model):
     """

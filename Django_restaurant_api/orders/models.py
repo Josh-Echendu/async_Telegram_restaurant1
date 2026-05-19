@@ -142,7 +142,9 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=12, decimal_places=2, default='0.00')
     in_stock = models.BooleanField(default=True)
     date = models.DateTimeField(auto_now_add=True, db_index=True)
-    
+    weight = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.5'),
+        help_text="Weight in kg (optional)")
+
     class Meta:
         verbose_name_plural = 'Products'
         ordering = ['-date']

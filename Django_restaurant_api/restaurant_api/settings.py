@@ -23,6 +23,11 @@ NGROK_FAST_API = os.getenv('NGROK_FAST_API')
 
 WHATSAPP_INTERNAL_API_KEY = os.getenv("WHATSAPP_INTERNAL_API_KEY")  # For verifying WhatsApp requests to Django
 
+TERMINAL_PUBLIC_KEY = os.getenv("TERMINAL_PUBLIC_KEY")
+TERMINAL_SECRET_KEY = os.getenv("TERMINAL_SECRET_KEY")
+
+LOCATIONIQ_KEY = os.getenv("LOCATIONIQ_KEY")
+
 
 
 # Quick-start development settings - unsuitable for production
@@ -333,3 +338,4 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 # To this:
 # TIME_ZONE = 'Africa/Lagos'  # Nigeria timezone (UTC+1)
 
+TERMINAL_DEFAULT_PACKAGING_ID = ""
