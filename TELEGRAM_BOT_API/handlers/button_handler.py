@@ -170,6 +170,11 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await save_user_session(update.effective_user.id, user_session)
 
         await query.answer("🍽️ Dine-in Menu 📜🍔 coming right up! 🎉")
+
+        business_type = user_session.get('business_type')
+        if business_type and business_type.lower() == 'hotel':
+            await menu_keyboard(update, query)
+            return
         await choose_table(update, query)
 
     elif data == "order_delivery":
@@ -285,10 +290,14 @@ async def menu_keyboard(update, query):
     restaurant_id = user_session['current_rid']
     user_service_mode = user_session['user_service_mode']
     table_number = user_session.get('table_number')
+    business_type = (user_session.get('business_type') or "").lower()
 
     platform = "telegram"  # or "whatsapp", depending on the platform
     if user_service_mode == 'dine_in':
-        WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode=dine_in&table={table_number}&platform={platform}"
+        if business_type == 'hotel':
+            WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode=dine_in&platform={platform}"
+        else:
+            WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode=dine_in&table={table_number}&platform={platform}"
 
     elif user_service_mode == 'delivery':
         WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode=delivery&platform={platform}"

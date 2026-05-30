@@ -1,4 +1,7 @@
 (function() {
+    
+    // Check if your script file loaded
+    console.log('Locationiq Script loaded check');
     const input = document.getElementById('address-autocomplete');
     const suggestionsContainer = document.getElementById('address-suggestions');
     let debounceTimer = null;

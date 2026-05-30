@@ -9,7 +9,7 @@ import uuid
 import requests
 from django.shortcuts import redirect
 
-from restaurants.services import get_coords
+from restaurants.services import sync_terminal_address
 
 from .utils import is_delivery_available
 from .authentication import TelegramWhatsappAuthentication
@@ -42,6 +42,8 @@ from .squad_signature_helper import verify_squad_signature
 from django.conf import settings
 from restaurants.models import DineInOTPSession
 import secrets
+
+
 
 import logging
 logger = logging.getLogger(__name__)
@@ -79,9 +81,9 @@ def restaurant_detail(request, restaurant_id):
     # TELEGRAM (init_data / frontend-driven)
     # =========================================
     elif platform == "telegram":
-        mode = (request.GET.get("mode") or "").lower()
-        table_number = request.GET.get("table") if mode == "dine_in" else None
-
+        mode = request.GET.get("mode")
+        table_number = request.GET.get("table")
+    
     context = {
         "mode": mode,
         "platform": platform,
@@ -90,6 +92,9 @@ def restaurant_detail(request, restaurant_id):
         "user_id": user_id,
         'max_tables': restaurant.max_tables or 10,  # ✅ Now restaurant always exists!
         'business_type': restaurant.business_type,  # ✅ Now restaurant always exists!
+        'payment_flow': restaurant.payment_flow or 'prepay', #✅ Pass payment flow to template, default to 'prepay' if not set
+        "locationiq_key": settings.LOCATIONIQ_KEY,  # ✅ Pass the LocationIQ key to the template
+        'maiaddy_token': settings.MAIADDY_API_KEY,
     }
     print("context: ", context)
 
@@ -112,18 +117,9 @@ class CategoryListApiView(ListAPIView):
 
         if not restaurant_id:
             return Response({"error": "restaurant ID missing"}, status=404)
-
-        restaurant = (
-            get_object_or_404(
-                Restaurant.objects.only('name', 'business_type', 'service_mode', 'image'),
-                rid=restaurant_id
-            )
-        )
         
-        business_type = (restaurant.business_type or "").lower()
-
-        # Session validation for restaurant that has dine-in
-        if mode == 'dine_in' and business_type == 'restaurant':
+        # Session validation for dine-in
+        if mode == 'dine_in':
             if not session_id:
                 return Response({
                     "error": "Session is required for dine-in",
@@ -132,7 +128,7 @@ class CategoryListApiView(ListAPIView):
             
             session = DineInOTPSession.objects.filter(
                 session_id=session_id,
-                restaurant=restaurant,
+                restaurant__rid=restaurant_id,
                 status='verified',
             ).only('session_id').first()
 
@@ -142,6 +138,12 @@ class CategoryListApiView(ListAPIView):
                     "session": False
                     }, status=401)
 
+        restaurant = (
+            get_object_or_404(
+                Restaurant.objects.only('name', 'business_type', 'service_mode', 'image'),
+                rid=restaurant_id
+            )
+        )
         categories = Category.objects.filter(restaurant=restaurant)
         serializers = CategorySerializer(categories, many=True)
         print("serialized: ", serializers.data)
@@ -187,10 +189,9 @@ class CategoryProductsApiView(ListAPIView):
             raise Http404("Restaurant ID missing")
 
         restaurant = get_object_or_404(Restaurant.objects.only('rid', 'business_type'), rid=restaurant_id)
-        business_type = (restaurant.business_type or "").lower()
 
         # Session validation for dine-in
-        if mode == 'dine_in' and business_type == 'restaurant':
+        if mode == 'dine_in':
             if not session_id:
                 return Response({
                     "error": "Session ID required for dine-in",
@@ -550,17 +551,15 @@ class OrderPreviewAPIView(APIView):
         
         # Get the restaurant
         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
-        business_type = (restaurant.business_type or "").lower()
         
-        # check delivery availability for restaurants only
-        if business_type == "restaurant":
-            is_available, message = is_delivery_available(restaurant)
-            if not is_available:
-                return Response({
-                    "success": False,
-                    "message": message,
-                    "delivery_unavailable": True
-                }, status=status.HTTP_400_BAD_REQUEST)
+        # check delivery availability
+        is_available, message = is_delivery_available(restaurant)
+        if not is_available:
+            return Response({
+                "success": False,
+                "message": message,
+                "delivery_unavailable": True
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             # Get all instock products for the particular restaurant and the selected products in the cart
@@ -597,55 +596,45 @@ class OrderPreviewAPIView(APIView):
                     "message": "All selected products are unavailable",
                     "product_ids": product_pids,
                 }, status=status.HTTP_200_OK)
+
+            # create the address_id for customers orders
+            success, message, data = sync_terminal_address(
+                city=city, country="NG",
+                state=state, first_name=first_name,
+                last_name=last_name, phone=f"+234{phone}",
+                line1=address
+            )
+            print("delivery_address_data: ", data)
+            print("delivery_message: ", message)
+            print("delivery_success: ", success)
+            delivery_address_id = data.get('data', {}).get("address_id")
+
+            if not success:
+                return Response({
+                    "success": False,
+                    "message": "invalid delivery information ",
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+
+            packaging_id = settings.TERMINAL_DEFAULT_PACKAGING_ID
+            print("from setting: ", packaging_id)
+            if not packaging_id:
+                
+                # Get item packaging ID (for delivery orders) 
+                packaging_id = create_package()
+                print("Terminal Package ID: ", packaging_id)
                 
             # 3️⃣ Rebuild cart_items safely from DB truth
             safe_items = [ item for item in cart_items if item.get('pid') in product_map ]
             print("safe_items: ", safe_items)
 
-            prep_times = []
-            prep_days = []
-            total_price = Decimal('0.00')
+            # 4️⃣ Calculate total price from DB prices and create parcel
+            prep_days, prep_times, total_price, parcel_id = create_parcel_and_calculate_price_and_prep_time(safe_items=safe_items, product_map=product_map, packaging_id=packaging_id)
 
-            for item in safe_items:
-                product = product_map.get(item.get('pid'))
-                qty = max(1, int(item.get("quantity", 1)))
-                price = product.price
-                
-                item_total = qty * price          # ← per-item subtotal
-                total_price += item_total         # ← running total (for your own use)
+            # Get shipping rates from Terminal API
+            shipment_rates = get_shipping_rates(restaurant=restaurant, delivery_address_id=delivery_address_id, parcel_id=parcel_id)
+            print("shipment_rates: ", shipment_rates)
 
-                # Restaurant / Vendor prep time logic
-                if product.category.prep_time_minutes:
-                    prep_times.append(product.category.prep_time_minutes)
-                    continue
-                
-                if product.category.prep_day:
-                    prep_days.append(product.category.prep_day)
-
-            success, msg, coords = get_coords(lga=city, state=state)  # Test the geocoding function with the provided delivery info
-            if not success:
-                return Response({
-                    "success": False,
-                    "message": f"Geocoding failed pick a proper address",
-                    "geocoding_failed": True
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            customer_lat = coords.get("lat")
-            customer_lng = coords.get("lng")
-
-            restaurant_lat = restaurant.latitude
-            restaurant_lng = restaurant.longitude
-
-            distance = haversine(restaurant_lat, restaurant_lng, customer_lat, customer_lng)
-            print(f"Calculated distance: {distance} km")
-            business_type = (restaurant.business_type or "").lower()
-            
-            if business_type == 'restaurant' and distance > restaurant.max_delivery_radius_km:
-                return Response({
-                    "success": False,
-                    "message": f"Sorry, we only deliver within {restaurant.max_delivery_radius_km}km. Your location is {distance:.1f}km away."
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
             # 7️⃣ Calculate VAT (7.5%) and round to 2 decimals
             vat = total_price * Decimal('0.075')  # 7.5% VAT
             vat_rounded = vat.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)  # Round to 2 decimal places Up
@@ -698,21 +687,6 @@ class OrderPreviewAPIView(APIView):
 
 preview_order_api_view = OrderPreviewAPIView.as_view()
 
-
-import math
-
-def haversine(lat1, lng1, lat2, lng2):
-    """Return distance in kilometers between two coordinates."""
-    R = 6371
-    print("haversine: ", lat1, lng1, lat2, lng2)
-    dlat = math.radians(lat2 - lat1)
-    dlng = math.radians(lng2 - lng1)
-    a = (math.sin(dlat / 2) ** 2 +
-         math.cos(math.radians(lat1)) *
-         math.cos(math.radians(lat2)) *
-         math.sin(dlng / 2) ** 2)
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
 
 class OrderBatchListCreateAPIView(APIView):
     throttle_scope = "send_kitchen"            # Tells DRF which limit to use
@@ -1616,6 +1590,244 @@ class UserOrderBatchesAPIView(APIView):
 batch_list_api_view = UserOrderBatchesAPIView.as_view()
 
 
+def create_package(max_retries=5):
+    """
+        /create_package
+    """
+
+    BASE_URL = "https://sandbox.terminal.africa/v1"
+
+    headers = {
+        "Authorization": f"Bearer {settings.TERMINAL_SECRET_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    payload = {
+        "name": "Standard Food Package",
+        "type": "soft-packaging",
+        "length": 30,
+        "width": 25,
+        "height": 10,
+        "size_unit": "cm",
+        "weight": 0.05,
+        "weight_unit": "kg"
+    }
+
+    for attempt in range(max_retries):  # Retry up to 5 times
+        try:
+            response = requests.post(f"{BASE_URL}/packaging", headers=headers, json=payload, timeout=30)
+            response.raise_for_status()  # Raise an exception for HTTP errors
+            
+            if response.status_code in (201, 200):
+                data = response.json()
+                print("Terminal API response for package: ", data)
+                return data.get("data", {}).get("packaging_id")  # Return the package ID for later use
+        
+        except requests.exceptions.Timeout as e:
+            err = error_response(e)
+            logger.error(f"timeout error for attempt {attempt + 1}/{max_retries}: {json.dumps(err, indent=2)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to timeouts.")
+
+        except requests.exceptions.ConnectionError as e:
+            err = error_response(e)
+            logger.error(f"connection error for attempt {attempt + 1}/{max_retries}: {json.dumps(err, indent=2)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to Connection errors.")
+
+        except requests.exceptions.RequestException as e:
+            err = error_response(e)
+            logger.error(f"Terminal API error for attempt {attempt +1 }/{max_retries}: {json.dumps(err, indent=2)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to Terminal API errors.")
+                
+        except Exception as e:
+            err = error_response(e)
+            logger.error(f"Unexpected error for attempt {attempt + 1}/{max_retries}: {json.dumps(err, indent=2)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to unexpected errors.")
+
+    return None
+
+
+def get_shipping_rates(restaurant, delivery_address_id, parcel_id, max_retries=5):
+    """
+        /get_shipping_rates
+    """
+
+    BASE_URL = "https://sandbox.terminal.africa/v1"
+
+    headers = {
+        "Authorization": f"Bearer {settings.TERMINAL_SECRET_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    url = f"{BASE_URL}/rates/shipment"
+
+    params = {
+        "pickup_address": restaurant.pick_up_address_id,
+        "delivery_address": delivery_address_id,
+        "currency": "NGN",
+        "parcel_id": parcel_id,
+    }
+    print("rates payload: ", params)
+
+    for attempt in range(max_retries):  # Retry up to 5 times
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+            response.raise_for_status()  # Raise an exception for HTTP errors
+            
+            if response.status_code in (201, 200):
+                data = response.json()
+                print("Terminal API response for package: ", data)
+                return data.get("data", [])  # Return the package ID for later use
+        
+        except requests.exceptions.Timeout as e:
+            err = error_response(e)
+            logger.error(f"Terminal API error for attempt {attempt + 1}/{max_retries}: {json.dumps(err, indent=2)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to timeouts.")
+
+        except requests.exceptions.ConnectionError as e:
+            err = error_response(e)
+            logger.error(f"connection error for attempt {attempt + 1}/{max_retries}: {json.dumps(err, indent=2)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to Connection errors.")
+
+        except requests.exceptions.RequestException as e:
+            err = error_response(e)
+            logger.error(f"Terminal API error for attempt {attempt +1 }/{max_retries}: {json.dumps(err, indent=2)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to Terminal API errors.")
+                
+        except Exception as e:
+            err = error_response(e)
+            logger.error(f"Unexpected error for attempt {attempt + 1}/{max_retries}: {json.dumps(err, indent=2)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to unexpected errors.")
+
+    return None
+
+def error_response(e):
+    if hasattr(e, 'response') and e.response is not None:
+        try:
+            error_data = e.response.json()
+            return {
+                "status_code": e.response.status_code,
+                "message": error_data.get("message", "No message"),
+                "errors": error_data.get("errors", error_data),
+                "full_response": error_data
+            }
+        except Exception:
+            return {
+                "status_code": e.response.status_code,
+                "raw": e.response.text[:500]
+            }
+    return {"error": str(e)}
+
+def create_parcel_and_calculate_price_and_prep_time(safe_items, product_map, packaging_id, max_retries=5):
+    """
+        /create_parcel
+    """
+
+    BASE_URL = "https://sandbox.terminal.africa/v1"
+
+    headers = {
+        "Authorization": f"Bearer {settings.TERMINAL_SECRET_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    total_price = Decimal('0.00')
+    prep_times = []
+    prep_days = []
+    items = []
+
+    for item in safe_items:
+
+        product = product_map.get(item.get('pid'))
+        qty = max(1, int(item.get("quantity", 1)))
+        price = product.price
+        
+        item_total = qty * price          # ← per-item subtotal
+        total_price += item_total         # ← running total (for your own use)
+
+        items.extend([
+            {
+                "currency": "NGN",
+                "quantity": qty,
+                "value": float(item_total),    # ← FIXED: per-item value
+                "name": product.title,
+                "description": product.description or "No description",
+                "weight": float(product.weight or Decimal('0.5')),
+                "type": "parcel"
+            }
+        ])
+
+        # Restaurant / Vendor prep time logic
+        if product.category.prep_time_minutes:
+            prep_times.append(product.category.prep_time_minutes)
+            continue
+        
+        if product.category.prep_day:
+            prep_days.append(product.category.prep_day)
+
+    print("items for parcel: ", items)
+    print("packaging_id for parcel: ", packaging_id)
+    print("prep_days for parcel: ", prep_days)
+    print("prep_times for parcel: ", prep_times)
+    print("total_price for parcel: ", total_price)
+
+    payload = {
+        "description": "Food order",
+        "items": items,
+        "packaging": packaging_id,
+        "weight_unit": "kg",
+        "metadata": {
+            "restaurant_id": product.restaurant.rid,
+            "restaurant_name": product.restaurant.name,
+        }   
+    }
+    for attempt in range(max_retries):  # Retry up to max_retries times
+        try:
+            response = requests.post(f"{BASE_URL}/parcels", headers=headers, json=payload, timeout=30)
+            response.raise_for_status()  # Raise an exception for HTTP errors
+
+            if response.status_code in (201, 200):
+                data = response.json()
+                print("Terminal API response for parcel: ", data)
+                parcel_id = data.get("data", {}).get("parcel_id")
+                return prep_days, prep_times, total_price, parcel_id
+
+        except requests.exceptions.Timeout as e:
+            err = error_response(e)
+            logger.error(f"Terminal API error for attempt {attempt + 1}/{max_retries}: {json.dumps(err, indent=2)}")
+
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to timeouts.")
+
+        except requests.exceptions.ConnectionError as e:
+            err = error_response(e)
+            logger.error(f"connection error for attempt {attempt + 1}/{max_retries}: {json.dumps(err, indent=2)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to Connection errors.")
+
+        except requests.exceptions.RequestException as e:
+            err = error_response(e)
+            logger.error(f"Terminal API error for attempt {attempt + 1}/{max_retries}: {json.dumps(err, indent=2)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to Terminal API errors.")
+                
+        except Exception as e:
+            err = error_response(e)
+            logger.error(f"Unexpected error for attempt {attempt + 1}/{max_retries}: {json.dumps(err, indent=2)}")
+            if attempt == max_retries - 1:  # Last attempt
+                logger.error("Max retries reached for create_package due to unexpected errors.")
+
+    return prep_days, prep_times, total_price, None
+
+
 # Break it into layers:
 
 # Layer 1: Your restaurant ordering + batching system (already done).
@@ -1655,8 +1867,3 @@ batch_list_api_view = UserOrderBatchesAPIView.as_view()
 # | ---------- | --------------- | ----------- | --------------- |
 # | A          | 50,000          | 50,000      | 0               |
 # | B          | 35,000          | 35,000      | 0               |
-
-
-
-# 08068856286
-# grievance.office@xiaomi.com

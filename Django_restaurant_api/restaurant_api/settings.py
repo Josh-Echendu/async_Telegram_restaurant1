@@ -27,6 +27,8 @@ TERMINAL_PUBLIC_KEY = os.getenv("TERMINAL_PUBLIC_KEY")
 TERMINAL_SECRET_KEY = os.getenv("TERMINAL_SECRET_KEY")
 
 LOCATIONIQ_KEY = os.getenv("LOCATIONIQ_KEY")
+MAIADDY_API_KEY = os.getenv("MAIADDY_API_KEY")
+GEOAPIFY_KEY = os.getenv("GEOAPIFY_KEY")
 
 
 
@@ -337,5 +339,3 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 # To this:
 # TIME_ZONE = 'Africa/Lagos'  # Nigeria timezone (UTC+1)
-
-TERMINAL_DEFAULT_PACKAGING_ID = ""

@@ -19,7 +19,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import OperationalError
 from datetime import time, timedelta
 import random
-from .tasks import get_coordinates_for_address
+from .tasks import create_or_update_restaurant_terminal_address
 import logging
 
 
@@ -47,7 +47,6 @@ SERVICE_MODE_CHOICES = (
 BUSINESS_TYPE = (
     ("restaurant", "Restaurant"),
     ("vendor", "Vendor"),
-    ("hotel", "Hotel"),
 )
 
 
@@ -63,59 +62,11 @@ BUSINESS_TYPE = (
     # | ---------- | -------  | ------- | ------- | ---------- |
     # | Restaurant | ✅      | ✅       | ❌       | ❌    |
     # | Vendor     | ❌      | ✅       | ✅       | ✅     
-    # | Hotel      | ✅      | ✅       | ❌       | ❌    
 
-# Then food goes to the wrong room, real guest complains, and your system looks broken.
-
-# ---
-
-# ### The Fix: Double Confirmation
-
-# Make the guest confirm their room number **twice** before they can order.
-
-# **Flow:**
-
-# 1. Guest scans QR → bot opens
-# 2. Bot: *"Please enter your room number:"*
-# 3. Guest types: `305`
-# 4. Bot: *"You entered Room 305. Is this correct? (Yes/No)"*
-# 5. Guest taps **Yes** → proceeds to menu
-# 6. Guest taps **No** → re-enter room number
-
-# ---
-
-# ### Additional Layer: Room Number Display on Payment Screen
-
-# Before they pay, show the room number one more time:
-
-# ```
-# ┌─────────────────────────────┐
-# │       CONFIRM ORDER         │
-# │                             │
-# │  🚪 Room: 305               │
-# │  🍗 Jollof Rice     ₦3,500 │
-# │                             │
-# │  [Pay with Transfer]        │
-# │  [Pay with Card]            │
-# └─────────────────────────────┘
-# ```
-
-# Guest sees `Room 305` and thinks: *"Wait, I'm in 503!"* → they'll correct it before paying.
-
-# ---
-
-# ### Why This Is Enough:
-
-# | Layer | What It Catches |
-# |-------|----------------|
-# | Room number entry | Guest types their room |
-# | Confirmation prompt | "Is 305 correct?" catches typos |
-# | Display before payment | Final visual check before money leaves |
-# | Physical reality | Guest is literally inside the room, they know their room number |
-
-# ---
-
-# If a guest still manages to type the wrong room number after three chances to catch it, that's on them — not your system. But this catches 99% of mistakes.
+PAYMENT_FLOW_CHOICES = (
+    ('postpay', 'Pay After Service (Order now, pay later)'),
+    ('prepay', 'Pay Before Service (Pay now, kitchen prepares)'),
+)
 
 class Restaurant(models.Model):
     rid = ShortUUIDField(unique=True, prefix='res', length=10, max_length=20, alphabet=ALPHABET, db_index=True)
@@ -130,15 +81,26 @@ class Restaurant(models.Model):
         help_text="Physical address of the restaurant"
     )
 
+    city = models.CharField(max_length=100, null=True, blank=True, 
+                            help_text="City where the restaurant is located"
+    )
     state = models.CharField(max_length=100, null=True, blank=True, 
                              help_text="State or region where the restaurant is located"
     )
 
-    latitude = models.FloatField(null=True, blank=True)
-    longitude = models.FloatField(null=True, blank=True)
-    max_delivery_radius_km = models.FloatField(default=10.0)
-    lga = models.CharField(max_length=100, null=True, blank=True)
+    zipcode = models.CharField(max_length=20, null=True, blank=True,
+        help_text="Postal code for the restaurant's location"
+    )
 
+    # Terminal API address ID for delivery logistics
+    pick_up_address_id  = models.CharField(max_length=255, null=True, blank=True,
+        help_text="Terminal API address ID for delivery logistics"
+    )
+    
+    payment_flow = models.CharField(max_length=20, choices=PAYMENT_FLOW_CHOICES, blank=True, null=True,
+        help_text="Dine-in payment flow: Pay after service (traditional) or Pay before service (prepaid)"
+    )
+    
     # ========== TELEGRAM BOT FIELDS ==========
     bot_username = models.CharField(max_length=100, blank=True, null=True)
     bot_token = EncryptedCharField(max_length=255, null=True)
@@ -167,7 +129,8 @@ class Restaurant(models.Model):
         help_text="Whether WhatsApp bot is active"
     )
     
-    # ========== SHARED FIELDS ==========
+    # ========== SHARED FIELDS (Both Telegram & WhatsApp) ==========
+    # Real-world use cases: Restaurant closed, Kitchen busy, Maintenance mode
     is_accepting_orders = models.BooleanField(default=True)
     
     kitchen_chat_id = models.BigIntegerField(null=True, blank=True,
@@ -175,8 +138,9 @@ class Restaurant(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True, null=True)
 
+    # Delivery support fields
     delivery_chat_id = models.BigIntegerField(null=True, blank=True, 
-        help_text="Telegram delivery group chat ID OR WhatsApp delivery group ID"
+        help_text="Telegram delivery group chat ID (if supports_delivery is True) OR WhatsApp delivery group ID"
     )
 
     service_mode = models.CharField(max_length=20, choices=SERVICE_MODE_CHOICES, db_index=True,
@@ -193,56 +157,48 @@ class Restaurant(models.Model):
     delivery_fee = models.DecimalField(max_digits=1000, decimal_places=2, default=0)
 
     business_type = models.CharField(max_length=20, choices=BUSINESS_TYPE, db_index=True,
-        help_text="Type of business: Restaurant, Vendor, or Hotel", 
+        help_text="Type of business: Restaurant or Vendor", 
     )
 
-    timezone = models.CharField(max_length=50, default='Africa/Lagos',
+    timezone = models.CharField(max_length=50,default='Africa/Lagos',
         choices=[(tz, tz) for tz in pytz.common_timezones],
         help_text="Restaurant's local timezone"
     )
 
     def save(self, *args, **kwargs):
+        # 1. Business logic
         if self.business_type == "vendor":
             self.max_tables = 0
             if self.service_mode != "delivery":
                 self.service_mode = "delivery"
-
         elif self.business_type == "restaurant":
             if not self.service_mode:
                 raise ValidationError("Restaurant must choose a service mode")
 
-        elif self.business_type == "hotel":
-            self.service_mode = "dine_in"
-            self.max_tables = 0
-
-        # Capture old values BEFORE saving
+        # 2. Capture old values BEFORE saving
         if self.pk:
             try:
-                old = Restaurant.objects.only('lga', 'state', 'address', 'latitude', 'longitude').get(pk=self.pk)
-                self._old_lga = old.lga
+                old = Restaurant.objects.only('city', 'state', 'address').get(pk=self.pk)
+                self._old_city = old.city
                 self._old_state = old.state
                 self._old_address = old.address
-                self._old_latitude = old.latitude
-                self._old_longitude = old.longitude
             except Restaurant.DoesNotExist:
-                self._old_lga = None
+                self._old_city = None
                 self._old_state = None
                 self._old_address = None
-                self._old_latitude = None
-                self._old_longitude = None
         else:
-            self._old_lga = None
+            self._old_city = None
             self._old_state = None
             self._old_address = None
-            self._old_latitude = None
-            self._old_longitude = None
-
+            
+        # 3. Save LAST
         super().save(*args, **kwargs)
 
     def clean(self):
         if self.kitchen_chat_id and not str(self.kitchen_chat_id).startswith("-"):
             raise ValidationError("Kitchen chat ID must be a group ID (negative number)")
         
+        # WhatsApp validation
         if self.is_whatsapp_active:
             if not self.whatsapp_phone_number_id:
                 raise ValidationError("WhatsApp Phone Number ID required when WhatsApp is active")
@@ -252,28 +208,33 @@ class Restaurant(models.Model):
                 raise ValidationError("WhatsApp Business Phone required when WhatsApp is active")
 
     def get_bot_token(self):
-        return self.bot_token
-
+        return self.bot_token  # decrypted automatically
+    
     def get_whatsapp_token(self):
-        return self.whatsapp_access_token
-
+        return self.whatsapp_access_token  # decrypted automatically
+    
     def get_telegram_webhook_url(self):
         return f"{FAST_API_URL}/telegram-webhook/{self.rid}"
+    
 
     def get_telegram_deep_url(self):
         return f"https://t.me/{self.bot_username}" if self.bot_username else None
-
+    
     def get_whatsapp_deep_url_or_clean_phone(self, terminal=None):
         if not self.whatsapp_business_phone:
             return None
         
         if self.whatsapp_business_phone.startswith("+234"):
-            return self.whatsapp_business_phone.strip()
+            return self.whatsapp_business_phone.strip()  # Already in correct format
         
+        # Clean the string: remove spaces, plus signs, or dashes
         clean_phone = ''.join(filter(str.isdigit, self.whatsapp_business_phone))
         
+        # Handle the Nigerian '0' prefix if the user saved it locally (e.g., 0703...)
         if clean_phone.startswith('0') and len(clean_phone) == 11:
             clean_phone = '234' + clean_phone[1:]
+        
+        # If it starts with 703 or 803 without a country code
         elif not clean_phone.startswith('234') and len(clean_phone) == 10:
             clean_phone = '234' + clean_phone
 
@@ -295,12 +256,11 @@ class Restaurant(models.Model):
             platform.append("WhatsApp")
         platform_str = f" ({'+'.join(platform)})" if platform else ""
         return f"{self.name}{platform_str}"
-    
 
 @receiver(post_save, sender=Restaurant)
 def manage_restaurant_webhook(sender, instance, created, **kwargs):
 
-    print(f"===== SIGNAL FIRED: created={created}, rid={instance.rid}, lga={instance.lga} =====")
+    print(f"===== SIGNAL FIRED: created={created}, rid={instance.rid}, city={instance.city} =====")
 
     # 1. Telegram webhook
     if instance.is_bot_active and instance.bot_token:
@@ -312,33 +272,41 @@ def manage_restaurant_webhook(sender, instance, created, **kwargs):
     if created:
         location_changed = True
     else:
-        old_lga = getattr(instance, '_old_lga', None)
+        old_city = getattr(instance, '_old_city', None)
         old_state = getattr(instance, '_old_state', None)
         old_address = getattr(instance, '_old_address', None)
-        old_latitude = getattr(instance, '_old_latitude', None)
-        old_longitude = getattr(instance, '_old_longitude', None)
         
         location_changed = (
-            old_lga != instance.lga or
+            old_city != instance.city or
             old_state != instance.state or
-            old_address != instance.address or
-            old_latitude != instance.latitude or
-            old_longitude != instance.longitude
+            old_address != instance.address
         )
         
-        print(f"SIGNAL: Old values - lga={old_lga}, state={old_state}, address={old_address}, latitude={old_latitude}, longitude={old_longitude}")
-        print(f"SIGNAL: New values - lga={instance.lga}, state={instance.state}, address={instance.address}")
+        print(f"SIGNAL: Old values - city={old_city}, state={old_state}")
+        print(f"SIGNAL: New values - city={instance.city}, state={instance.state}")
 
-    print(f"SIGNAL: location_changed={location_changed}, longitude={instance.longitude}, latitude={instance.latitude}")
+    print(f"SIGNAL: location_changed={location_changed}, has_pickup_id={bool(instance.pick_up_address_id)}")
 
     # 3. Skip if nothing changed
-    if not location_changed:
+    if instance.pick_up_address_id and not location_changed:
         print("SIGNAL: No location change, skipping")
         return
 
     # 4. Call directly
     print("SIGNAL: Triggering Terminal address sync...")
-    result = get_coordinates_for_address.delay(lga=instance.lga, state=instance.state, restaurant_id=instance.rid)
+    result = create_or_update_restaurant_terminal_address.delay(
+        restaurant_id=instance.rid,
+        address_id=instance.pick_up_address_id,
+        city=instance.city,
+        country="NG",
+        state=instance.state,
+        first_name=instance.first_name,
+        last_name=instance.last_name,
+        phone=instance.get_whatsapp_deep_url_or_clean_phone(terminal=True),
+        line1=instance.address,
+        zip_code=instance.zipcode,
+
+    )
     print(f"SIGNAL: Terminal sync result = {result}")
 
 
@@ -564,237 +532,3 @@ class DineInOTPSession(models.Model):
     
     def __str__(self):
         return f"Table {self.table_number} - {self.status} - {self.session_id[:8]}"
-
-# 💬 IF YOU WANT NEXT
-
-# I can upgrade this to:
-
-# 🔥 Redis caching for tokens (no DB hit per request)
-# 🔥 Rate limiting per bot
-# 🔥 Background processing with Celery
-# 🔥 Nginx + HTTPS production setup
-# 🔥 Token encryption best practice (you already started this)
-
-
-
-# 🔥 Redis (instead of in-memory cache)
-# 🔥 Horizontal scaling (multiple FastAPI workers)
-# 🔥 Queue-based processing (Celery)
-# 🔥 Auto bot warm-up (no cold start lag)
-
-
-
-
-# Good question — this is where your system starts feeling like a *real product*, not just backend logic. Let’s make it very simple and practical.
-
-# ---
-
-# # 🧠 First: What the database stores vs what the dashboard shows
-
-# You must separate two things:
-
-# ## 🟡 DATABASE (backend)
-
-# Stores:
-
-# ```python
-# day_of_week = 0,1,2,3,4,5,6
-# ```
-
-# ## 🟢 DASHBOARD (frontend)
-
-# Shows:
-
-# ```text
-# Monday, Tuesday, Wednesday...
-# ```
-
-# 👉 The restaurant owner NEVER sees numbers.
-
-# ---
-
-# # 🍽️ So how does it look in a real dashboard?
-
-# Imagine a page like this:
-
-# ## 📅 “Delivery Schedule Settings”
-
-# ### Monday
-
-# * ⭕ Open time: [09:00]
-# * ⭕ Close time: [17:00]
-# * ☑ Closed toggle
-
-# ---
-
-# ### Tuesday
-
-# * ⭕ Open time: [09:00]
-# * ⭕ Close time: [17:00]
-# * ☑ Closed toggle
-
-# ---
-
-# ### Sunday
-
-# * ⭕ Open time: [12:00]
-# * ⭕ Close time: [20:00]
-# * ☑ Closed toggle
-
-# ---
-
-# # 🧠 How frontend converts Integer → Day name
-
-# In your frontend (React / HTML / Django template), you map numbers like this:
-
-# ```javascript id="daymap1"
-# const DAYS = {
-#   0: "Monday",
-#   1: "Tuesday",
-#   2: "Wednesday",
-#   3: "Thursday",
-#   4: "Friday",
-#   5: "Saturday",
-#   6: "Sunday"
-# };
-# ```
-
-# So when backend sends:
-
-# ```json
-# { "day_of_week": 6 }
-# ```
-
-# Frontend shows:
-
-# ```text
-# Sunday
-# ```
-
-# ---
-
-# # 🧩 What the restaurant owner actually interacts with
-
-# They don’t see your model.
-
-# They see a form like:
-
-# ## 🟢 Delivery Settings Form
-
-# ### Day: Monday
-
-# * Open time: ⏰ [09:00]
-# * Close time: ⏰ [17:00]
-# * Closed? [checkbox]
-
-# ---
-
-# ## 🧠 If “Closed” is checked:
-
-# Frontend does:
-
-# * disables time inputs
-# * sends:
-
-# ```json
-# {
-#   "day_of_week": 0,
-#   "is_closed": true
-# }
-# ```
-
-# ---
-
-# # 🔥 IMPORTANT DESIGN IDEA (this is key)
-
-# Even if database uses:
-
-# ```python
-# TimeField
-# IntegerField
-# ```
-
-# 👉 frontend ALWAYS uses human language.
-
-# ---
-
-# # 🍽️ Example full flow
-
-# ## Step 1: Restaurant owner opens dashboard
-
-# Sees:
-
-# ```
-# Monday   [Open 09:00 - 17:00]  [ ]
-# Tuesday  [Open 09:00 - 17:00]  [ ]
-# Sunday   [CLOSED]              [✔]
-# ```
-
-# ---
-
-# ## Step 2: They click Sunday → Closed
-
-# Frontend sends:
-
-# ```json
-# {
-#   "day_of_week": 6,
-#   "open_time": null,
-#   "close_time": null
-# }
-# ```
-
-# ---
-
-# ## Step 3: Bot logic sees NULL → treats as CLOSED
-
-# ---
-
-# # 🧠 VERY SIMPLE MENTAL MODEL
-
-# ## Backend thinks:
-
-# > “Numbers and times”
-
-# ## Frontend thinks:
-
-# > “Days of the week and human-friendly forms”
-
-# ## User thinks:
-
-# > “Open or closed switches per day”
-
-# ---
-
-# # ⚖️ Why this design is standard
-
-# Because:
-
-# * backend must be structured (numbers)
-# * frontend must be human (words)
-# * users must see simplicity (toggles)
-
-# ---
-
-# # 🚀 BEST PRACTICAL UI DESIGN (for your system)
-
-# For each restaurant:
-
-# ```
-# [ Monday    ]  Open: 09:00  Close: 17:00  [Closed toggle]
-# [ Tuesday   ]  Open: 09:00  Close: 17:00  [Closed toggle]
-# [ Wednesday ]  Open: 09:00  Close: 17:00  [Closed toggle]
-# ...
-# ```
-
-# ---
-
-# # ❤️ Final clarity
-
-# If you remember ONE thing:
-
-# > The database speaks numbers, but the dashboard speaks human language.
-
-# ---
-
-# If you want, I can next design your **full restaurant admin dashboard UI layout (like real SaaS systems such as Uber Eats merchant panel)** — that will make everything click visually 👍

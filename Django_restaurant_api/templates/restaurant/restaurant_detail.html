@@ -1,3 +1,4 @@
+{% load static %}
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -15,8 +16,12 @@
 
   <script>
       window.LOCATIONIQ_TOKEN = '{{ locationiq_key }}';  // Django injects the env var
+      window.MAIADDY_TOKEN = '{{ maiaddy_token }}';
+      window.GEOAPIFY_KEY = '{{ geoapify_key }}';
   </script>
-  <script defer src="{% static 'js/address-autocomplete.js' %}"></script>
+
+  <!-- <script defer src="{% static 'js/address-autocomplete.js' %}"></script> -->
+  <script defer src="{% static 'js/maiaddy-autocomplete.js' %}"></script>
 
   <script>
       let tg = null;
@@ -337,12 +342,19 @@
   // Add these after 'showCheckoutModal: false,'
   showDeliveryForm: false,
   deliveryInfo: {
-    fullName: '',
-    phone: '',
-    address: '',
-    landmark: '',
-    specialInstructions: ''
+      firstName: '',
+      lastName: '',
+      phone: '',
+      address: '',
+      lga: '',
+      state: '',
+      country: 'Nigeria',
+      country_code: 'NG',
+      landmark: '',
+      specialInstructions: ''
   },
+  lgas: [],
+  allLgas: {},
   isSubmittingDelivery: false,
 
   // ========== TABLE SELECTION FOR WHATSAPP DINE-IN ==========
@@ -375,6 +387,9 @@
   allmeals: [], // for 'all' category caching // ← FIX: Added comma
   currentPage: 1, // ← FIX: Added comma
   perPage: 3, // ← FIX: Added comma
+
+  showHotelPaymentModal: false,
+  roomNumber: '305',  // Will come from Django template or URL param
  
   mapProducts(products, categoryOverride = null) {
     return products.map(p => ({
@@ -522,6 +537,8 @@
   restaurantName: 'Fork & Co.', // Default value
   restaurantImage: '',
   loading: false,
+
+  
 
   async loadCategories(retries = 3) {
     const pathParts = window.location.pathname.split('/').filter(p => p);
@@ -817,64 +834,145 @@
         return;
     }
     
-    if (this.mode === 'dine_in' && !this.isVerified) {
-        console.log('Showing OTP modal');
-        this.showOtpModal = true;
-    } else {
+  if (this.businessType !== 'hotel' && this.mode === 'dine_in' && !this.isVerified) {
+      console.log('Showing OTP modal');
+      this.showOtpModal = true;
+  } else {
         console.log('NOT showing OTP modal. mode:', this.mode, 'isVerified:', this.isVerified);
     }
   },
 
   placeOrder() {
 
-    if (this.paymentSessionActive) {
-      this.toast = {
-        visible: true,
-        message: '⚠️ You have a pending payment. Complete it before ordering again.'
-      };
-      setTimeout(() => this.toast.visible = false, 10000);
-      return;
-    }
+      if (this.paymentSessionActive) {
+        this.toast = {
+          visible: true,
+          message: '⚠️ You have a pending payment. Complete it before ordering again.'
+        };
+        setTimeout(() => this.toast.visible = false, 10000);
+        return;
+      }
 
-    // FIRST: block if out of stock exists
-    if (this.cart.some(item => !item.in_stock)) {
+      if (this.cart.some(item => !item.in_stock)) {
+        this.toast = {
+          visible: true,
+          message: 'Remove out-of-stock items before checkout'
+        };
+        setTimeout(() => this.toast.visible = false, 10000);
+        return;
+      }
 
-      this.toast = {
-        visible: true,
-        message: 'Remove out-of-stock items before checkout'
-      };
+      if (this.cart.length === 0) {
+        this.toast = {
+          visible: true,
+          message: '✨ Your cart is empty — add some delicious items!'
+        };
+        setTimeout(() => this.toast.visible = false, 2200);
+        return;
+      }
 
-      setTimeout(() => this.toast.visible = false, 10000);
+      this.orderId = 'ORD-' + Math.floor(800000 + Math.random()*200000);
 
-      return;
-    }
+      // === HOTEL: Straight to payment modal (prepay) ===
+      if (this.businessType === 'hotel') {
+        this.calculateHotelPrices();
+        this.showCart = false;
+        this.showHotelPaymentModal = true;
+        return;
+      }
 
-    // SECOND: block if cart empty
-    if (this.cart.length === 0) {
+      // === DELIVERY: Show delivery form first ===
+      if (this.mode === 'delivery') {
+        this.showCheckoutModal = false;
+        this.showDeliveryForm = true;
+        return;
+      }
 
-      this.toast = {
-        visible: true,
-        message: '✨ Your cart is empty — add some delicious items!'
-      };
-
-      setTimeout(() => this.toast.visible = false, 2200);
-
-      return;
-    }
-
-    // THIRD: allow checkout
-    this.orderId = 'ORD-' + Math.floor(800000 + Math.random()*200000);
-    this.showCheckoutModal = true;
-
-    // Check mode: if delivery, show delivery form first
-    if (this.mode === 'delivery') {
-      this.showCheckoutModal = false;
-      this.showDeliveryForm = true;
-    } else {
-      // Dine-in: show checkout modal directly
+      // === DINE-IN: Show checkout modal (postpay) ===
       this.showCheckoutModal = true;
-    }
-  }, // ← FIX: Added comma
+  },
+
+  // Hotel payment computed values
+  get vatAmount() {
+      return this.cartTotal * 0.075;
+  },  
+
+  get grandTotal() {
+      return this.cartTotal + this.vatAmount;
+  },
+
+  get transferFee() {
+      return 100;
+  },
+
+  get cardFee() {
+      return this.grandTotal * 0.015;
+  },
+
+  calculateHotelPrices() {
+      // Trigger the getters
+      const total = this.grandTotal;
+      console.log('Hotel order:', {
+          subtotal: this.cartTotal,
+          vat: this.vatAmount,
+          total: total,
+          transferFee: this.transferFee,
+          cardFee: this.cardFee
+      });
+  },
+
+  hotelPayWithTransfer() {
+      this.showHotelPaymentModal = false;
+      this.toast = {
+          visible: true,
+          message: '🏦 Redirecting to bank transfer...'
+      };
+      setTimeout(() => this.toast.visible = false, 3000);
+      // TODO: Call your backend to generate payment link/virtual account
+  },
+
+  hotelPayWithCard() {
+      this.showHotelPaymentModal = false;
+      this.toast = {
+          visible: true,
+          message: '💳 Redirecting to card payment...'
+      };
+      setTimeout(() => this.toast.visible = false, 3000);
+      // TODO: Call your backend to generate card payment link
+  },
+
+  // Delivery payment computed values
+  get deliveryTransferFee() {
+      return 100;
+  },
+
+  get deliveryCardFee() {
+      return this.priceBreakdown.total * 0.015;
+  },
+
+  deliveryPayWithTransfer() {
+      this.isSubmittingDelivery = true;
+      this.toast = {
+          visible: true,
+          message: '🏦 Redirecting to bank transfer...'
+      };
+      setTimeout(() => this.toast.visible = false, 3000);
+      // TODO: Backend call — create order + generate transfer payment link
+      // Pass: cart items, delivery info, price_breakdown, payment_method='transfer'
+  },
+
+  deliveryPayWithCard() {
+      this.isSubmittingDelivery = true;
+      this.toast = {
+          visible: true,
+          message: '💳 Redirecting to card payment...'
+      };
+      setTimeout(() => this.toast.visible = false, 3000);
+      // TODO: Backend call — create order + generate card payment link
+      // Pass: cart items, delivery info, price_breakdown, payment_method='card'
+  },
+
+  
 
   get hasOutOfStockItems() {
     return this.cart.some(item => !item.in_stock);
@@ -1027,23 +1125,44 @@
     if (this.isSubmittingDelivery) return;
     
     // Validate delivery info
-    if (!this.deliveryInfo.fullName.trim()) {
-      this.toast = { visible: true, message: 'Please enter your full name' };
+    if (!this.deliveryInfo.firstName.trim()) {
+      this.toast = { visible: true, message: 'Please enter your first name' };
       setTimeout(() => this.toast.visible = false, 3000);
+      return;
+    }
+
+    if (!this.deliveryInfo.lastName.trim()) {
+      this.toast = { visible: true, message: 'Please enter your last name' };
+      setTimeout(() => this.toast.visible = false, 3000);
+      return;
+    }
+
+    // Phone: must be exactly 10 digits, no leading zero
+    const phoneDigits = this.deliveryInfo.phone.replace(/\D/g, '');
+    if (phoneDigits.length !== 10) {
+      this.toast = { visible: true, message: 'Please enter a valid 10-digit phone number' };
+      setTimeout(() => this.toast.visible = false, 3000);
+      return;
+    }
+    if (phoneDigits.startsWith('0')) {
+      this.toast = { visible: true, message: 'Phone number should not start with 0. Just enter the 10 digits after the 0.' };
+      setTimeout(() => this.toast.visible = false, 4000);
       return;
     }
     
-    if (!this.deliveryInfo.phone.trim()) {
-      this.toast = { visible: true, message: 'Please enter your phone number' };
-      setTimeout(() => this.toast.visible = false, 3000);
-      return;
-    }
-    
-    if (!this.deliveryInfo.address.trim()) {
-      this.toast = { visible: true, message: 'Please enter your delivery address' };
-      setTimeout(() => this.toast.visible = false, 3000);
-      return;
-    }
+  if (!this.deliveryInfo.state.trim()) {
+    this.toast = { visible: true, message: 'Please select your state' };
+    setTimeout(() => this.toast.visible = false, 3000);
+    return;
+  }
+
+  if (!this.deliveryInfo.lga.trim()) {
+    this.toast = { visible: true, message: 'Please select your LGA' };
+    setTimeout(() => this.toast.visible = false, 3000);
+    return;
+  }
+
+// Country is auto-set to Nigeria, no validation needed
     
     this.isPreviewLoading = true;
     
@@ -1054,6 +1173,7 @@
       // Step 1: Call PREVIEW API to get calculated prices
       const previewPayload = {
         cart_items: this.cart.map(i => ({ pid: i.pid, quantity: i.quantity, price: i.price })),
+        delivery_info: this.deliveryInfo,
       };
       
       const previewResponse = await axios.post(
@@ -1231,9 +1351,14 @@
         
         // Reset delivery form
         this.deliveryInfo = {
-          fullName: '',
+          firstName: '',
+          lastName: '',
           phone: '',
           address: '',
+          lga: '',
+          state: '',
+          country: 'Nigeria',
+          country_code: 'NG',
           landmark: '',
           specialInstructions: ''
         };
@@ -1347,9 +1472,6 @@ x-init="
   const storageKey = `fork_cart_${cartUserId}_${restaurantId}`;
   const saved = localStorage.getItem(storageKey);
   
-  console.log('cartUserId: ', cartUserId);  // ✅ No 'this.' because it's a local variable
-  console.log('storageKey: ', storageKey);  // ✅ No 'this.' because it's a local variable
-  
   if (saved) {
     try{
       // REMOVE 'this.' - Alpine maps these directly to your data object
@@ -1360,13 +1482,6 @@ x-init="
     }
   }
 
-  console.log('=== BEFORE initOtpVerification ===');
-  console.log('mode:', mode);
-  console.log('platform:', platform);
-  console.log('userId:', userId);
-  console.log('isVerified:', isVerified);
-  console.log('showOtpModal:', showOtpModal);
-
   initOtpVerification();  // ← ADD THIS BEFORE loading categories
   
   console.log('=== AFTER initOtpVerification ===');
@@ -1374,10 +1489,32 @@ x-init="
   console.log('showOtpModal:', showOtpModal);
 
 
-  //initTableSelection();
+  // Hotels skip OTP — QR code in the room is the verification
+  if (businessType === 'hotel') {
+      console.log('Hotel mode — skipping OTP');
+  }
 
-  // Only load categories if verified or delivery mode
-  if (mode === 'delivery' || isVerified) {
+  // Only call OTP for restaurant dine-in
+  if (businessType !== 'hotel') {
+      initOtpVerification();
+  }
+
+  // Load LGA data for delivery mode
+  if (mode === 'delivery') {
+      fetch('/static/data/nigeria-lgas.json')
+          .then(r => r.json())
+          .then(data => {
+              allLgas = data;
+          })
+          .catch(e => console.error('Failed to load LGAs:', e));
+  }
+
+  // Load categories:
+  // - Hotels: always load (no verification needed)
+  // - Delivery: always load (no verification needed)
+  // - Dine-in: only load if OTP verified
+  // Only load categories if verified or delivery mode or business_type is hotel
+  if (mode === 'delivery' || isVerified || businessType === 'hotel') {
 
     console.log('about to load categories')
     loadCategories();
@@ -1821,14 +1958,119 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
   </div>
 </div>
 
+<!-- ===== HOTEL PAYMENT MODAL (Prepay with Price Breakdown) ===== -->
+<div x-show="showHotelPaymentModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" @keydown.escape.window="showHotelPaymentModal = false">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" @click="showHotelPaymentModal = false"></div>
+  <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl border border-[#eef2f8] overflow-y-auto max-h-[95vh]"
+       x-show="showHotelPaymentModal" x-transition>
+
+    <!-- Header -->
+    <div class="bg-white z-10 px-5 pt-6 pb-4 border-b border-[#eef2f8]">  
+      <div class="text-center">
+        <div class="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-3 animate-pulse" style="box-shadow: 0 0 20px rgba(99,102,241,0.5);">
+          <i class="fas fa-hotel text-2xl sm:text-3xl text-white"></i>
+        </div>
+        <h3 class="text-xl sm:text-2xl brand-italic font-bold">Room Service Order</h3>
+        <p class="text-xs text-[#6f7c91] mt-1">Review your order before payment</p>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="px-5 py-4 space-y-3">
+
+      <!-- Order Items -->
+      <div class="space-y-2">
+        <template x-for="item in cart" :key="item.pid">
+          <div class="flex justify-between items-center bg-gray-50 rounded-xl p-3">
+            <div class="flex items-center gap-3">
+              <img :src="item.image" class="w-10 h-10 rounded-lg object-cover bg-[#f0f4fa]" alt="">
+              <div>
+                <p class="text-sm font-semibold text-[#1f2a3f]" x-text="item.name"></p>
+                <p class="text-xs text-[#6f7c91]">
+                  <span x-text="item.quantity"></span> × ₦<span x-text="formatPrice(item.price)"></span>
+                </p>
+              </div>
+            </div>
+            <span class="text-sm font-bold text-[#1f2a3f]">₦<span x-text="formatPrice(item.price * item.quantity)"></span></span>
+          </div>
+        </template>
+      </div>
+
+      <!-- Price Breakdown -->
+      <div class="space-y-2 pt-2">
+        <div class="flex justify-between text-sm">
+          <span class="text-[#6f7c91]">Subtotal</span>
+          <span class="font-semibold">₦<span x-text="formatPrice(cartTotal)"></span></span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-[#6f7c91]">VAT (7.5%)</span>
+          <span class="font-semibold text-amber-600">+₦<span x-text="formatPrice(vatAmount)"></span></span>
+        </div>
+        <div class="border-t border-dashed border-[#eef2f8] my-2"></div>
+        <div class="flex justify-between text-base font-bold bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-3">
+          <span class="text-[#1f2a3f]">Total</span>
+          <span class="text-green-600">₦<span x-text="formatPrice(grandTotal)"></span></span>
+        </div>
+      </div>
+
+      <!-- Room Number Display -->
+      <div class="bg-indigo-50 rounded-xl p-3 flex items-center gap-3">
+        <i class="fas fa-door-open text-indigo-500 text-lg"></i>
+        <div>
+          <p class="text-xs text-indigo-500 font-medium">Delivering to</p>
+          <p class="text-sm font-bold text-indigo-700">Room <span x-text="roomNumber"></span></p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Payment Buttons -->
+    <div class="sticky bottom-0 bg-white border-t border-[#eef2f8] p-4 space-y-3">
+      <!-- Pay with Transfer -->
+      <button
+        @click="hotelPayWithTransfer()"
+        class="w-full bg-gradient-to-r from-emerald-500 to-green-600 text-white py-4 rounded-2xl font-semibold shadow-lg flex items-center justify-center gap-3 hover:shadow-xl transition-all hover:scale-[1.02]"
+      >
+        <i class="fas fa-university text-lg"></i>
+        <div class="text-left">
+          <p class="text-sm font-bold">Pay with Bank Transfer</p>
+          <p class="text-xs opacity-80">₦<span x-text="formatPrice(grandTotal + transferFee)"></span> (incl. ₦<span x-text="formatPrice(transferFee)"></span> fee)</p>
+        </div>
+      </button>
+
+      <!-- Pay with Card -->
+      <button
+        @click="hotelPayWithCard()"
+        class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-4 rounded-2xl font-semibold shadow-lg flex items-center justify-center gap-3 hover:shadow-xl transition-all hover:scale-[1.02]"
+      >
+        <i class="fas fa-credit-card text-lg"></i>
+        <div class="text-left">
+          <p class="text-sm font-bold">Pay with Card</p>
+          <p class="text-xs opacity-80">₦<span x-text="formatPrice(grandTotal + cardFee)"></span> (incl. ₦<span x-text="formatPrice(cardFee)"></span> fee)</p>
+        </div>
+      </button>
+
+      <!-- Back -->
+      <button
+        @click="showHotelPaymentModal = false"
+        class="w-full py-3 border-2 border-[#dee7f2] rounded-xl text-[#1f2a3f] font-semibold hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+      >
+        <i class="fas fa-arrow-left"></i>
+        <span>Back to Cart</span>
+      </button>
+    </div>
+
+  </div>
+</div>
+
 <!-- ===== DELIVERY FORM MODAL (beautiful delivery info form) ===== -->
 <div x-show="showDeliveryForm" class="fixed inset-0 z-50 flex items-center justify-center p-4" @keydown.escape.window="showDeliveryForm = false">
   <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" @click="showDeliveryForm = false"></div>
-  <div class="relative bg-white max-w-md w-full rounded-3xl p-6 shadow-2xl border border-[#eef2f8] max-h-[90vh] overflow-y-auto"
+  <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl border border-[#eef2f8] max-h-[90vh] overflow-y-auto"
        x-show="showDeliveryForm" x-transition>
     
     <!-- Header -->
-    <div class="text-center mb-6">
+    <div class="text-center mb-6 sticky top-0 bg-white z-10 pt-6 px-6 pb-3 border-b border-[#eef2f8]">
       <div class="w-16 h-16 bg-gradient-to-br from-[#1f2a3f] to-[#2b384f] rounded-2xl flex items-center justify-center mx-auto mb-3">
         <i class="fas fa-truck text-3xl text-white"></i>
       </div>
@@ -1837,110 +2079,226 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
     </div>
     
     <!-- Form Fields -->
-    <div class="space-y-4">
-      <!-- Full Name -->
+    <div class="px-6 py-4 space-y-4">
+      
+      <!-- First Name -->
       <div>
         <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
-          <i class="fas fa-user mr-2"></i>Full Name
+          <i class="fas fa-user mr-2"></i>First Name <span class="text-red-500">*</span>
         </label>
         <input 
           type="text" 
-          x-model="deliveryInfo.fullName"
-          placeholder="Enter your full name"
+          x-model="deliveryInfo.firstName"
+          placeholder="Enter your first name"
+          required
           class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all"
         >
       </div>
-      
+
+      <!-- Last Name -->
+      <div>
+        <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
+          <i class="fas fa-user mr-2"></i>Last Name <span class="text-red-500">*</span>
+        </label>
+        <input 
+          type="text" 
+          x-model="deliveryInfo.lastName"
+          placeholder="Enter your last name"
+          required
+          class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all"
+        >
+      </div>
+
       <!-- Phone Number -->
       <div>
         <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
-          <i class="fas fa-phone mr-2"></i>Phone Number
+          <i class="fas fa-phone mr-2"></i>Phone Number <span class="text-red-500">*</span>
+        </label>
+        <div class="relative">
+          <div class="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-gray-500 font-medium text-sm pointer-events-none">
+            <span>+234</span>
+            <span class="text-gray-300">|</span>
+          </div>
+          <input 
+            type="tel" 
+            x-model="deliveryInfo.phone"
+            placeholder="8012345678"
+            maxlength="10"
+            required
+            @input="deliveryInfo.phone = deliveryInfo.phone.replace(/[^0-9]/g, '').replace(/^0+/, '').slice(0, 10)"            
+            class="w-full pl-16 pr-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all"
+          >
+        </div>
+        <p class="text-xs text-gray-400 mt-1">Enter 10-digit number without the leading 0</p>
+      </div>
+      
+      <!-- Street Address -->
+      <div>
+        <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
+          <i class="fas fa-location-dot mr-2"></i>Street Address
+        </label>
+        <textarea 
+          x-model="deliveryInfo.address"
+          rows="2"
+          placeholder="Street name, building number, area..."
+          class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all resize-none"
+        ></textarea>
+      </div>
+      
+      <!-- State -->
+      <div>
+        <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
+          <i class="fas fa-map-marker-alt mr-2"></i>State <span class="text-red-500">*</span>
+        </label>
+        <select 
+          x-model="deliveryInfo.state"
+          @change="
+            deliveryInfo.lga = '';
+            lgas = allLgas[deliveryInfo.state] || [];
+          "
+          class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all bg-white"
+        >
+          <option value="">Select State</option>
+          <option value="Abia">Abia</option>
+          <option value="Adamawa">Adamawa</option>
+          <option value="Akwa Ibom">Akwa Ibom</option>
+          <option value="Anambra">Anambra</option>
+          <option value="Bauchi">Bauchi</option>
+          <option value="Bayelsa">Bayelsa</option>
+          <option value="Benue">Benue</option>
+          <option value="Borno">Borno</option>
+          <option value="Cross River">Cross River</option>
+          <option value="Delta">Delta</option>
+          <option value="Ebonyi">Ebonyi</option>
+          <option value="Edo">Edo</option>
+          <option value="Ekiti">Ekiti</option>
+          <option value="Enugu">Enugu</option>
+          <option value="FCT Abuja">FCT Abuja</option>
+          <option value="Gombe">Gombe</option>
+          <option value="Imo">Imo</option>
+          <option value="Jigawa">Jigawa</option>
+          <option value="Kaduna">Kaduna</option>
+          <option value="Kano">Kano</option>
+          <option value="Katsina">Katsina</option>
+          <option value="Kebbi">Kebbi</option>
+          <option value="Kogi">Kogi</option>
+          <option value="Kwara">Kwara</option>
+          <option value="Lagos">Lagos</option>
+          <option value="Nasarawa">Nasarawa</option>
+          <option value="Niger">Niger</option>
+          <option value="Ogun">Ogun</option>
+          <option value="Ondo">Ondo</option>
+          <option value="Osun">Osun</option>
+          <option value="Oyo">Oyo</option>
+          <option value="Plateau">Plateau</option>
+          <option value="Rivers">Rivers</option>
+          <option value="Sokoto">Sokoto</option>
+          <option value="Taraba">Taraba</option>
+          <option value="Yobe">Yobe</option>
+          <option value="Zamfara">Zamfara</option>
+        </select>
+      </div>
+
+      <!-- LGA (Local Government Area) -->
+      <div>
+        <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
+          <i class="fas fa-city mr-2"></i>LGA <span class="text-red-500">*</span>
+        </label>
+        <select 
+          x-model="deliveryInfo.lga"
+          :disabled="!deliveryInfo.state"
+          class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all bg-white"
+          :class="!deliveryInfo.state ? 'bg-gray-100 cursor-not-allowed text-gray-400' : ''"
+        >
+          <option value="">Select LGA</option>
+          <template x-for="lga in lgas" :key="lga">
+            <option :value="lga" x-text="lga"></option>
+          </template>
+        </select>
+        <p x-show="!deliveryInfo.state" class="text-xs text-gray-400 mt-1">Select a state first</p>
+      </div>
+      
+      
+      <!-- Country (Static - Nigeria Only) -->
+      <div>
+        <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
+          <i class="fas fa-globe mr-2"></i>Country
+        </label>
+        <div class="relative">
+          <input 
+            type="text" 
+            x-model="deliveryInfo.country"
+            readonly
+            disabled
+            class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed"
+          >
+          <input type="hidden" x-model="deliveryInfo.country_code" value="NG">
+          <div class="absolute right-3 top-1/2 -translate-y-1/2">
+            <i class="fas fa-check-circle text-green-500"></i>
+          </div>
+        </div>
+        <p class="text-xs text-gray-400 mt-1">We currently deliver within Nigeria only</p>
+      </div>
+      
+      <!-- Landmark (Optional) -->
+      <div>
+        <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
+          <i class="fas fa-map-pin mr-2"></i>Landmark (Optional)
         </label>
         <input 
-          type="tel" 
-          x-model="deliveryInfo.phone"
-          placeholder="e.g., 08012345678"
+          type="text" 
+          x-model="deliveryInfo.landmark"
+          placeholder="Near the church, opposite the mall..."
           class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all"
         >
       </div>
       
-<!-- Delivery Address with Autocomplete -->
-<div>
-  <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
-    <i class="fas fa-location-dot mr-2"></i>Delivery Address
-  </label>
-  <div class="relative">
-    <input 
-      id="address-autocomplete"
-      type="text"
-      x-model="deliveryInfo.address"
-      placeholder="Start typing your address..."
-      autocomplete="off"
-      class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all"
-    >
-    <div id="address-suggestions" class="absolute top-full left-0 right-0 bg-white border border-[#dee7f2] rounded-xl shadow-lg mt-1 z-50 hidden max-h-60 overflow-y-auto">
+      <!-- Special Instructions -->
+      <div>
+        <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
+          <i class="fas fa-pen mr-2"></i>Special Instructions (Optional)
+        </label>
+        <textarea 
+          x-model="deliveryInfo.specialInstructions"
+          rows="2"
+          placeholder="Gate code, buzzer number, etc..."
+          class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all resize-none"
+        ></textarea>
+      </div>
+      
+    </div>
+    
+    <!-- Order Summary Preview -->
+    <div class="mx-6 p-4 bg-[#f8fafd] rounded-xl">
+      <div class="flex justify-between text-sm mb-2">
+        <span class="text-[#6f7c91]">Items:</span>
+        <span class="font-semibold" x-text="cartCount + ' item(s)'"></span>
+      </div>
+      <div class="flex justify-between text-lg font-bold">
+        <span>Total:</span>
+        <span class="text-[#1f2a3f]" x-text="'₦' + formatPrice(cartTotal)"></span>
+      </div>
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="flex gap-3 p-6 pt-4">
+      <button 
+        @click="showDeliveryForm = false" 
+        class="flex-1 py-3 border-2 border-[#dee7f2] rounded-xl text-[#1f2a3f] font-semibold hover:bg-gray-50 transition-all"
+      >
+        <i class="fas fa-arrow-left mr-2"></i>Back
+      </button>
+      <button 
+        @click="submitDeliveryOrder()" 
+        :disabled="isSubmittingDelivery"
+        :class="isSubmittingDelivery ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg transform hover:scale-[1.02]'"
+        class="flex-1 bg-gradient-to-r from-[#1f2a3f] to-[#2b384f] text-white py-3 rounded-xl font-semibold shadow-md flex items-center justify-center gap-2 transition-all"
+      >
+        <i class="fas" :class="isSubmittingDelivery ? 'fa-spinner fa-pulse' : 'fa-check-circle'"></i>
+        <span x-text="isSubmittingDelivery ? 'Placing Order...' : 'Confirm Delivery'"></span>
+      </button>
     </div>
   </div>
-</div>
-
-<!-- Landmark (Optional) -->
-<div>
-  <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
-    <i class="fas fa-map-pin mr-2"></i>Landmark (Optional)
-  </label>
-  <input 
-    type="text" 
-    x-model="deliveryInfo.landmark"
-    placeholder="Near the church, opposite the mall..."
-    class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all"
-  >
-</div>
-
-<!-- Special Instructions -->
-<div>
-  <label class="block text-sm font-semibold text-[#1f2a3f] mb-2">
-    <i class="fas fa-pen mr-2"></i>Special Instructions (Optional)
-  </label>
-  <textarea 
-    x-model="deliveryInfo.specialInstructions"
-    rows="2"
-    placeholder="Gate code, buzzer number, etc..."
-    class="w-full px-4 py-3 rounded-xl border border-[#dee7f2] focus:border-[#1f2a3f] focus:ring-2 focus:ring-[#1f2a3f]/20 outline-none transition-all resize-none"
-  ></textarea>
-</div>
-</div>
-
-<!-- Order Summary Preview -->
-<div class="mt-6 p-4 bg-[#f8fafd] rounded-xl">
-<div class="flex justify-between text-sm mb-2">
-  <span class="text-[#6f7c91]">Items:</span>
-  <span class="font-semibold" x-text="cartCount + ' item(s)'"></span>
-</div>
-<div class="flex justify-between text-lg font-bold">
-  <span>Total:</span>
-  <span class="text-[#1f2a3f]" x-text="'₦' + formatPrice(cartTotal)"></span>
-</div>
-</div>
-
-<!-- Action Buttons -->
-<div class="flex gap-3 mt-6">
-<button 
-  @click="showDeliveryForm = false" 
-  class="flex-1 py-3 border-2 border-[#dee7f2] rounded-xl text-[#1f2a3f] font-semibold hover:bg-gray-50 transition-all"
->
-  <i class="fas fa-arrow-left mr-2"></i>Back
-</button>
-<button 
-  @click="submitDeliveryOrder()" 
-  :disabled="isSubmittingDelivery"
-  :class="isSubmittingDelivery ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg transform hover:scale-[1.02]'"
-  class="flex-1 bg-gradient-to-r from-[#1f2a3f] to-[#2b384f] text-white py-3 rounded-xl font-semibold shadow-md flex items-center justify-center gap-2 transition-all"
->
-  <i class="fas" :class="isSubmittingDelivery ? 'fa-spinner fa-pulse' : 'fa-check-circle'"></i>
-  <span x-text="isSubmittingDelivery ? 'Placing Order...' : 'Confirm Delivery'"></span>
-</button>
-</div>
-</div>
 </div>
 
 <!-- ===== PRICE PREVIEW MODAL (Shows VAT, Delivery Fee, Total) ===== -->
@@ -1950,15 +2308,26 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
   <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl border border-[#eef2f8] overflow-y-auto max-h-[95vh]"
        x-show="showPricePreview" x-transition>
     
-    <!-- Sticky Header -->
-    <div class="sticky top-0 bg-white z-10 px-5 pt-6 pb-3 border-b border-[#eef2f8]">
-      <div class="text-center">
-        <div class="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3 animate-pulse" style="box-shadow: 0 0 20px rgba(34,197,94,0.5);">
-          <i class="fas fa-receipt text-2xl sm:text-3xl text-white"></i>
+    <!-- Sticky Header with Bold Total -->
+    <div class="bg-white z-10 px-5 pt-5 pb-4 border-b border-[#eef2f8]">
+      <!-- Total Amount - Prominent at Top -->
+      <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-4 mb-3 border border-green-100">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i class="fas fa-calculator text-green-600 text-lg"></i>
+            <div>
+              <p class="text-xs text-green-600 font-medium">TOTAL AMOUNT</p>
+              <p class="text-2xl sm:text-3xl font-extrabold text-green-700">₦<span x-text="formatPrice(priceBreakdown.total)"></span></p>
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="bg-green-100 rounded-full px-3 py-1">
+              <p class="text-xs text-green-700 font-medium">VAT incl.</p>
+            </div>
+          </div>
         </div>
-        <h3 class="text-xl sm:text-2xl brand-italic font-bold">Order Summary</h3>
-        <p class="text-xs text-[#6f7c91] mt-1">Review your charges before payment</p>
       </div>
+      <p class="text-xs text-[#6f7c91] text-center">Review your charges before payment</p>
     </div>
     
     <!-- Scrollable Content -->
@@ -2052,16 +2421,11 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
           </div>
         </div>
         
-        <!-- Grand Total -->
-        <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4">
-          <div class="flex justify-between items-center">
-            <div class="flex items-center gap-2">
-              <i class="fas fa-calculator text-green-600 text-base"></i>
-              <span class="text-base font-bold text-[#1f2a3f]">Total Amount</span>
-            </div>
-            <div class="text-right">
-              <span class="text-xl sm:text-2xl font-bold text-green-600">₦<span x-text="formatPrice(priceBreakdown.total)"></span></span>
-            </div>
+        <!-- Grand Total (clean divider) -->
+        <div class="relative my-2">
+          <div class="border-t-2 border-dashed border-[#eef2f8]"></div>
+          <div class="absolute left-1/2 -top-2 -translate-x-1/2 bg-white px-2">
+            <i class="fas fa-star text-yellow-400 text-xs"></i>
           </div>
         </div>
         
@@ -2071,7 +2435,10 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
             <i class="fas fa-map-marker-alt text-[#1f2a3f] text-sm mt-0.5"></i>
             <div class="flex-1">
               <p class="text-xs font-semibold text-[#1f2a3f]">📦 Delivering to:</p>
-              <p class="text-sm font-medium text-gray-800" x-text="deliveryInfo.fullName"></p>
+              
+              <p class="text-sm font-medium text-gray-800">
+                <span x-text="deliveryInfo.firstName"></span> <span x-text="deliveryInfo.lastName"></span>
+              </p>
               <p class="text-xs text-[#6f7c91] mt-0.5" x-text="deliveryInfo.address"></p>
             </div>
           </div>
@@ -2081,27 +2448,50 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
       
     </div>
     
-    <!-- Sticky Footer with Buttons -->
-    <div class="sticky bottom-0 bg-white border-t border-[#eef2f8] p-4">
-      <div class="flex flex-col sm:flex-row gap-3">
-        <button 
-          @click="showPricePreview = false; showDeliveryForm = true;" 
-          class="order-2 sm:order-1 flex-1 py-3 border-2 border-[#dee7f2] rounded-xl text-[#1f2a3f] font-semibold hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
-        >
-          <i class="fas fa-arrow-left"></i>
-          <span>Back</span>
-        </button>
-        <button 
-          @click="confirmDeliveryOrder()" 
-          :disabled="isSubmittingDelivery"
-          :class="isSubmittingDelivery ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg transform hover:scale-[1.02]'"
-          class="order-1 sm:order-2 flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 rounded-xl font-semibold shadow-md flex items-center justify-center gap-2 transition-all"
-          style="animation: rainbowGlow 3s linear infinite;"
-        >
-          <i class="fas" :class="isSubmittingDelivery ? 'fa-spinner fa-pulse' : 'fa-credit-card'"></i>
-          <span x-text="isSubmittingDelivery ? 'Processing...' : 'Pay Now'"></span>
-        </button>
-      </div>
+    <!-- Sticky Footer with Payment Buttons -->
+    <div class="bg-white border-t border-[#eef2f8] p-4 space-y-3">
+
+      <!-- Pay with Bank Transfer -->
+      <button
+        @click="deliveryPayWithTransfer()"
+        :disabled="isSubmittingDelivery"
+        class="w-full bg-gradient-to-r from-emerald-500 to-green-600 text-white py-4 rounded-2xl font-semibold shadow-lg flex items-center justify-center gap-3 hover:shadow-xl transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <i class="fas fa-university text-lg"></i>
+        <div class="text-left">
+          <p class="text-sm font-bold">Pay with Bank Transfer</p>
+          <p class="text-xs opacity-80">
+            ₦<span x-text="formatPrice(priceBreakdown.total + deliveryTransferFee)"></span> 
+            (incl. ₦<span x-text="formatPrice(deliveryTransferFee)"></span> fee)
+          </p>
+        </div>
+      </button>
+
+      <!-- Pay with Card -->
+      <button
+        @click="deliveryPayWithCard()"
+        :disabled="isSubmittingDelivery"
+        class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-4 rounded-2xl font-semibold shadow-lg flex items-center justify-center gap-3 hover:shadow-xl transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <i class="fas fa-credit-card text-lg"></i>
+        <div class="text-left">
+          <p class="text-sm font-bold">Pay with Card</p>
+          <p class="text-xs opacity-80">
+            ₦<span x-text="formatPrice(priceBreakdown.total + deliveryCardFee)"></span> 
+            (incl. ₦<span x-text="formatPrice(deliveryCardFee)"></span> fee)
+          </p>
+        </div>
+      </button>
+
+      <!-- Back Button -->
+      <button
+        @click="showPricePreview = false; showDeliveryForm = true;"
+        :disabled="isSubmittingDelivery"
+        class="w-full py-3 border-2 border-[#dee7f2] rounded-xl text-[#1f2a3f] font-semibold hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+      >
+        <i class="fas fa-arrow-left"></i>
+        <span>Back</span>
+      </button>
     </div>
     
   </div>
