@@ -12,15 +12,11 @@ import json
 
 
 
-def verify_telegram_init_data(init_data: str, restaurant_id: str):
+def verify_telegram_init_data(init_data: str, restaurant):
     """
     Verifies Telegram Web App init_data according to Telegram docs.
     Returns (is_valid, data_dict).
     """
-    try: 
-        # Optimized: Only fetches the ID and bot_token from the DB
-        restaurant = Restaurant.objects.only('bot_token').get(rid=restaurant_id)
-    except Restaurant.DoesNotExist: return False, {}
 
     if not init_data:
         return False, {}
@@ -81,18 +77,27 @@ class TelegramWhatsappAuthentication(BaseAuthentication):
         whatsapp_id = request.data.get("user_id")
         mode = request.data.get('mode')
 
+        print("request data for auth: ", request.data)
+
         if not all([restaurant_id, platform, mode]):
             raise AuthenticationFailed("Missing session authentication data")
 
-        platform = platform.lower()
+        platform = (platform or "").lower()
+
+        # Get restaurant to check business_type
+        restaurant = Restaurant.objects.filter(rid=restaurant_id).only('business_type', 'bot_token').first()
+        if not restaurant:
+            raise AuthenticationFailed("Missing Restaurant")
+        
+        is_hotel = restaurant and restaurant.business_type == 'hotel'
 
         if platform == 'whatsapp':
-            if mode and mode.lower() == 'dine_in' and session_id:
+            if mode and mode.lower() == 'dine_in' and session_id and not is_hotel:
                 session = DineInOTPSession.objects.filter(
                     user__whatsapp_id=whatsapp_id,
                     status='verified',
                     session_id=session_id,
-                    restaurant__rid=restaurant_id,
+                    restaurant=restaurant,
                 ).select_related('user', 'restaurant').first()
 
                 if not session:
@@ -111,7 +116,7 @@ class TelegramWhatsappAuthentication(BaseAuthentication):
 
         if platform == 'telegram':
             init_data = request.data.get("init_data")
-            is_valid, data = verify_telegram_init_data(init_data, restaurant_id)
+            is_valid, data = verify_telegram_init_data(init_data, restaurant)
             if not is_valid:
                 raise AuthenticationFailed("Invalid Telegram data")
 
@@ -120,12 +125,12 @@ class TelegramWhatsappAuthentication(BaseAuthentication):
             if not telegram_id:
                 raise AuthenticationFailed("Telegram user not found")
 
-            if mode and mode.lower() == 'dine_in' and session_id:
+            if mode and mode.lower() == 'dine_in' and session_id and not is_hotel:
                 session = DineInOTPSession.objects.filter(
                     user__telegram_id=telegram_id,
                     status='verified',
                     session_id=session_id,
-                    restaurant__rid=restaurant_id,
+                    restaurant=restaurant,
                 ).first()
 
                 if not session:

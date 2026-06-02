@@ -211,8 +211,12 @@ def send_to_kitchen_for_celery(order, TOKEN):
     # 🔥 Add mode-specific information
     if service_mode == "dine_in":
         
-        # Dine-in: Add table number, NO delivery info
-        kitchen_text += f"📋 Table Number: {order.dine_in_table_number}\n\n"
+        # Check if this is a hotel order (room service)
+        if order.restaurant.business_type == 'hotel':
+            kitchen_text += f"🚪 Room Number: {order.checkout_session.room_number}\n\n"
+        else:
+            # Regular dine-in: Add table number
+            kitchen_text += f"📋 Table Number: {order.dine_in_table_number}\n\n"
     
     elif service_mode == "delivery":
         

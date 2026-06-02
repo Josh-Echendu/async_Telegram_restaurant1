@@ -24,10 +24,10 @@ PAYMENT_STATUS_CHOICES = (
 )
 
 TRANSACTION_TYPE = (
-    ('None', 'None'),
     ('cash', 'CASH'),
     ('pos', 'POS'),
-    ('dynamic_virtual_account', 'dynamic_virtual_account'),
+    ('card', 'CARD'),
+    ('transfer', 'Transfer'),
 )
 
 def product_image_path(instance, filename):
@@ -215,20 +215,17 @@ PLATFORM_CHOICES = (
 
 
 class CheckoutSession(models.Model):
-    session_id = ShortUUIDField(unique=True, length=10, alphabet=ALPHABET, prefix='ses')
+    session_id = ShortUUIDField(unique=True, length=20, alphabet=ALPHABET, prefix='ses')
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, null=True, related_name='restaurant_session', db_index=True)
     telegram_user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, null=True, related_name='telegram_session', db_index=True)
 
-    va_acct_number = models.CharField(max_length=50, null=True, blank=True)  # Assigned DVA
-    va_bank = models.CharField(max_length=50, null=True, blank=True)
-    va_expiry = models.DateTimeField(null=True, blank=True)  # NEW FIELD
-    merchant_reference = models.CharField(max_length=100, unique=True, null=True, blank=True, db_index=True)
     transaction_reference = models.CharField(max_length=100, unique=True, null=True, blank=True)
-    transaction_type = models.CharField(max_length=100, choices=TRANSACTION_TYPE, default='None')
+    transaction_type = models.CharField(max_length=100, choices=TRANSACTION_TYPE, null=True)
 
-    expected_amount = models.PositiveIntegerField(null=True, blank=True)
-    amount_received = models.PositiveIntegerField(null=True, blank=True)
-    
+    expected_amount = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal('0.00'), null=True, blank=True)
+    amount_received = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal('0.00'), null=True, blank=True)
+    bank_fee = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal('0.00'), null=True, blank=True)
+
     paid_at = models.DateTimeField(null=True, blank=True)
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
     webhook_payload = models.JSONField(null=True, blank=True)
@@ -237,10 +234,10 @@ class CheckoutSession(models.Model):
     payment_in_progress = models.BooleanField(default=False)
     notification_sent =  models.BooleanField(default=False)
     date_created = models.DateTimeField(auto_now_add=True, db_index=True)
-    # expires_at = models.DateTimeField(null=True, blank=True)
 
     service_mode = models.CharField(max_length=20, choices=SERVICE_MODE_CHOICES, help_text="Service mode for this checkout session", db_index=True)
     platform = models.CharField(max_length=100, choices=PLATFORM_CHOICES, null=True, blank=True, help_text="platform used for this checkout session", db_index=True)
+    room_number = models.CharField(max_length=255, blank=True, null=True)
 
     # For Delivery (only used when service_mode='delivery')
     delivery_full_name = models.CharField(max_length=255, null=True, blank=True)
@@ -267,6 +264,12 @@ class CheckoutSession(models.Model):
             )
         ]
 
+    def clean(self):
+        if self.service_mode == 'delivery' and self.room_number:
+            raise ValidationError("Delivery sessions cannot have a room number")
+        if self.service_mode == 'dine_in' and self.delivery_address:
+            raise ValidationError("Dine-in sessions cannot have a delivery address")
+
     def save(self, *args, **kwargs):
 
         # If this is a delivery session, auto-close it after payment
@@ -275,6 +278,10 @@ class CheckoutSession(models.Model):
 
         if self.service_mode == "dine_in" and self.payment_status == "paid":
             self.is_active = False
+
+        if self.restaurant.business_type == 'restaurant' and self.service_mode == 'dine_in':            
+            self.payment_method = None
+            self.room_number = None
 
         super().save(*args, **kwargs)
 

@@ -277,7 +277,7 @@ REST_FRAMEWORK = {
     #     "orders.throttles.TelegramScopedThrottle",
     # ],
     "DEFAULT_THROTTLE_RATES": {
-        "send_kitchen": "2/minute",  # only 1 request per 60 seconds per user
+        "send_kitchen": "1000/minute",  # only 1 request per 60 seconds per user
         "kitchen_otp": "190/hour",
     },
 }
@@ -339,3 +339,13 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 # To this:
 # TIME_ZONE = 'Africa/Lagos'  # Nigeria timezone (UTC+1)
+
+
+
+# VPay Settings
+VPAY_SANDBOX_PUBLIC_KEY = os.getenv('VPAY_SANDBOX_PUBLIC_KEY')
+VPAY_SANDBOX_SECRET_KEY = os.getenv('VPAY_SANDBOX_SECRET_KEY')
+VPAY_LIVE_PUBLIC_KEY = os.getenv('VPAY_LIVE_PUBLIC_KEY')
+VPAY_LIVE_SECRET_KEY = os.getenv('VPAY_LIVE_SECRET_KEY')
+VPAY_WEBHOOK_SECRET = os.getenv('VPAY_WEBHOOK_SECRET')
+VPAY_DOMAIN = 'live'  # or 'live'

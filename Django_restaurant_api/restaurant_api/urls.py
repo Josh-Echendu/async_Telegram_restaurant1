@@ -26,6 +26,7 @@ urlpatterns = [
     path('userauths/', include('userAuths.urls')),  # your other API routes
     path('useradmin/', include('userAdmin.urls')),  # your other API routes
     path('restaurants/', include('restaurants.urls')),  # your other API routes
+    path('payments/', include('payments.urls')),  # your other API routes
 ]
 
 

@@ -9,6 +9,7 @@ import uuid
 import requests
 from django.shortcuts import redirect
 
+from payments.services import calculate_payment_amounts, generate_transaction_reference, get_vpay_public_key
 from restaurants.services import get_coords
 
 from .utils import is_delivery_available
@@ -90,6 +91,7 @@ def restaurant_detail(request, restaurant_id):
         "user_id": user_id,
         'max_tables': restaurant.max_tables or 10,  # ✅ Now restaurant always exists!
         'business_type': restaurant.business_type,  # ✅ Now restaurant always exists!
+        'vpay_public_key': settings.VPAY_LIVE_PUBLIC_KEY,  # ✅ Pass VPAY public key to template
     }
     print("context: ", context)
 
@@ -736,11 +738,13 @@ class OrderBatchListCreateAPIView(APIView):
             service_mode = str(request.data.get("mode"))
             table_number = str(request.data.get("table_number")) if service_mode == "dine_in" else None
             delivery_info = request.data.get("delivery_info")   # ← NEW for delivery            
-            platform = request.data.get('platform')
+            platform = (request.data.get('platform') or "").lower()
+            payment_method = (request.data.get("payment_method") or "").lower()
+            room_number = request.data.get('room_number')
 
         except (TypeError, ValueError) as e:
             return Response({"error": f"Invalid data: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-
+            
         print("table_number_joshua: ", table_number)
         if not cart_items: return Response({"message": "Cart is empty"}, status=status.HTTP_400_BAD_REQUEST)
         if not idempotency_key: return Response({"error": "Missing idempotency key"}, status=status.HTTP_400_BAD_REQUEST)
@@ -748,7 +752,6 @@ class OrderBatchListCreateAPIView(APIView):
         if service_mode:
             service_mode = service_mode.lower()
                     
-        if service_mode == "dine_in" and not table_number: return Response({"message": "Missing table number for dine-in order"}, status=status.HTTP_400_BAD_REQUEST)
         if service_mode == "delivery" and delivery_info is None: return Response({"message": "Missing Delivery information for a delivery order"})
 
         # Validate cart items structure
@@ -759,7 +762,22 @@ class OrderBatchListCreateAPIView(APIView):
                 return Response({"error": f"Invalid quantity for product {item.get('pid')}"}, status=status.HTTP_400_BAD_REQUEST)
     
         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
+        business_type = (restaurant.business_type or "").lower()
 
+        if business_type == 'restaurant' and service_mode == 'dine_in':            
+            if not table_number: return Response({"message": "Missing table number for dine-in order"}, status=status.HTTP_400_BAD_REQUEST)
+            payment_method = None
+        
+        elif business_type == 'hotel':
+            if not room_number: return Response({"message": 'Invalid room number'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Hotels: always prepay, service_mode forced to dine_in
+            if payment_method not in ['card', 'transfer']:
+                return Response({'success': False, 'message': 'Invalid payment method'}, status=400)
+        else:
+            if payment_method not in ['card', 'transfer']:
+                return Response({'success': False, 'message': 'Invalid parameters'}, status=400)
+        
         # Fast fail - restaurant accepting orders?
         if not restaurant.is_accepting_orders or not restaurant.is_bot_active:
             return Response({"message": "Restaurant is not accepting orders at the moment"}, status=status.HTTP_400_BAD_REQUEST)
@@ -862,13 +880,20 @@ class OrderBatchListCreateAPIView(APIView):
                 product = product_map.get(item.get('pid'))
                 qty = max(1, int(item.get("quantity", 1)))
                 total_price += product.price * qty
+            
+            amounts = calculate_payment_amounts(total_price, service_mode, restaurant)
+            print("full amounts: ", amounts)
 
-            session = self.create_order_session(
+            session, final_amount = self.create_order_session(
                 restaurant=restaurant,
                 user=user,
                 service_mode=service_mode, 
                 delivery_info=delivery_info,
-                platform=platform
+                platform=platform,
+                room_number=room_number,
+                payment_method=payment_method,
+                amounts=amounts,
+                business_type=business_type
             )
 
             if session and session.payment_in_progress:
@@ -893,7 +918,7 @@ class OrderBatchListCreateAPIView(APIView):
                 status='pending', # kitchen status
                 payment_status='unpaid',  # payment workflow,
                 platform=platform,
-                dine_in_table_number=table_number if service_mode == 'dine_in' else None
+                dine_in_table_number=None if business_type == 'hotel' else table_number
             )
 
             # 6️⃣ Create OrderBatchItems
@@ -908,29 +933,31 @@ class OrderBatchListCreateAPIView(APIView):
             ]
             OrderBatchItem.objects.bulk_create(batch_items, batch_size=100)
 
-            for i in range(5):
-                try:
-                    # Send notification (don't fail order if this fails)
-                    send_order_notifications.delay(
-                        restaurant.rid,
-                        order_batch.bid, 
-                        order_batch.telegram_user.telegram_id
-                    )
-                    break
-                except Exception as e:
-                    if i == 4:
-                        logger.error(f"Failed to queue notification for order {order_batch.bid}: {e}")  
-                        break
-                    time.sleep(5)      
-            
-            data = {
-                "success": True,
-                "message": "Order batch created successfully", 
-                "batch_id": order_batch.bid,
-                "removed_items": removed_items
-            }
-            return Response(data, status=status.HTTP_201_CREATED)
-        
+            if business_type == 'restaurant' and service_mode == 'dine_in':
+                # Send notification (don't fail order if this fails)
+                send_order_notifications.delay(restaurant.rid, order_batch.bid,  order_batch.telegram_user.telegram_id)
+
+                data = {
+                    "success": True,
+                    "message": "Order batch created successfully", 
+                    "batch_id": order_batch.bid,
+                    "removed_items": removed_items
+                }
+                print("restaurant and dine_in: ", data)
+                return Response(data, status=status.HTTP_201_CREATED)
+
+            else:
+                data = {
+                    "success": True,
+                    "message": "Order batch created successfully",
+                    "batch_id": order_batch.bid,  # ← ADD THIS
+                    "transactionref": session.transaction_reference,
+                    'public_key': get_vpay_public_key(),
+                    "removed_items": removed_items,
+                    "final_amount": final_amount,
+                }
+                print("delivery and hotel: ", data)
+                return Response(data, status=status.HTTP_201_CREATED)
         except IntegrityError as e:
             # Race condition: someone else already created it
             batch = get_object_or_404(OrderBatch, telegram_user=user, idempotency_key=idempotency_key, restaurant=restaurant)
@@ -954,8 +981,15 @@ class OrderBatchListCreateAPIView(APIView):
             )
 
     # 3. In your order creation logic
-    def create_order_session(self, restaurant, user, service_mode, platform, delivery_info=None):
+    def create_order_session(self, restaurant, user, service_mode, platform, payment_method, amounts, business_type, room_number=None, delivery_info=None):
+
+        final_amount = Decimal('0.00')
         
+        if payment_method == "transfer":
+            final_amount = amounts['transfer_total']
+        elif payment_method == "card":  # ← Use elif, not if
+            final_amount = amounts["card_total"]
+                
         # 🔥 NEW: Handle sessions based on service_mode
         if service_mode == 'delivery':
 
@@ -969,6 +1003,10 @@ class OrderBatchListCreateAPIView(APIView):
                 platform=platform,
             ).update(is_active=False) # ← Close old one        
             
+            first_name = delivery_info.get('firstName', '')
+            last_name = delivery_info.get('lastName', '')
+            full_name = f"{first_name} {last_name}".strip()
+
             # Create a fresh session for delivery
             session = CheckoutSession.objects.create(
                 restaurant=restaurant,
@@ -977,28 +1015,30 @@ class OrderBatchListCreateAPIView(APIView):
                 is_active=True,
                 payment_status='unpaid',
                 platform=platform,
-
+                transaction_type=payment_method,
+                expected_amount=final_amount,
 
                 # delivery Info
-                delivery_full_name=delivery_info.get('fullName'),
+                delivery_full_name=full_name,
                 delivery_phone=delivery_info.get('phone'),
                 delivery_address=delivery_info.get('address'),
                 delivery_landmark=delivery_info.get('landmark', ''),
                 delivery_instructions=delivery_info.get('specialInstructions', '')
             )
-            
-        else:  # DINE_IN MODE
-                        
-            # Dine-in: Use existing active session OR create new one
-            session = CheckoutSession.objects.filter(
-                restaurant=restaurant,
-                telegram_user=user,
-                service_mode='dine_in',
-                is_active=True,
-                payment_status='unpaid', 
-            ).order_by('-date_created').first()
-            
-            if not session:
+            save_session_with_unique_reference(session)
+
+        else:  # DINE_IN MODE (Restaurant or Hotel)
+               
+            if business_type == 'hotel':
+                # Hotels: Close any old active dine-in session, create fresh one (prepay per order)
+                CheckoutSession.objects.filter(
+                    restaurant=restaurant,
+                    telegram_user=user,
+                    service_mode='dine_in',
+                    is_active=True,
+                    payment_status='unpaid'
+                ).update(is_active=False)
+                
                 session = CheckoutSession.objects.create(
                     restaurant=restaurant,
                     telegram_user=user,
@@ -1006,8 +1046,52 @@ class OrderBatchListCreateAPIView(APIView):
                     is_active=True,
                     payment_status='unpaid',
                     platform=platform,
+                    transaction_type=payment_method,
+                    room_number=room_number,
+                    expected_amount=final_amount
                 )
-        return session
+                session.transaction_reference = generate_transaction_reference(session.session_id)
+                session.save(update_fields=['transaction_reference'])
+
+            else:
+                # Restaurant dine-in: Reuse active session (postpay, multiple orders)
+                session = CheckoutSession.objects.filter(
+                    restaurant=restaurant,
+                    telegram_user=user,
+                    service_mode='dine_in',
+                    is_active=True,
+                    payment_status='unpaid',
+                ).order_by('-date_created').first()
+                
+                if not session:
+                    session = CheckoutSession.objects.create(
+                        restaurant=restaurant,
+                        telegram_user=user,
+                        service_mode='dine_in',
+                        is_active=True,
+                        payment_status='unpaid',
+                        platform=platform,
+                        transaction_type=payment_method
+                    )
+                    save_session_with_unique_reference(session)
+
+        return session, final_amount
+    
+
+def save_session_with_unique_reference(session, max_retries=3):
+    """Save session with retry on transaction_reference collision."""
+    
+    for attempt in range(max_retries):
+        try:
+            session.transaction_reference = generate_transaction_reference(session.session_id)
+            session.save(update_fields=['transaction_reference'])
+            return session
+        except IntegrityError:
+            if attempt == max_retries - 1:
+                raise
+            # Generate a new reference and retry
+            continue
+    return session
 
 
 
@@ -1660,3 +1744,4 @@ batch_list_api_view = UserOrderBatchesAPIView.as_view()
 
 # 08068856286
 # grievance.office@xiaomi.com
+# 0816 472 0993: anita
