@@ -3,8 +3,6 @@ from django.core.exceptions import ValidationError
 
 
 # Create your models here.
-
-
 class POSConfig(models.Model):
     BRAND_CHOICES = (
         ('moniepoint', 'Moniepoint'),
@@ -58,7 +56,7 @@ class POSConfig(models.Model):
                 })
 
     def save(self, *args, **kwargs):
-        
+
         # Always run full clean before save
         self.full_clean()
         super().save(*args, **kwargs)

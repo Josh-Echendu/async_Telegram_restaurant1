@@ -349,3 +349,26 @@ VPAY_LIVE_PUBLIC_KEY = os.getenv('VPAY_LIVE_PUBLIC_KEY')
 VPAY_LIVE_SECRET_KEY = os.getenv('VPAY_LIVE_SECRET_KEY')
 VPAY_WEBHOOK_SECRET = os.getenv('VPAY_WEBHOOK_SECRET')
 VPAY_DOMAIN = 'live'  # or 'live'
+
+
+
+MONIEPOINT_CONFIG = {
+    "BASE_URL": "https://channel.moniepoint.com",
+    "CLIENT_ID": os.getenv("CLIENT_ID"),
+    "CLIENT_SECRET": os.getenv("CLIENT_SECRET"),
+    "AUTH_ENDPOINT": "/v1/auth",
+    "TRANSACTION_ENDPOINT": "/v1/transactions",
+    "STATUS_ENDPOINT": "/v1/transactions/merchants/{merchant_reference}",
+    
+    # Production tuning
+    "REQUEST_TIMEOUT": 15,           # seconds - HTTP request timeout
+    "TOKEN_REFRESH_BUFFER": 300,     # refresh token 5 minutes before expiry
+    "POLL_MAX_ATTEMPTS": 20,         # max status check attempts
+    "POLL_INTERVAL": 5,              # seconds between polls
+    "POLL_TIMEOUT": 120,             # total seconds before giving up
+    
+    # Retry config
+    "MAX_RETRIES": 3,
+    "RETRY_BACKOFF_FACTOR": 0.5,     # exponential backoff multiplier
+    "RETRY_STATUSES": [429, 500, 502, 503, 504],  # statuses to retry on
+}
