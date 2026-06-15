@@ -213,18 +213,44 @@ PLATFORM_CHOICES = (
     ('whatsapp', 'Whatsapp')
 )
 
+BANK_CHOICES = (
+    ('opay', 'OPay'),
+    ('palmpay', 'PalmPay'),
+    ('vpay', 'Vpay'),
+    ('moniepoint', 'Moniepoint'),
+)
 
 class CheckoutSession(models.Model):
+    from restaurants.models import DineInOTPSession
+
     session_id = ShortUUIDField(unique=True, length=20, alphabet=ALPHABET, prefix='ses')
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, null=True, related_name='restaurant_session', db_index=True)
     telegram_user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, null=True, related_name='telegram_session', db_index=True)
+    dine_session = models.ForeignKey(DineInOTPSession, on_delete=models.CASCADE, null=True, blank=True, related_name='dine_session', db_index=True)
+
 
     transaction_reference = models.CharField(max_length=100, unique=True, null=True, blank=True)
     transaction_type = models.CharField(max_length=100, choices=TRANSACTION_TYPE, null=True)
 
+    # Food cost only
+    total_price = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal('0.00'), null=True, blank=True)
+    
+    # What customer pays dine_in (subtotal + vat + bank_fee) or if delivery(subtotal + vat + delivery_fee + bank_fee)
     expected_amount = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal('0.00'), null=True, blank=True)
+
+    # 7.5% vat charge
+    vat_amount = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal('0.00'), null=True, blank=True)
+
+    # Delivery fee
+    delivery_fee = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal('0.00'), null=True, blank=True)
+
+
+    # What actually landed (from webhook)
     amount_received = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal('0.00'), null=True, blank=True)
+
+    # The amount bank charges us
     bank_fee = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal('0.00'), null=True, blank=True)
+    bank_choice = models.CharField(max_length=100, null=True, blank=True, choices=BANK_CHOICES)
 
     paid_at = models.DateTimeField(null=True, blank=True)
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
@@ -272,15 +298,13 @@ class CheckoutSession(models.Model):
 
     def save(self, *args, **kwargs):
 
-        # If this is a delivery session, auto-close it after payment
-        if self.service_mode == 'delivery' and self.payment_status == 'paid':
+        # When paid, close session and update all batches
+        if self.payment_status == 'paid':
             self.is_active = False
+            self.session_batches.all().update(payment_status='paid')
 
-        if self.service_mode == "dine_in" and self.payment_status == "paid":
-            self.is_active = False
-
-        if self.restaurant.business_type == 'restaurant' and self.service_mode == 'dine_in':            
-            self.payment_method = None
+        # Restaurant dine-in doesn't use room numbers
+        if self.restaurant.business_type == 'restaurant' and self.service_mode == 'dine_in':
             self.room_number = None
 
         super().save(*args, **kwargs)
@@ -306,7 +330,7 @@ class CheckoutSession(models.Model):
 # Permanent order batch (represents one checkout)
 class OrderBatch(models.Model):
     checkout_session = models.ForeignKey(CheckoutSession, on_delete=models.CASCADE, related_name="session_batches", null=True, db_index=True)
-    
+
     bid = ShortUUIDField(unique=True, length=10, max_length=20, editable=False) # editable=False: 👉 This field will not appear in Django forms or admin forms.
     restaurant = models.ForeignKey(Restaurant, db_index=True, on_delete=models.CASCADE, related_name='restaurant_orders')
     telegram_user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='order_batches', db_index=True, null=True)

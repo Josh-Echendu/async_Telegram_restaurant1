@@ -141,7 +141,7 @@ class GenerateOTPForTableAPIView(APIView):
             "success": True,
             "session_id": session.session_id,
             "otp_code": otp,
-            "expires_in": 300,  # 5 minutes in seconds
+            "expires_in": 60,  # 1 minutes in seconds
             "waiter_usernamr": session.waiter_username or "waiter",  # For PTB to send message
             "message": f"OTP {otp} generated for Table {table_number}"
         }, status=201)

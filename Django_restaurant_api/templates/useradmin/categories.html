@@ -1,0 +1,178 @@
+{% extends "useradmin/base.html" %}
+{% load static %}
+
+{% block content %}
+
+<div class="px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    
+    <!-- ==================== PAGE HEADER ==================== -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">Categories</h1>
+            <p class="text-xs sm:text-sm text-gray-500 mt-0.5">{{ categories.paginator.count }} categor{{ categories.paginator.count|pluralize:"y,ies" }} in your catalog</p>
+        </div>
+        <a href="{% url 'useradmin:dashboard-add-category' %}" 
+           class="inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:py-3 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 hover:shadow-indigo-300 active:scale-95">
+            <i class="fas fa-plus text-xs"></i>
+            <span>Add Category</span>
+        </a>
+    </div>
+
+    <!-- ==================== CATEGORIES TABLE (Desktop) ==================== -->
+    <div class="hidden lg:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <table class="w-full">
+            <thead>
+                <tr class="bg-gray-50">
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Category</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Prep Time / Days</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Products</th>
+                    <th class="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for c in categories %}
+                <tr class="hover:bg-gray-50/50 transition-colors">
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-4">
+                            {% if c.image %}
+                                <img src="{{ c.image.url }}" class="w-12 h-12 rounded-xl object-cover bg-gray-100" alt="{{ c.title }}" />
+                            {% else %}
+                                <div class="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center">
+                                    <i class="fas fa-tag text-indigo-400 text-lg"></i>
+                                </div>
+                            {% endif %}
+                            <p class="text-sm font-semibold text-gray-900">{{ c.title }}</p>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4">
+                        {% if c.prep_time_minutes %}
+                            <span class="text-sm text-gray-700">{{ c.prep_time_minutes }} min</span>
+                        {% elif c.prep_day is not None %}
+                            <span class="text-sm text-gray-700">
+                                {% if c.prep_day == 0 %}Same Day{% else %}{{ c.prep_day }} day{{ c.prep_day|pluralize }}{% endif %}
+                            </span>
+                        {% else %}
+                            <span class="text-sm text-gray-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="text-sm text-gray-700">{{ c.product_set.count }}</span>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'useradmin:edit-category' c.cid %}" 
+                               class="p-2 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Edit">
+                                <i class="fas fa-pen text-sm"></i>
+                            </a>
+                            <form method="POST" action="{% url 'useradmin:delete-category' c.cid %}" class="inline" onsubmit="return confirm('Delete this category? All products in it will become uncategorized.')">
+                                {% csrf_token %}
+                                <button type="submit" class="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Delete">
+                                    <i class="fas fa-trash text-sm"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="px-6 py-16 text-center">
+                        <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-tags text-gray-400 text-2xl"></i>
+                        </div>
+                        <p class="text-sm font-medium text-gray-500">No categories yet</p>
+                        <p class="text-xs text-gray-400 mt-1">Create categories to organize your products</p>
+                        <a href="{% url 'useradmin:dashboard-add-category' %}" 
+                           class="inline-flex items-center gap-2 mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-800">
+                            <i class="fas fa-plus text-xs"></i> Add Category
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ==================== CATEGORIES CARDS (Mobile/Tablet) ==================== -->
+    <div class="lg:hidden space-y-3">
+        {% for c in categories %}
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-4">
+            {% if c.image %}
+                <img src="{{ c.image.url }}" class="w-14 h-14 rounded-xl object-cover bg-gray-100 flex-shrink-0" alt="{{ c.title }}" />
+            {% else %}
+                <div class="w-14 h-14 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-tag text-indigo-400 text-xl"></i>
+                </div>
+            {% endif %}
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-gray-900 truncate">{{ c.title }}</p>
+                <div class="flex items-center gap-2 mt-1">
+                    {% if c.prep_time_minutes %}
+                        <span class="text-xs text-gray-500">{{ c.prep_time_minutes }} min</span>
+                    {% elif c.prep_day is not None %}
+                        <span class="text-xs text-gray-500">
+                            {% if c.prep_day == 0 %}Same Day{% else %}{{ c.prep_day }} day{{ c.prep_day|pluralize }}{% endif %}
+                        </span>
+                    {% endif %}
+                    <span class="text-xs text-gray-400">·</span>
+                    <span class="text-xs text-gray-500">{{ c.product_set.count }} products</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-1">
+                <a href="{% url 'useradmin:edit-category' c.cid %}" 
+                   class="p-2 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+                    <i class="fas fa-pen text-sm"></i>
+                </a>
+                <form method="POST" action="{% url 'useradmin:delete-category' c.cid %}" class="inline" onsubmit="return confirm('Delete this category?')">
+                    {% csrf_token %}
+                    <button type="submit" class="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                        <i class="fas fa-trash text-sm"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% empty %}
+        <div class="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
+            <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-tags text-gray-400 text-2xl"></i>
+            </div>
+            <p class="text-sm font-medium text-gray-500">No categories yet</p>
+            <p class="text-xs text-gray-400 mt-1">Create categories to organize your products</p>
+            <a href="{% url 'useradmin:dashboard-add-category' %}" 
+               class="inline-flex items-center gap-2 mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-800">
+                <i class="fas fa-plus text-xs"></i> Add Category
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- ==================== PAGINATION ==================== -->
+    {% if categories.has_other_pages %}
+    <div class="flex items-center justify-center gap-1">
+        {% if categories.has_previous %}
+        <a href="?page={{ categories.previous_page_number }}" 
+           class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors">
+            <i class="fas fa-chevron-left text-xs"></i>
+        </a>
+        {% endif %}
+        
+        {% for num in categories.paginator.page_range %}
+            {% if num == categories.number %}
+            <span class="w-9 h-9 flex items-center justify-center rounded-lg bg-indigo-600 text-white text-sm font-semibold">{{ num }}</span>
+            {% elif num > categories.number|add:'-3' and num < categories.number|add:'3' %}
+            <a href="?page={{ num }}" 
+               class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors text-sm">{{ num }}</a>
+            {% endif %}
+        {% endfor %}
+        
+        {% if categories.has_next %}
+        <a href="?page={{ categories.next_page_number }}" 
+           class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors">
+            <i class="fas fa-chevron-right text-xs"></i>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</div>
+
+{% endblock %}

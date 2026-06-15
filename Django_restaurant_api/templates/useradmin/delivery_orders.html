@@ -1,0 +1,255 @@
+{% extends "useradmin/base.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block content %}
+
+<div class="px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    
+    <!-- ==================== PAGE HEADER ==================== -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">Delivery Orders</h1>
+            <p class="text-xs sm:text-sm text-gray-500 mt-0.5">{{ orders.paginator.count }} order{{ orders.paginator.count|pluralize }}</p>
+        </div>
+    </div>
+
+    <!-- ==================== DATE PICKER ==================== -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="relative">
+                    <i class="fas fa-calendar-alt absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <input 
+                        type="date" 
+                        id="dateFilter"
+                        name="date"
+                        value="{{ selected_date|default:'' }}"
+                        onchange="filterByDate(this.value)"
+                        class="pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all cursor-pointer"
+                    >
+                </div>
+                {% if selected_date %}
+                <a href="." class="text-xs text-red-500 hover:text-red-700 font-medium flex items-center gap-1">
+                    <i class="fas fa-times-circle"></i> Clear
+                </a>
+                {% endif %}
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <button onclick="filterByDate('today')" 
+                   class="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors {% if selected_date == today_str %}bg-indigo-600 text-white{% else %}bg-white border border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">
+                    Today
+                </button>
+                <button onclick="filterByDate('yesterday')" 
+                   class="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors {% if selected_date == yesterday_str %}bg-indigo-600 text-white{% else %}bg-white border border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">
+                    Yesterday
+                </button>
+                <button onclick="filterByDate('this_week')" 
+                   class="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">
+                    This Week
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== STATS CARDS ==================== -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        
+        <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+            <div class="flex items-center justify-between mb-3">
+                <span class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-indigo-50 flex items-center justify-center">
+                    <i class="fas fa-shopping-cart text-indigo-600 text-lg"></i>
+                </span>
+                <span class="text-[10px] font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">{% if selected_date %}Selected{% else %}All Time{% endif %}</span>
+            </div>
+            <p class="text-[11px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">Total Orders</p>
+            <p class="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mt-1">{{ total_orders }}</p>
+        </div>
+
+        <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+            <div class="flex items-center justify-between mb-3">
+                <span class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-emerald-50 flex items-center justify-center">
+                    <i class="fas fa-check-circle text-emerald-600 text-lg"></i>
+                </span>
+                <span class="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Completed</span>
+            </div>
+            <p class="text-[11px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">Paid Orders</p>
+            <p class="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mt-1">{{ paid_orders }}</p>
+        </div>
+
+        <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+            <div class="flex items-center justify-between mb-3">
+                <span class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-red-50 flex items-center justify-center">
+                    <i class="fas fa-clock text-red-600 text-lg"></i>
+                </span>
+                <span class="text-[10px] font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">Pending</span>
+            </div>
+            <p class="text-[11px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">Unpaid Orders</p>
+            <p class="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mt-1">{{ unpaid_orders }}</p>
+        </div>
+
+        <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+            <div class="flex items-center justify-between mb-3">
+                <span class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-50 flex items-center justify-center">
+                    <i class="fas fa-coins text-amber-600 text-lg"></i>
+                </span>
+                <span class="text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Gross</span>
+            </div>
+            <p class="text-[11px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">Total Revenue</p>
+            <p class="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mt-1">₦{{ total_revenue|intcomma }}</p>
+        </div>
+
+
+
+        <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+            <div class="flex items-center justify-between mb-3">
+                <span class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-purple-50 flex items-center justify-center">
+                    <i class="fas fa-percent text-purple-600 text-lg"></i>
+                </span>
+                <span class="text-[10px] font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">7.5%</span>
+            </div>
+            <p class="text-[11px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">VAT Collected</p>
+            <p class="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mt-1">₦{{ total_vat_price|intcomma }}</p>
+        </div>
+
+    </div>
+
+    <!-- ==================== ORDERS TABLE (Desktop) ==================== -->
+    <div class="hidden lg:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <table class="w-full">
+            <thead>
+                <tr class="bg-gray-50">
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Order ID</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Payment</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Time</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Platform</th>
+                    <th class="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for order in orders %}
+                <tr class="hover:bg-gray-50/50 transition-colors">
+                    <td class="px-6 py-4">
+                        <span class="text-sm text-gray-700">{{ order.telegram_user.first_name|default:order.telegram_user.username|default:'Guest' }}</span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="text-sm text-gray-700">{{ order.transaction_type|default:"—" }}</span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="text-sm text-gray-500">{{ order.date_created|date:"d M, g:i A" }}</span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="text-sm font-semibold text-gray-900">₦{{ order.amount_received|default:order.expected_amount|intcomma }}</span>
+                    </td>
+                    <td class="px-6 py-4">
+                        {% if order.platform == 'telegram' %}
+                            <span class="text-xs font-medium text-sky-700 bg-sky-50 px-2.5 py-1 rounded-full">Telegram</span>
+                        {% elif order.platform == 'whatsapp' %}
+                            <span class="text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">WhatsApp</span>
+                        {% else %}
+                            <span class="text-xs text-gray-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <a href="{% url 'useradmin:delivery-order-details' order.session_id %}" 
+                           class="text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:underline">
+                            Details →
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="px-6 py-16 text-center">
+                        <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-inbox text-gray-400 text-2xl"></i>
+                        </div>
+                        <p class="text-sm font-medium text-gray-500">No delivery orders for this date</p>
+                        <p class="text-xs text-gray-400 mt-1">Try selecting a different date or clear the filter</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ==================== ORDERS CARDS (Mobile/Tablet) ==================== -->
+    <div class="lg:hidden space-y-3">
+        {% for order in orders %}
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-semibold text-gray-900">#{{ order.session_id|slice:":12" }}</span>
+                <span class="text-xs text-gray-500">{{ order.date_created|date:"g:i A" }}</span>
+            </div>
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs text-gray-600">{{ order.telegram_user.first_name|default:'Guest' }}</span>
+                <span class="text-sm font-bold text-gray-900">₦{{ order.amount_received|default:order.expected_amount|intcomma }}</span>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">Paid</span>
+                {% if order.platform %}
+                    <span class="text-[10px] font-medium text-gray-500 bg-gray-50 px-2 py-0.5 rounded-full">{{ order.platform|title }}</span>
+                {% endif %}
+            </div>
+            <a href="{% url 'useradmin:delivery-order-details' order.session_id %}" 
+               class="inline-block mt-2 text-xs font-medium text-indigo-600 hover:text-indigo-800">
+                View Details →
+            </a>
+        </div>
+        {% empty %}
+        <div class="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
+            <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-inbox text-gray-400 text-2xl"></i>
+            </div>
+            <p class="text-sm font-medium text-gray-500">No delivery orders for this date</p>
+            <p class="text-xs text-gray-400 mt-1">Try selecting a different date</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- ==================== PAGINATION ==================== -->
+    {% if orders.has_other_pages %}
+    <div class="flex items-center justify-center gap-1">
+        {% if orders.has_previous %}
+        <a href="?page={{ orders.previous_page_number }}{% if selected_date %}&date={{ selected_date }}{% endif %}" 
+           class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors">
+            <i class="fas fa-chevron-left text-xs"></i>
+        </a>
+        {% endif %}
+        
+        {% for num in orders.paginator.page_range %}
+            {% if num == orders.number %}
+            <span class="w-9 h-9 flex items-center justify-center rounded-lg bg-indigo-600 text-white text-sm font-semibold">{{ num }}</span>
+            {% elif num > orders.number|add:'-3' and num < orders.number|add:'3' %}
+            <a href="?page={{ num }}{% if selected_date %}&date={{ selected_date }}{% endif %}" 
+               class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors text-sm">{{ num }}</a>
+            {% endif %}
+        {% endfor %}
+        
+        {% if orders.has_next %}
+        <a href="?page={{ orders.next_page_number }}{% if selected_date %}&date={{ selected_date }}{% endif %}" 
+           class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors">
+            <i class="fas fa-chevron-right text-xs"></i>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</div>
+
+<script>
+    function filterByDate(value) {
+        let dateValue = value;
+        
+        if (value === 'today') {
+            dateValue = '{{ today_str }}';
+        } else if (value === 'yesterday') {
+            dateValue = '{{ yesterday_str }}';
+        }
+        
+        let url = `?date=${dateValue}`;
+        window.location.href = url;
+    }
+</script>
+
+{% endblock %}

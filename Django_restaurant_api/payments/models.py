@@ -22,7 +22,7 @@ class POSConfig(models.Model):
         verbose_name_plural = "POS Configurations"
 
         constraints = [
-            # A restaurant can only have ONE config per brand
+            # A restaurant can only have ONE config per brand i.e One row per brand per restaurant.
             models.UniqueConstraint(
                 fields=['restaurant', 'brand'],
                 name='unique_restaurant_brand'

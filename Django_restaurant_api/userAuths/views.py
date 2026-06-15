@@ -442,26 +442,26 @@ def whatsapp_error_view(request, restaurant_id):
 
 
 
-def admin_login_view(request):
+def admin_login_view(request, restaurant_id=None):
     if request.method == 'POST':
-
         email = request.POST.get('email')
         password = request.POST.get('password')
 
         user = authenticate(request, email=email, password=password)
+        print("user: ", user)
         if user is not None and user.is_staff:
-
-            # Login successful
             login(request, user)
-
-            return redirect("useradmin:dashboard")
+            if restaurant_id:
+                request.session['restaurant_id'] = restaurant_id
+                print("restaurant_id: ", restaurant_id)
+            return redirect("useradmin:dashboard")  # ✅ Dashboard doesn't need restaurant_id in URL
 
         else:
-            # Login failed
             messages.error(request, 'Invalid login credentials. Please try again.')
-            return redirect("userauths:admin_login")
+            return redirect("userauths:admin_login", restaurant_id=restaurant_id)  # ✅ Fixed
 
     return render(request, 'userauths/admin_login.html')
+
 
 def admin_logout_view(request):
     logout(request)

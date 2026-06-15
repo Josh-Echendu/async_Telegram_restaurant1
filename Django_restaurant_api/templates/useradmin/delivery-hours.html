@@ -1,0 +1,278 @@
+{% extends "useradmin/base.html" %}
+{% load static %}
+
+{% block content %}
+
+{% csrf_token %}
+
+<div class="px-4 sm:px-6 lg:px-8 py-6 space-y-6" x-data="deliveryHoursPage">
+    
+    <!-- Page Header -->
+    <div>
+        <h1 class="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">Delivery Hours</h1>
+        <p class="text-xs sm:text-sm text-gray-500 mt-0.5">Set open and close times. Leave both empty to mark a day as closed.</p>
+    </div>
+
+    <!-- Notification Banner -->
+    <div 
+        x-show="notification.show" 
+        x-cloak
+        :class="notification.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'"
+        class="border rounded-xl p-4 flex items-center justify-between"
+        x-transition
+    >
+        <div class="flex items-center gap-3">
+            <i :class="notification.type === 'success' ? 'fas fa-check-circle text-emerald-500' : 'fas fa-circle-exclamation text-red-500'"></i>
+            <span class="text-sm font-medium" x-text="notification.message"></span>
+        </div>
+        <button @click="notification.show = false" class="text-current opacity-50 hover:opacity-100">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <!-- Hours Cards -->
+    <div class="space-y-3">
+        {% for h in hours %}
+        <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100"
+             x-data="dayRow({{ h.day_of_week }}, '{{ h.open_time|time:"H:i"|default:"" }}', '{{ h.close_time|time:"H:i"|default:"" }}')">
+            
+            <!-- Day Name & Status -->
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-3">
+                    <span class="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                        <i class="fas fa-calendar-day text-indigo-600"></i>
+                    </span>
+                    <div>
+                        <span class="text-sm font-semibold text-gray-900" x-text="dayName"></span>
+                        <span x-show="isClosed" class="text-[10px] text-red-500 font-medium block">Closed</span>
+                        <span x-show="!isClosed" class="text-[10px] text-emerald-500 font-medium block">
+                            <span x-text="openDisplay"></span> — <span x-text="closeDisplay"></span>
+                        </span>
+                    </div>
+                </div>
+                
+                <!-- Quick Toggle -->
+                <button 
+                    @click="toggleClosed()"
+                    :class="isClosed ? 'bg-red-50 text-red-700 hover:bg-red-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'"
+                    class="text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                    x-text="isClosed ? 'Closed' : 'Open'"
+                ></button>
+            </div>
+
+            <!-- Time Selectors (shown only when open) -->
+            <div x-show="!isClosed" class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                
+                <!-- Open Time -->
+                <div class="flex items-center gap-1">
+                    <span class="text-xs text-gray-500 w-10">Open</span>
+                    <select x-model="openHour12" class="text-sm border border-gray-200 rounded-lg px-2 py-2 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none bg-white">
+                        <option value="12">12</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10">10</option>
+                        <option value="11">11</option>
+                    </select>
+                    <span class="text-xs text-gray-400">:</span>
+                    <select x-model="openMinute" class="text-sm border border-gray-200 rounded-lg px-2 py-2 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none bg-white">
+                        <template x-for="m in 60" :key="m">
+                            <option :value="String(m - 1).padStart(2, '0')" x-text="String(m - 1).padStart(2, '0')"></option>
+                        </template>
+                    </select>
+                    <select x-model="openAmPm" class="text-sm border border-gray-200 rounded-lg px-2 py-2 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none bg-white">
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                    </select>
+                </div>
+
+                <span class="text-xs text-gray-400">to</span>
+
+                <!-- Close Time -->
+                <div class="flex items-center gap-1">
+                    <span class="text-xs text-gray-500 w-10">Close</span>
+                    <select x-model="closeHour12" class="text-sm border border-gray-200 rounded-lg px-2 py-2 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none bg-white">
+                        <option value="12">12</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10">10</option>
+                        <option value="11">11</option>
+                    </select>
+                    <span class="text-xs text-gray-400">:</span>
+                    <select x-model="closeMinute" class="text-sm border border-gray-200 rounded-lg px-2 py-2 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none bg-white">
+                        <template x-for="m in 60" :key="m">
+                            <option :value="String(m - 1).padStart(2, '0')" x-text="String(m - 1).padStart(2, '0')"></option>
+                        </template>
+                    </select>
+                    <select x-model="closeAmPm" class="text-sm border border-gray-200 rounded-lg px-2 py-2 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none bg-white">
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                    </select>
+                </div>
+
+                <!-- Save -->
+                <button 
+                    @click="save()"
+                    :disabled="saving"
+                    x-text="saving ? 'Saving...' : 'Save'"
+                    class="text-xs sm:text-sm px-5 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 ml-auto"
+                ></button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+<script>
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    axios.defaults.headers.common['X-CSRFToken'] = csrfToken;
+
+    const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('deliveryHoursPage', () => ({
+            notification: { show: false, message: '', type: 'success' },
+            showNotification(message, type = 'success') {
+                this.notification.message = message;
+                this.notification.type = type;
+                this.notification.show = true;
+                setTimeout(() => { this.notification.show = false; }, 4000);
+            }
+        }));
+    });
+
+    function parseTime(timeStr) {
+        if (!timeStr) return { hour12: '9', minute: '00', ampm: 'AM' };
+        const parts = timeStr.split(':');
+        let hour24 = parseInt(parts[0]);
+        const minute = parts[1] || '00';
+        let ampm = 'AM';
+        if (hour24 >= 12) {
+            ampm = 'PM';
+            if (hour24 > 12) hour24 -= 12;
+        }
+        if (hour24 === 0) hour24 = 12;
+        return { hour12: String(hour24), minute, ampm };
+    }
+
+    function to24h(hour12, minute, ampm) {
+        let hour24 = parseInt(hour12);
+        if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
+        if (ampm === 'AM' && hour24 === 12) hour24 = 0;
+        return String(hour24).padStart(2, '0') + ':' + minute;
+    }
+
+    function dayRow(dayIndex, openT, closeT) {
+        const openParsed = parseTime(openT);
+        const closeParsed = parseTime(closeT);
+
+        return {
+            dayIndex,
+            dayName: DAYS[dayIndex],
+            openHour12: openParsed.hour12,
+            openMinute: openParsed.minute,
+            openAmPm: openParsed.ampm,
+            closeHour12: closeParsed.hour12,
+            closeMinute: closeParsed.minute,
+            closeAmPm: closeParsed.ampm,
+            manuallyClosed: !openT || !closeT,
+            saving: false,
+
+            get openDisplay() {
+                if (this.manuallyClosed) return '';
+                return this.openHour12 + ':' + this.openMinute + ' ' + this.openAmPm;
+            },
+
+            get closeDisplay() {
+                if (this.manuallyClosed) return '';
+                return this.closeHour12 + ':' + this.closeMinute + ' ' + this.closeAmPm;
+            },
+
+            get openTime() {
+                if (this.manuallyClosed) return '';
+                return to24h(this.openHour12, this.openMinute, this.openAmPm);
+            },
+
+            get closeTime() {
+                if (this.manuallyClosed) return '';
+                return to24h(this.closeHour12, this.closeMinute, this.closeAmPm);
+            },
+
+            get isClosed() {
+                return this.manuallyClosed;
+            },
+
+            toggleClosed() {
+                if (this.manuallyClosed) {
+                    this.manuallyClosed = false;
+                    this.openHour12 = '9';
+                    this.openMinute = '00';
+                    this.openAmPm = 'AM';
+                    this.closeHour12 = '5';
+                    this.closeMinute = '00';
+                    this.closeAmPm = 'PM';
+                } else {
+                    this.manuallyClosed = true;
+                }
+                this.save();
+            },
+
+            async save() {
+                this.saving = true;
+
+                try {
+                    const formData = new FormData();
+                    formData.append('day_of_week', this.dayIndex);
+
+                    if (this.manuallyClosed) {
+                        formData.append('open_time', '');
+                        formData.append('close_time', '');
+                    } else {
+                        formData.append('open_time', this.openTime);
+                        formData.append('close_time', this.closeTime);
+                    }
+
+                    await axios.post('{% url "useradmin:update-delivery-hours" %}', formData, {
+                        headers: { 'X-CSRFToken': csrfToken }
+                    });
+
+                    const pageEl = document.querySelector('[x-data="deliveryHoursPage"]');
+                    if (pageEl && pageEl._x_dataStack) {
+                        pageEl._x_dataStack[0].showNotification(this.dayName + ' hours saved', 'success');
+                    }
+
+                } catch (error) {
+                    let message = 'Something went wrong';
+                    if (error.response && error.response.data && error.response.data.error) {
+                        message = error.response.data.error;
+                    }
+
+                    const pageEl = document.querySelector('[x-data="deliveryHoursPage"]');
+                    if (pageEl && pageEl._x_dataStack) {
+                        pageEl._x_dataStack[0].showNotification('Failed: ' + message, 'error');
+                    }
+                } finally {
+                    this.saving = false;
+                }
+            }
+        };
+    }
+</script>
+
+{% endblock %}

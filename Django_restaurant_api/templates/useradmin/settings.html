@@ -1,0 +1,714 @@
+{% extends 'useradmin/base.html' %}
+{% load static %}
+
+{% block content %}
+
+<div class="px-4 sm:px-6 lg:px-8 py-6 space-y-6" x-data="shopSettings">
+    
+    <!-- ==================== PAGE HEADER ==================== -->
+    <div>
+        <h1 class="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">Shop Settings</h1>
+        <p class="text-xs sm:text-sm text-gray-500 mt-0.5">Manage your business profile, operations, and integrations</p>
+    </div>
+
+    <!-- Notification Banner -->
+    <div 
+        x-show="notification.show" 
+        x-cloak
+        :class="notification.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'"
+        class="border rounded-xl p-4 flex items-center justify-between"
+        x-transition
+    >
+        <div class="flex items-center gap-3">
+            <i :class="notification.type === 'success' ? 'fas fa-check-circle text-emerald-500' : 'fas fa-circle-exclamation text-red-500'"></i>
+            <span class="text-sm font-medium" x-text="notification.message"></span>
+        </div>
+        <button @click="notification.show = false" class="text-current opacity-50 hover:opacity-100">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data" @submit.prevent="saveAll">
+        {% csrf_token %}
+        
+        <!-- ==================== SECTION 1: ACCOUNT ==================== -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="px-5 sm:px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                <span class="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center">
+                    <i class="fas fa-user text-indigo-600 text-sm"></i>
+                </span>
+                <div>
+                    <h3 class="text-sm font-bold text-gray-900">Account</h3>
+                    <p class="text-xs text-gray-500">Your personal information</p>
+                </div>
+            </div>
+            <div class="p-5 sm:p-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">First Name</label>
+                        <input 
+                            type="text" 
+                            name="first_name" 
+                            x-model="form.first_name"
+                            value="{{ restaurant.first_name|default:'' }}"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            placeholder="Amaka"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Last Name</label>
+                        <input 
+                            type="text" 
+                            name="last_name" 
+                            x-model="form.last_name"
+                            value="{{ restaurant.last_name|default:'' }}"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            placeholder="Okafor"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Phone Number</label>
+                        <input 
+                            type="tel" 
+                            name="phone_number" 
+                            x-model="form.phone_number"
+                            value="{{ restaurant.phone_number|default:'' }}"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            placeholder="+234 801 234 5678"
+                        >
+                    </div>
+                </div>
+                <div class="mt-5">
+                    <button type="button" @click="saveSection('account')" 
+                        :disabled="saving === 'account'"
+                        class="text-xs sm:text-sm px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                        <span x-show="saving !== 'account'">Save Changes</span>
+                        <span x-show="saving === 'account'" class="flex items-center gap-2">
+                            <i class="fas fa-spinner fa-pulse"></i> Saving...
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== SECTION 2: BUSINESS INFORMATION ==================== -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="px-5 sm:px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                <span class="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center">
+                    <i class="fas fa-store text-amber-600 text-sm"></i>
+                </span>
+                <div>
+                    <h3 class="text-sm font-bold text-gray-900">Business Information</h3>
+                    <p class="text-xs text-gray-500">What customers see on your storefront</p>
+                </div>
+            </div>
+            <div class="p-5 sm:p-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Business Name</label>
+                        <input 
+                            type="text" 
+                            name="name" 
+                            x-model="form.name"
+                            value="{{ restaurant.name|default:'' }}"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            placeholder="Mama Put Kitchen"
+                        >
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Description</label>
+                        <textarea 
+                            name="description" 
+                            x-model="form.description"
+                            rows="3"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all resize-none"
+                            placeholder="Best jollof rice in Lagos..."
+                        >{{ restaurant.description|default:'' }}</textarea>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Logo</label>
+                        <div class="flex items-center gap-4">
+                            {% if restaurant.image %}
+                                <img src="{{ restaurant.image.url }}" class="w-16 h-16 rounded-xl object-cover border border-gray-200" alt="Logo" />
+                            {% else %}
+                                <div class="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center border border-gray-200">
+                                    <i class="fas fa-store text-gray-400 text-xl"></i>
+                                </div>
+                            {% endif %}
+                            <label class="cursor-pointer">
+                                <span class="text-xs sm:text-sm px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors font-medium">
+                                    <i class="fas fa-upload mr-1.5 text-xs"></i> Upload New
+                                </span>
+                                <input type="file" name="image" class="hidden" accept="image/*">
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">State</label>
+                        <input 
+                            type="text" 
+                            name="state" 
+                            x-model="form.state"
+                            value="{{ restaurant.state|default:'' }}"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            placeholder="Lagos"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">LGA</label>
+                        <input 
+                            type="text" 
+                            name="lga" 
+                            x-model="form.lga"
+                            value="{{ restaurant.lga|default:'' }}"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            placeholder="Eti-Osa"
+                        >
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Address</label>
+                        <input 
+                            type="text" 
+                            name="address" 
+                            x-model="form.address"
+                            value="{{ restaurant.address|default:'' }}"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            placeholder="12 Marina Road, Lagos Island"
+                        >
+                    </div>
+                </div>
+                <div class="mt-5">
+                    <button type="button" @click="saveSection('business')" 
+                        :disabled="saving === 'business'"
+                        class="text-xs sm:text-sm px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                        <span x-show="saving !== 'business'">Save Changes</span>
+                        <span x-show="saving === 'business'" class="flex items-center gap-2">
+                            <i class="fas fa-spinner fa-pulse"></i> Saving...
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== SECTION 3: OPERATIONS ==================== -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="px-5 sm:px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                <span class="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                    <i class="fas fa-sliders text-emerald-600 text-sm"></i>
+                </span>
+                <div>
+                    <h3 class="text-sm font-bold text-gray-900">Operations</h3>
+                    <p class="text-xs text-gray-500">How your business runs day-to-day</p>
+                </div>
+            </div>
+            <div class="p-5 sm:p-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Service Mode</label>
+                        
+                        {% if restaurant.business_type == 'restaurant' %}
+                            <!-- Restaurant: can choose any mode -->
+                            <select name="service_mode" x-model="form.service_mode"
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all bg-white">
+                                <option value="dine_in" {% if restaurant.service_mode == 'dine_in' %}selected{% endif %}>Dine-in Only</option>
+                                <option value="delivery" {% if restaurant.service_mode == 'delivery' %}selected{% endif %}>Delivery Only</option>
+                                <option value="both" {% if restaurant.service_mode == 'both' %}selected{% endif %}>Dine-in & Delivery</option>
+                            </select>
+                        
+                        {% elif restaurant.business_type == 'hotel' %}
+                            <!-- Hotel: locked to dine-in -->
+                            <input 
+                                type="text" 
+                                value="Dine-in Only"
+                                disabled
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed"
+                            >
+                            <p class="text-[10px] text-gray-400 mt-1">Hotels only support dine-in (room service)</p>
+                        
+                        {% elif restaurant.business_type == 'vendor' %}
+                            <!-- Vendor: locked to delivery -->
+                            <input 
+                                type="text" 
+                                value="Delivery Only"
+                                disabled
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed"
+                            >
+                            <p class="text-[10px] text-gray-400 mt-1">vendors only support delivery</p>
+                        {% endif %}
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Business Type</label>
+                        <input 
+                            type="text" 
+                            value="{% if restaurant.business_type == 'restaurant' %}Restaurant{% elif restaurant.business_type == 'vendor' %}Vendor{% elif restaurant.business_type == 'hotel' %}Hotel{% endif %}"
+                            disabled
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed"
+                        >
+                        <p class="text-[10px] text-gray-400 mt-1">Business type cannot be changed after registration</p>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Fee (₦)</label>
+                        <input 
+                            type="number" 
+                            name="delivery_fee" 
+                            x-model="form.delivery_fee"
+                            value="{{ restaurant.delivery_fee|default:'0' }}"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            placeholder="500"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Prep Time (minutes)</label>
+                        <input 
+                            type="number" 
+                            name="average_preparation_time" 
+                            x-model="form.average_preparation_time"
+                            value="{{ restaurant.average_preparation_time|default:'30' }}"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            placeholder="30"
+                        >
+                    </div>
+                    {% if restaurant.business_type == 'restaurant' and restaurant.service_mode != 'delivery' %}
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Max Tables</label>
+                        <input 
+                            type="number" 
+                            name="max_tables" 
+                            x-model="form.max_tables"
+                            value="{{ restaurant.max_tables|default:'10' }}"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            placeholder="10"
+                        >
+                    </div>
+                    {% endif %}
+                    {% if restaurant.business_type != 'hotel' and restaurant.service_mode != 'dine_in' %}
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Radius (km)</label>
+                        <input 
+                            type="number" 
+                            name="max_delivery_radius_km" 
+                            x-model="form.max_delivery_radius_km"
+                            value="{{ restaurant.max_delivery_radius_km|default:'10' }}"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            placeholder="10"
+                        >
+                    </div>
+                    {% endif %}
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Timezone</label>
+                        <select name="timezone" x-model="form.timezone"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all bg-white">
+                            <option value="Africa/Lagos" {% if restaurant.timezone == 'Africa/Lagos' %}selected{% endif %}>Africa/Lagos (GMT+1)</option>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2 flex items-center gap-3">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="is_accepting_orders" x-model="form.is_accepting_orders"
+                                {% if restaurant.is_accepting_orders %}checked{% endif %}
+                                class="sr-only peer">
+                            <div class="w-10 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-indigo-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                        </label>
+                        <div>
+                            <p class="text-sm font-semibold text-gray-900">Accepting Orders</p>
+                            <p class="text-xs text-gray-500">Toggle off to temporarily close your shop</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-5">
+                    <button type="button" @click="saveSection('operations')" 
+                        :disabled="saving === 'operations'"
+                        class="text-xs sm:text-sm px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                        <span x-show="saving !== 'operations'">Save Changes</span>
+                        <span x-show="saving === 'operations'" class="flex items-center gap-2">
+                            <i class="fas fa-spinner fa-pulse"></i> Saving...
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== SECTION 4: BANK DETAILS ==================== -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="px-5 sm:px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                <span class="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center">
+                    <i class="fas fa-building-columns text-purple-600 text-sm"></i>
+                </span>
+                <div>
+                    <h3 class="text-sm font-bold text-gray-900">Bank Details</h3>
+                    <p class="text-xs text-gray-500">For settlements and payouts</p>
+                </div>
+            </div>
+            <div class="p-5 sm:p-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Account Name</label>
+                        <input 
+                            type="text" 
+                            name="bank_account_name" 
+                            x-model="form.bank_account_name"
+                            value="{{ restaurant.bank_account_name|default:'' }}"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            placeholder="Mama Put Enterprises"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Account Number</label>
+                        <input 
+                            type="text" 
+                            name="bank_account_number" 
+                            x-model="form.bank_account_number"
+                            value="{{ restaurant.bank_account_number|default:'' }}"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            placeholder="0123456789"
+                        >
+                    </div>
+                </div>
+                <div class="mt-5">
+                    <button type="button" @click="saveSection('bank')" 
+                        :disabled="saving === 'bank'"
+                        class="text-xs sm:text-sm px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                        <span x-show="saving !== 'bank'">Save Changes</span>
+                        <span x-show="saving === 'bank'" class="flex items-center gap-2">
+                            <i class="fas fa-spinner fa-pulse"></i> Saving...
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== SECTION 5: BOT SETTINGS ==================== -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="px-5 sm:px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                <span class="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center">
+                    <i class="fas fa-robot text-sky-600 text-sm"></i>
+                </span>
+                <div>
+                    <h3 class="text-sm font-bold text-gray-900">Bot Settings</h3>
+                    <p class="text-xs text-gray-500">Telegram & WhatsApp integration</p>
+                </div>
+            </div>
+            <div class="p-5 sm:p-6 space-y-6">
+                
+                <!-- Telegram Sub-section -->
+                <div class="border border-gray-100 rounded-xl p-4 sm:p-5">
+                    <div class="flex items-center gap-2 mb-4">
+                        <i class="fab fa-telegram-plane text-sky-500 text-lg"></i>
+                        <h4 class="text-sm font-bold text-gray-900">Telegram Bot</h4>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Bot Username</label>
+                            <input 
+                                type="text" 
+                                name="bot_username" 
+                                x-model="form.bot_username"
+                                value="{{ restaurant.bot_username|default:'' }}"
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                                placeholder="@mamaput_bot"
+                            >
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Bot Token</label>
+                            <input 
+                                type="password" 
+                                name="bot_token" 
+                                x-model="form.bot_token"
+                                value="{{ restaurant.bot_token|default:'' }}"
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                                placeholder="••••••••••••••••"
+                            >
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" name="is_bot_active" x-model="form.is_bot_active"
+                                    {% if restaurant.is_bot_active %}checked{% endif %}
+                                    class="sr-only peer">
+                                <div class="w-10 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-indigo-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                            </label>
+                            <div>
+                                <p class="text-sm font-semibold text-gray-900">Bot Active</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WhatsApp Sub-section -->
+                <div class="border border-gray-100 rounded-xl p-4 sm:p-5">
+                    <div class="flex items-center gap-2 mb-4">
+                        <i class="fab fa-whatsapp text-green-500 text-lg"></i>
+                        <h4 class="text-sm font-bold text-gray-900">WhatsApp Business</h4>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Business Phone</label>
+                            <input 
+                                type="text" 
+                                name="whatsapp_business_phone" 
+                                x-model="form.whatsapp_business_phone"
+                                value="{{ restaurant.whatsapp_business_phone|default:'' }}"
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                                placeholder="+234 801 234 5678"
+                            >
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">WABA ID</label>
+                            <input 
+                                type="text" 
+                                name="whatsapp_business_account_id" 
+                                x-model="form.whatsapp_business_account_id"
+                                value="{{ restaurant.whatsapp_business_account_id|default:'' }}"
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                                placeholder="••••••••"
+                            >
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Phone Number ID</label>
+                            <input 
+                                type="text" 
+                                name="whatsapp_phone_number_id" 
+                                x-model="form.whatsapp_phone_number_id"
+                                value="{{ restaurant.whatsapp_phone_number_id|default:'' }}"
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                                placeholder="••••••••"
+                            >
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Access Token</label>
+                            <input 
+                                type="password" 
+                                name="whatsapp_access_token" 
+                                x-model="form.whatsapp_access_token"
+                                value="{{ restaurant.whatsapp_access_token|default:'' }}"
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                                placeholder="••••••••••••••••"
+                            >
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" name="is_whatsapp_active" x-model="form.is_whatsapp_active"
+                                    {% if restaurant.is_whatsapp_active %}checked{% endif %}
+                                    class="sr-only peer">
+                                <div class="w-10 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-indigo-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                            </label>
+                            <div>
+                                <p class="text-sm font-semibold text-gray-900">WhatsApp Active</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Groups -->
+                <div class="border border-gray-100 rounded-xl p-4 sm:p-5">
+                    <div class="flex items-center gap-2 mb-4">
+                        <i class="fas fa-comments text-indigo-500 text-lg"></i>
+                        <h4 class="text-sm font-bold text-gray-900">Chat Groups</h4>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Kitchen Chat ID</label>
+                            <input 
+                                type="text" 
+                                name="kitchen_chat_id" 
+                                x-model="form.kitchen_chat_id"
+                                value="{{ restaurant.kitchen_chat_id|default:'' }}"
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                                placeholder="-1001234567890"
+                            >
+                            <p class="text-[10px] text-gray-400 mt-1">Negative number for Telegram group ID</p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Chat ID</label>
+                            <input 
+                                type="text" 
+                                name="delivery_chat_id" 
+                                x-model="form.delivery_chat_id"
+                                value="{{ restaurant.delivery_chat_id|default:'' }}"
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                                placeholder="-1001234567890"
+                            >
+                            <p class="text-[10px] text-gray-400 mt-1">Negative number for Telegram group ID</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-5">
+                    <button type="button" @click="saveSection('bot')" 
+                        :disabled="saving === 'bot'"
+                        class="text-xs sm:text-sm px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                        <span x-show="saving !== 'bot'">Save Changes</span>
+                        <span x-show="saving === 'bot'" class="flex items-center gap-2">
+                            <i class="fas fa-spinner fa-pulse"></i> Saving...
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== SECTION 6: DANGER ZONE ==================== -->
+        <div class="bg-white rounded-2xl shadow-sm border border-red-200 overflow-hidden">
+            <div class="px-5 sm:px-6 py-4 border-b border-red-100 flex items-center gap-3">
+                <span class="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center">
+                    <i class="fas fa-triangle-exclamation text-red-600 text-sm"></i>
+                </span>
+                <div>
+                    <h3 class="text-sm font-bold text-red-800">Danger Zone</h3>
+                    <p class="text-xs text-red-500">Irreversible actions for your shop</p>
+                </div>
+            </div>
+            <div class="p-5 sm:p-6">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 bg-red-50 rounded-xl border border-red-100">
+                    <div>
+                        <p class="text-sm font-semibold text-red-800">Close Shop Temporarily</p>
+                        <p class="text-xs text-red-500">This will stop accepting new orders until you reopen</p>
+                    </div>
+                    <button type="button" @click="toggleShopStatus()"
+                        class="text-xs sm:text-sm px-5 py-2.5 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors">
+                        {% if restaurant.is_accepting_orders %}
+                            Close Shop
+                        {% else %}
+                            Reopen Shop
+                        {% endif %}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+<script>
+    function getCSRFToken() {
+        const cookie = document.cookie.split('; ').find(row => row.startsWith('csrftoken='));
+        return cookie ? cookie.split('=')[1] : '';
+    }
+
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('shopSettings', () => ({
+            form: {
+                first_name: '{{ restaurant.first_name|default:"" }}',
+                last_name: '{{ restaurant.last_name|default:"" }}',
+                phone_number: '{{ restaurant.phone_number|default:"" }}',
+                name: '{{ restaurant.name|default:"" }}',
+                description: '{{ restaurant.description|default:"" }}',
+                state: '{{ restaurant.state|default:"" }}',
+                lga: '{{ restaurant.lga|default:"" }}',
+                address: '{{ restaurant.address|default:"" }}',
+                service_mode: '{{ restaurant.service_mode|default:"" }}',
+                // business_type: '{{ restaurant.business_type|default:"" }}',
+                delivery_fee: '{{ restaurant.delivery_fee|default:"0" }}',
+                average_preparation_time: '{{ restaurant.average_preparation_time|default:"30" }}',
+                max_tables: '{{ restaurant.max_tables|default:"10" }}',
+                max_delivery_radius_km: '{{ restaurant.max_delivery_radius_km|default:"10" }}',
+                timezone: '{{ restaurant.timezone|default:"Africa/Lagos" }}',
+                is_accepting_orders: {{ restaurant.is_accepting_orders|yesno:"true,false" }},
+                bank_account_name: '{{ restaurant.bank_account_name|default:"" }}',
+                bank_account_number: '{{ restaurant.bank_account_number|default:"" }}',
+                bot_username: '{{ restaurant.bot_username|default:"" }}',
+                bot_token: '{{ restaurant.bot_token|default:"" }}',
+                is_bot_active: {{ restaurant.is_bot_active|yesno:"true,false" }},
+                whatsapp_business_phone: '{{ restaurant.whatsapp_business_phone|default:"" }}',
+                whatsapp_business_account_id: '{{ restaurant.whatsapp_business_account_id|default:"" }}',
+                whatsapp_phone_number_id: '{{ restaurant.whatsapp_phone_number_id|default:"" }}',
+                whatsapp_access_token: '{{ restaurant.whatsapp_access_token|default:"" }}',
+                is_whatsapp_active: {{ restaurant.is_whatsapp_active|yesno:"true,false" }},
+                kitchen_chat_id: '{{ restaurant.kitchen_chat_id|default:"" }}',
+                delivery_chat_id: '{{ restaurant.delivery_chat_id|default:"" }}',
+            },
+            saving: null,
+            notification: { show: false, message: '', type: 'success' },
+
+            showNotification(message, type = 'success') {
+                this.notification.message = message;
+                this.notification.type = type;
+                this.notification.show = true;
+                setTimeout(() => { this.notification.show = false; }, 4000);
+            },
+
+            async saveSection(section) {
+                this.saving = section;
+                try {
+                    const formData = new FormData();
+                    
+                    if (section === 'account') {
+                        formData.append('first_name', this.form.first_name);
+                        formData.append('last_name', this.form.last_name);
+                        formData.append('phone_number', this.form.phone_number);
+                    } else if (section === 'business') {
+                        formData.append('name', this.form.name);
+                        formData.append('description', this.form.description);
+                        formData.append('state', this.form.state);
+                        formData.append('lga', this.form.lga);
+                        formData.append('address', this.form.address);
+                        const imageInput = document.querySelector('input[name="image"]');
+                        if (imageInput && imageInput.files[0]) {
+                            formData.append('image', imageInput.files[0]);
+                        }
+                    } else if (section === 'operations') {
+                        formData.append('service_mode', this.form.service_mode);
+                        formData.append('business_type', this.form.business_type);
+                        formData.append('delivery_fee', this.form.delivery_fee);
+                        formData.append('average_preparation_time', this.form.average_preparation_time);
+                        formData.append('max_tables', this.form.max_tables);
+                        formData.append('max_delivery_radius_km', this.form.max_delivery_radius_km);
+                        formData.append('timezone', this.form.timezone);
+                        formData.append('is_accepting_orders', this.form.is_accepting_orders);
+                    } else if (section === 'bank') {
+                        formData.append('bank_account_name', this.form.bank_account_name);
+                        formData.append('bank_account_number', this.form.bank_account_number);
+                    } else if (section === 'bot') {
+                        formData.append('bot_username', this.form.bot_username);
+                        formData.append('bot_token', this.form.bot_token);
+                        formData.append('is_bot_active', this.form.is_bot_active);
+                        formData.append('whatsapp_business_phone', this.form.whatsapp_business_phone);
+                        formData.append('whatsapp_business_account_id', this.form.whatsapp_business_account_id);
+                        formData.append('whatsapp_phone_number_id', this.form.whatsapp_phone_number_id);
+                        formData.append('whatsapp_access_token', this.form.whatsapp_access_token);
+                        formData.append('is_whatsapp_active', this.form.is_whatsapp_active);
+                        formData.append('kitchen_chat_id', this.form.kitchen_chat_id);
+                        formData.append('delivery_chat_id', this.form.delivery_chat_id);
+                    }
+
+                    await axios.post('{% url "useradmin:update-shop-settings" %}', formData, {
+                        headers: { 'X-CSRFToken': getCSRFToken() }
+                    });
+
+                    this.showNotification('Settings saved successfully!', 'success');
+                } catch (error) {
+                    let message = 'Something went wrong';
+                    if (error.response?.data?.error) {
+                        message = error.response.data.error;
+                    }
+                    this.showNotification('Failed to save: ' + message, 'error');
+                } finally {
+                    this.saving = null;
+                }
+            },
+
+            async toggleShopStatus() {
+                try {
+                    const formData = new FormData();
+                    formData.append('is_accepting_orders', !this.form.is_accepting_orders);
+
+                    await axios.post('{% url "useradmin:update-shop-settings" %}', formData, {
+                        headers: { 'X-CSRFToken': getCSRFToken() }
+                    });
+
+                    this.form.is_accepting_orders = !this.form.is_accepting_orders;
+                    this.showNotification(
+                        this.form.is_accepting_orders ? 'Shop reopened! Accepting orders.' : 'Shop closed. Not accepting new orders.',
+                        'success'
+                    );
+                    setTimeout(() => { window.location.reload(); }, 1000);
+                } catch (error) {
+                    this.showNotification('Failed to update shop status', 'error');
+                }
+            },
+        }));
+    });
+</script>
+
+{% endblock %}

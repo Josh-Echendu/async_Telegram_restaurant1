@@ -9,7 +9,7 @@ import uuid
 import requests
 from django.shortcuts import redirect
 
-from payments.services import calculate_payment_amounts, generate_transaction_reference, get_vpay_public_key
+from payments.service import calculate_payment_amounts, generate_transaction_reference, get_vpay_public_key
 from restaurants.services import get_coords
 
 from .utils import is_delivery_available
@@ -35,7 +35,7 @@ from django.db.models.functions import Coalesce
 from django.http import Http404
 from rest_framework import status
 from django.db import transaction, IntegrityError
-from .tasks import send_order_notifications, process_squad_webhook, requery_transaction, edit_amount_duration
+from .tasks import send_order_notifications, process_squad_webhook
 from .throttles import TelegramWhatsappScopedThrottle  # import the custom throttle
 from .virtual_account import initiate_dynamic_virtual_account
 from dateutil import parser
@@ -650,13 +650,13 @@ class OrderPreviewAPIView(APIView):
             
             # 7️⃣ Calculate VAT (7.5%) and round to 2 decimals
             vat = total_price * Decimal('0.075')  # 7.5% VAT
-            vat_rounded = vat.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)  # Round to 2 decimal places Up
+            vat_rounded = math.ceil(vat.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))  # Round to 2 decimal places Up
             
             # 8️⃣ Ensure delivery_fee is Decimal
             delivery_fee = Decimal(str(restaurant.delivery_fee)) if restaurant.delivery_fee else Decimal('0.00')
             
             # 9️⃣ Calculate grand total
-            grand_price = (total_price + vat_rounded + delivery_fee).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            grand_price = math.ceil(total_price + vat_rounded + delivery_fee).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             
             # 🔟 Calculate max prep time
             max_prep_time = max(prep_times) if prep_times else restaurant.average_preparation_time
@@ -782,8 +782,10 @@ class OrderBatchListCreateAPIView(APIView):
         if not restaurant.is_accepting_orders or not restaurant.is_bot_active:
             return Response({"message": "Restaurant is not accepting orders at the moment"}, status=status.HTTP_400_BAD_REQUEST)
 
+        delivery_fee = None
         # 🔥 ADD THIS BLOCK 🔥 Check delivery hours (ONLY for delivery mode)
         if service_mode == 'delivery':
+            delivery_fee = Decimal(str(restaurant.delivery_fee)) if restaurant.delivery_fee else Decimal('0.00')
             is_available, message = is_delivery_available(restaurant)
             if not is_available:
                 return Response({
@@ -793,6 +795,7 @@ class OrderBatchListCreateAPIView(APIView):
                     "code": "DELIVERY_NOT_AVAILABLE"
                 }, status=status.HTTP_400_BAD_REQUEST)
 
+        user = None
         # 2️⃣ Get telegram User
         if platform.lower() == 'telegram':
             user = get_object_or_404(TelegramUser, telegram_id=request.user) # request.user is set by TelegramAuthentication to be the telegram_id
@@ -885,6 +888,7 @@ class OrderBatchListCreateAPIView(APIView):
             print("full amounts: ", amounts)
 
             session, final_amount = self.create_order_session(
+                dine_session=request.dine_session,
                 restaurant=restaurant,
                 user=user,
                 service_mode=service_mode, 
@@ -892,7 +896,9 @@ class OrderBatchListCreateAPIView(APIView):
                 platform=platform,
                 room_number=room_number,
                 payment_method=payment_method,
+                delivery_fee=delivery_fee ,
                 amounts=amounts,
+                total_price=total_price,
                 business_type=business_type
             )
 
@@ -914,7 +920,6 @@ class OrderBatchListCreateAPIView(APIView):
                 removed_cart_items=removed_items,
                 idempotency_key=idempotency_key,
                 telegram_user=user,
-                total_price=total_price,
                 status='pending', # kitchen status
                 payment_status='unpaid',  # payment workflow,
                 platform=platform,
@@ -981,14 +986,21 @@ class OrderBatchListCreateAPIView(APIView):
             )
 
     # 3. In your order creation logic
-    def create_order_session(self, restaurant, user, service_mode, platform, payment_method, amounts, business_type, room_number=None, delivery_info=None):
+    def create_order_session(
+            self, restaurant, user, service_mode, platform, payment_method,
+            amounts, business_type, dine_session=None,
+            room_number=None, delivery_info=None, delivery_fee=None
+        ):
 
         final_amount = Decimal('0.00')
+        charges = Decimal('0.00')
         
         if payment_method == "transfer":
             final_amount = amounts['transfer_total']
+            charges = amounts['transfer_fee']
         elif payment_method == "card":  # ← Use elif, not if
             final_amount = amounts["card_total"]
+            charges = amounts['card_fee']
                 
         # 🔥 NEW: Handle sessions based on service_mode
         if service_mode == 'delivery':
@@ -1016,7 +1028,12 @@ class OrderBatchListCreateAPIView(APIView):
                 payment_status='unpaid',
                 platform=platform,
                 transaction_type=payment_method,
+                
+                bank_fee=charges,
+                delivery_fee=delivery_fee,
+                vat_amount=amounts['vat'],
                 expected_amount=final_amount,
+                bank_choice='vpay',
 
                 # delivery Info
                 delivery_full_name=full_name,
@@ -1031,27 +1048,38 @@ class OrderBatchListCreateAPIView(APIView):
                
             if business_type == 'hotel':
                 # Hotels: Close any old active dine-in session, create fresh one (prepay per order)
-                CheckoutSession.objects.filter(
-                    restaurant=restaurant,
-                    telegram_user=user,
-                    service_mode='dine_in',
-                    is_active=True,
-                    payment_status='unpaid'
-                ).update(is_active=False)
-                
-                session = CheckoutSession.objects.create(
+                session, created = CheckoutSession.objects.update_or_create(
+
+                    # LOOKUP: Find a record matching these fields
                     restaurant=restaurant,
                     telegram_user=user,
                     service_mode='dine_in',
                     is_active=True,
                     payment_status='unpaid',
-                    platform=platform,
-                    transaction_type=payment_method,
-                    room_number=room_number,
-                    expected_amount=final_amount
+                    
+                    # DEFAULTS: If found → update with these. If not found → create with these + lookup fields.
+                    defaults={
+                        'platform': platform,
+                        'transaction_type': payment_method,
+                        'room_number': room_number,
+                        "vat_amount":amounts['vat'],
+                        "bank_fee": charges,
+                        'expected_amount': final_amount,
+                        'bank_choice': 'vpay',
+                    }
                 )
-                session.transaction_reference = generate_transaction_reference(session.session_id)
-                session.save(update_fields=['transaction_reference'])
+
+                if created:
+                    session.transaction_reference = generate_transaction_reference(session.session_id)
+                    session.save(update_fields=['transaction_reference'])
+                
+                # Update existing session
+                else:
+                    # Delete old batches — customer is re-ordering
+                    session.session_batches.all().delete()
+
+                    session.transaction_reference = generate_transaction_reference(session.session_id)
+                    session.save(update_fields=['expected_amount', 'transaction_reference'])
 
             else:
                 # Restaurant dine-in: Reuse active session (postpay, multiple orders)
@@ -1071,7 +1099,8 @@ class OrderBatchListCreateAPIView(APIView):
                         is_active=True,
                         payment_status='unpaid',
                         platform=platform,
-                        transaction_type=payment_method
+                        transaction_type=payment_method,
+                        dine_session=dine_session if business_type == 'restaurant' else None
                     )
                     save_session_with_unique_reference(session)
 
@@ -1745,3 +1774,8 @@ batch_list_api_view = UserOrderBatchesAPIView.as_view()
 # 08068856286
 # grievance.office@xiaomi.com
 # 0816 472 0993: anita
+
+
+
+
+

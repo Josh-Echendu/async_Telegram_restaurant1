@@ -1,82 +1,194 @@
 {% extends "useradmin/base.html" %}
 {% load static %}
 {% load humanize %}
+
 {% block content %}
-<section class="content-main">
-    <div class="content-header">
+
+<div class="px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    
+    <!-- ==================== PAGE HEADER ==================== -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-            <h2 class="content-title card-title">Products List</h2>
-            <p>Manage all your products from here</p>
+            <h1 class="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">Products</h1>
+            <p class="text-xs sm:text-sm text-gray-500 mt-0.5">{{ products|length }} product{{ products|length|pluralize }} in your catalog</p>
         </div>
-        <div>
-            <a href="{% url 'useradmin:dashboard-add-products' %}" class="btn btn-primary btn-sm rounded">Create Product</a>
+        <a href="{% url 'useradmin:dashboard-add-products' %}" 
+           class="inline-flex items-center justify-center gap-2 px-5 py-2.5 sm:py-3 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 hover:shadow-indigo-300 active:scale-95">
+            <i class="fas fa-plus text-xs"></i>
+            <span>Add Product</span>
+        </a>
+    </div>
+
+    <!-- ==================== FILTER BAR ==================== -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div class="flex items-center gap-2">
+            <a href="?status=all{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}" 
+            class="text-xs sm:text-sm px-4 py-2 rounded-lg font-medium transition-colors {% if current_status == 'all' %}bg-indigo-600 text-white{% else %}bg-white border border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">
+                All
+            </a>
+            <a href="?status=in_stock{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}" 
+            class="text-xs sm:text-sm px-4 py-2 rounded-lg font-medium transition-colors {% if current_status == 'in_stock' %}bg-emerald-600 text-white{% else %}bg-white border border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">
+                In Stock
+            </a>
+            <a href="?status=out_of_stock{% if request.GET.page %}&page={{ request.GET.page }}{% endif %}" 
+            class="text-xs sm:text-sm px-4 py-2 rounded-lg font-medium transition-colors {% if current_status == 'out_of_stock' %}bg-red-600 text-white{% else %}bg-white border border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">
+                Out of Stock
+            </a>
+        </div>
+        <div class="relative">
+            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+            <input 
+                type="text" 
+                placeholder="Search products..." 
+                class="w-full sm:w-64 pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+            >
         </div>
     </div>
-    <div class="card mb-4">
-        <header class="card-header">
-            <div class="row align-items-center">
-                <div class="col-md-2 col-6">
-                    <select class="form-select">
-                        <option selected>Status</option>
-                        <option>Active</option>
-                        <option>Disabled</option>
-                        <option>Show all</option>
-                    </select>
+
+    <!-- ==================== PRODUCTS GRID (Desktop) ==================== -->
+    <div class="hidden lg:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <table class="w-full">
+            <thead>
+                <tr class="bg-gray-50">
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Product</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Price</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                    <th class="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for p in products %}
+                <tr class="hover:bg-gray-50/50 transition-colors">
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-4">
+                            <img src="{{ p.image.url }}" class="w-12 h-12 rounded-xl object-cover bg-gray-100" alt="{{ p.title }}" />
+                            <div>
+                                <p class="text-sm font-semibold text-gray-900">{{ p.title }}</p>
+                                <p class="text-xs text-gray-400">{{ p.category.title|default:'Uncategorized' }}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="text-sm font-bold text-gray-900">₦{{ p.price|intcomma }}</span>
+                    </td>
+                    <td class="px-6 py-4">
+                        {% if p.in_stock %}
+                            <span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">In Stock</span>
+                        {% else %}
+                            <span class="text-xs font-medium text-red-700 bg-red-50 px-2.5 py-1 rounded-full">Out of Stock</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="text-sm text-gray-500">{{ p.date|date:"d M, Y" }}</span>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'useradmin:edit-products' p.pid %}" 
+                               class="p-2 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Edit">
+                                <i class="fas fa-pen text-sm"></i>
+                            </a>
+                            <form method="POST" action="{% url 'useradmin:delete-products' pid=p.pid %}" class="inline" onsubmit="return confirm('Delete this product?')">
+                                {% csrf_token %}
+                                <button type="submit" class="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Delete">
+                                    <i class="fas fa-trash text-sm"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="px-6 py-16 text-center">
+                        <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-box-open text-gray-400 text-2xl"></i>
+                        </div>
+                        <p class="text-sm font-medium text-gray-500">No products yet</p>
+                        <p class="text-xs text-gray-400 mt-1">Create your first product to start selling</p>
+                        <a href="{% url 'useradmin:dashboard-add-products' %}" 
+                           class="inline-flex items-center gap-2 mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-800">
+                            <i class="fas fa-plus text-xs"></i> Add Product
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ==================== PRODUCTS CARDS (Mobile/Tablet) ==================== -->
+    <div class="lg:hidden space-y-3">
+        {% for p in products %}
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-4">
+            <img src="{{ p.image.url }}" class="w-16 h-16 rounded-xl object-cover bg-gray-100 flex-shrink-0" alt="{{ p.title }}" />
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-gray-900 truncate">{{ p.title }}</p>
+                <p class="text-xs text-gray-400">{{ p.category.title|default:'Uncategorized' }}</p>
+                <div class="flex items-center gap-2 mt-1.5">
+                    <span class="text-sm font-bold text-gray-900">₦{{ p.price|intcomma }}</span>
+                    {% if p.in_stock %}
+                        <span class="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">In Stock</span>
+                    {% else %}
+                        <span class="text-[10px] font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-full">Out of Stock</span>
+                    {% endif %}
                 </div>
             </div>
-        </header>
-        <div class="card-body">
-            {% for p in products %}
-            <article class="itemlist">
-                <div class="row align-items-center">
-                    <div class="col col-check flex-grow-0">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" />
-                        </div>
-                    </div>
-                    <div class="col-lg-4 col-sm-4 col-8 flex-grow-1 col-name">
-                        <a class="itemside" href="">
-                            <div class="left">
-                                <img src="{{p.image.url}}" style="width: 100px; height: 100px; object-fit: cover; border-radius: 15px" class="img-sm img-thumbnail" alt="Item" />
-                            </div>
-                            <div class="info">
-                                <h6 class="mb-0">{{p.title}}</h6>
-                            </div>
-                        </a>
-                    </div>
-                    <div class="col-lg-2 col-sm-2 col-4 col-price"><span>₦{{p.price|intcomma}}</span></div>
-                    <div class="col-lg-2 col-sm-2 col-4 col-status">
-                        {% if p.in_stock %}
-                        <span class="badge alert-success">In Stock</span>
-                        {% else %}
-                        <span class="badge alert-danger">Out of Stock</span>
-                        {% endif %}
-                    </div>
-                    <div class="col-lg-1 col-sm-2 col-4 col-date">
-                        <span>{{p.date|date:"d/m/Y"}}</span>
-                    </div>
-                    <div class="col-lg-2 col-sm-2 col-4 col-action text-end">
-                        <a href="{% url 'useradmin:edit-products' p.pid %}" class="btn btn-sm font-sm rounded btn-brand"> <i class="material-icons md-edit"></i> Edit </a>
-                        <a href="{% url 'useradmin:delete-products' pid=p.pid %}" class="btn btn-sm font-sm btn-light rounded"> <i class="material-icons md-delete_forever"></i> Delete </a>
-                    </div>
-                </div>
-            </article>
-            {% endfor %}
+            <div class="flex items-center gap-1">
+                <a href="{% url 'useradmin:edit-products' p.pid %}" 
+                   class="p-2 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+                    <i class="fas fa-pen text-sm"></i>
+                </a>
+                <form method="POST" action="{% url 'useradmin:delete-products' pid=p.pid %}" class="inline" onsubmit="return confirm('Delete this product?')">
+                    {% csrf_token %}
+                    <button type="submit" class="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                        <i class="fas fa-trash text-sm"></i>
+                    </button>
+                </form>
+            </div>
         </div>
+        {% empty %}
+        <div class="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
+            <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-box-open text-gray-400 text-2xl"></i>
+            </div>
+            <p class="text-sm font-medium text-gray-500">No products yet</p>
+            <p class="text-xs text-gray-400 mt-1">Create your first product to start selling</p>
+            <a href="{% url 'useradmin:dashboard-add-products' %}" 
+               class="inline-flex items-center gap-2 mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-800">
+                <i class="fas fa-plus text-xs"></i> Add Product
+            </a>
+        </div>
+        {% endfor %}
     </div>
-    <div class="pagination-area mt-30 mb-50">
-        <nav aria-label="Page navigation example">
-            <ul class="pagination justify-content-start">
-                <li class="page-item active"><a class="page-link" href="#">01</a></li>
-                <li class="page-item"><a class="page-link" href="#">02</a></li>
-                <li class="page-item"><a class="page-link" href="#">03</a></li>
-                <li class="page-item"><a class="page-link dot" href="#">...</a></li>
-                <li class="page-item"><a class="page-link" href="#">16</a></li>
-                <li class="page-item">
-                    <a class="page-link" href="#"><i class="material-icons md-chevron_right"></i></a>
-                </li>
-            </ul>
-        </nav>
+
+    <!-- ==================== PAGINATION ==================== -->
+    {% if products.has_other_pages %}
+    <div class="flex items-center justify-center gap-1">
+        {% if products.has_previous %}
+        <a href="?page={{ products.previous_page_number }}&status={{ current_status }}" 
+        class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors">
+            <i class="fas fa-chevron-left text-xs"></i>
+        </a>
+        {% endif %}
+        
+        {% for num in products.paginator.page_range %}
+            {% if num == products.number %}
+            <span class="w-9 h-9 flex items-center justify-center rounded-lg bg-indigo-600 text-white text-sm font-semibold">{{ num }}</span>
+            {% elif num > products.number|add:'-3' and num < products.number|add:'3' %}
+            <a href="?page={{ num }}&status={{ current_status }}" 
+            class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors text-sm">{{ num }}</a>
+            {% endif %}
+        {% endfor %}
+        
+        {% if products.has_next %}
+        <a href="?page={{ products.next_page_number }}&status={{ current_status }}" 
+        class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors">
+            <i class="fas fa-chevron-right text-xs"></i>
+        </a>
+        {% endif %}
     </div>
-</section>
-{% endblock content %}
+    {% endif %}
+
+</div>
+
+{% endblock %}

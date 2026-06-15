@@ -18,13 +18,11 @@ from django.db.transaction import on_commit
 import uuid
 from celery.exceptions import SoftTimeLimitExceeded
 from .redis_client import redis_client
-from .virtual_account import initiate_dynamic_virtual_account
-from .errors import prefetch_webhooks, delete_webhook
-from .virtual_edit_duration import virtual_account_edit_amount_duration
 from django.db.models import OuterRef, Subquery, Sum, Value, F
 from django.core.cache import cache
 from pywa import WhatsApp  # ← synchronous version
 from pywa.types import Button
+from payments.tasks import requery_transaction
 
 
 import logging
@@ -40,22 +38,24 @@ logger = logging.getLogger(__name__)
 @worker_ready.connect # @worker_ready.connect → run when Celery worker starts
 def at_start(sender, **kwargs):
     """Runs immediately when Celery worker starts."""
-    retry_unsent_orders_notifications.delay()
-    retry_unsent_payment_notifications.delay()
+    # retry_unsent_orders_notifications.delay()
+    # retry_unsent_payment_notifications.delay()
     # requery_transaction.delay()
 
 
+# task to be executed in 5 minutes
 @shared_task
 def run_retry_jobs():
-    retry_unsent_orders_notifications.delay()
-    retry_unsent_payment_notifications.delay()
+    pass
+    # retry_unsent_orders_notifications.delay()
+    # retry_unsent_payment_notifications.delay()
     # requery_transaction.delay()
 
 
 # ---------------------------
 # Main retry task: pushes tasks in bulk
 # ---------------------------
-@shared_task(bind=True, max_retries=10)
+@shared_task(bind=True, max_retries=3)
 def retry_unsent_payment_notifications(self):
     try:
         # Fetch all pending sessions
@@ -78,7 +78,7 @@ def retry_unsent_payment_notifications(self):
     except Exception as exc:
         # This handles errors pushing tasks to the broker
         logger.error(f"Failed to push send_receipt_safe tasks: {exc}")
-        if self.request.retries < 10:
+        if self.request.retries < 3:
             raise self.retry(exc=exc, countdown=min(2 ** self.request.retries, 60))
         
 
@@ -369,7 +369,7 @@ def send_user_message_for_celery(order, telegram_id, TOKEN):
 
 
 
-@shared_task(bind=True, soft_time_limit=200, max_retries=10)
+@shared_task(bind=True, soft_time_limit=200, max_retries=3)
 def process_squad_webhook(self, payload):
     print("Processing webhook:", payload)
 
@@ -420,7 +420,7 @@ def process_squad_webhook(self, payload):
     except Exception as exc:
 
         logger.error(f"Failed to send receipt for merchant_ref {merchant_ref} for ({self.request.retries + 1}...: {exc}")
-        if self.request.retries >= 10:
+        if self.request.retries >= 3:
             logger.error(f"Max retries reached for {session.id}")
             return
         raise self.retry(exc=exc, countdown=min(2 ** self.request.retries, 3600))
@@ -528,7 +528,7 @@ def handle_mismatch(session_id, payload):
         on_commit(lambda: mismatch_message.delay(session.telegram_user.telegram_id))
 
 
-@shared_task(bind=True, soft_time_limit=200, max_retries=10)
+@shared_task(bind=True, soft_time_limit=200, max_retries=3)
 def mismatch_message(self, telegram_id, TOKEN):
     bot = Bot(token=TOKEN)
     try:
@@ -543,7 +543,7 @@ def mismatch_message(self, telegram_id, TOKEN):
 
     except Exception as exc:
         logger.error(f"Telegram send failed {telegram_id}: {exc}")
-        if self.request.retries >= 10:
+        if self.request.retries >= 3:
             logger.error(f"Max retries reached for telegram {telegram_id}")
             return
         raise self.retry(exc=exc, countdown=min(2 ** self.request.retries, 3600))
@@ -552,7 +552,7 @@ def mismatch_message(self, telegram_id, TOKEN):
 # ---------------------------
 # Worker task: handles sending receipt
 # ---------------------------
-@shared_task(bind=True, soft_time_limit=200, max_retries=10)
+@shared_task(bind=True, soft_time_limit=200, max_retries=3)
 def send_receipt_safe(self, session_id):
     try:
         session = CheckoutSession.objects.get(id=session_id)
@@ -577,7 +577,7 @@ def send_receipt_safe(self, session_id):
 
     except Exception as exc:
         logger.error(f"Failed to send receipt for session {session_id}: {exc}")
-        if self.request.retries >= 10:
+        if self.request.retries >= 3:
             logger.error(f"Max retries reached for {session_id}")
             return
         raise self.retry(exc=exc, countdown=min(2 ** self.request.retries, 3600))
@@ -631,111 +631,6 @@ def send_account_details_to_user(session, virtual_account_data):
         logger.error("Telegram send failed: %s", e)
 
 
-@shared_task(bind=True, soft_time_limit=200, max_retries=10)
-def requery_transaction(self):
-    try:    
-        pending_sessions = CheckoutSession.objects.filter(
-            is_active=True,
-            webhook_payload__isnull=True
-        ).only('merchant_reference')
-
-        if not pending_sessions:
-            logger.info("No pending sessions to re-query...")
-            return
-        
-        # Create a group of tasks for all pending sessions
-        tasks_group = group(handle_retry_query_external_api.s(session.merchant_reference) for session in pending_sessions)
-
-        # Push all tasks to the broker at once
-        tasks_group.apply_async()
-        logger.info(f"Pushed {(pending_sessions.count())} handle_retry_query_external_api tasks to workers.")
-
-    except Exception as exc:
-        # This handles errors pushing tasks to the broker
-        logger.error(f"Failed to push send_receipt_safe tasks: {exc}")
-        if self.request.retries < 10:
-            raise self.retry(exc=exc, countdown=min(2 ** self.request.retries, 60))
-        
-
-@shared_task(bind=True, soft_time_limit=200, max_retries=10)
-def handle_retry_query_external_api(self, merchant_reference):
-    if not merchant_reference:
-        return 
-    
-    missed_webhook = prefetch_webhooks(merchant_reference)
-    
-    if not missed_webhook:
-        logger.info("No webhook found for %s", merchant_reference)
-        return
-
-    payload = missed_webhook.get("payload", {})
-    
-    status = payload.get('transaction_status').lower()
-    transaction_ref = missed_webhook.get("transaction_ref")
-
-    try:
-        with transaction.atomic():
-            session_id = CheckoutSession.objects.select_for_update().filter(merchant_reference=merchant_reference).only('id').first()
-            
-            if not session_id:
-                return
-            
-            if status == "success":
-                logger.info(f"{merchant_reference} success")
-                handle_success(session_id, payload)
-            
-            if status == 'expired':
-                logger.info(f"{merchant_reference} expired")
-                handle_expired(session_id, payload)
-
-            if status == 'mismatch':
-                logger.info(f"{merchant_reference} mismatch")
-                handle_mismatch(session_id, payload)
-
-
-    except SoftTimeLimitExceeded:
-        logger.warning(f"Soft time limit exceeded to handle requery for merchant_reference: {merchant_reference}, retrying...")
-        raise self.retry(exc=SoftTimeLimitExceeded(), countdown=1)
-
-    except Exception as exc:
-        logger.error(f"Failed to handle requery for merchant_reference : {merchant_reference}: {exc}")
-        if self.request.retries >= 10:
-            logger.error(f"Max retries reached for {merchant_reference}")
-            return
-        raise self.retry(exc=exc, countdown=min(2 ** self.request.retries, 3600))
-
-    finally:
-        if payload:
-            delete_webhook(transaction_ref)
-
-
-@shared_task(bind=True, soft_time_limit=200, max_retries=10)
-def edit_amount_duration(self, session_id):
-    
-    try:
-        session = CheckoutSession.objects.filter(id=session_id).prefetch_related('session_batches')
-
-        logger.info("session already exist for %s: ", session.merchant_reference)
-        order_batches = session.session_batches.all()
-        vat = int(100)
-
-        total = int(order_batches.aggregate(total_price=Sum('total_price'))['total_price'] or 0) + vat
-
-        total_price = int(total * 100)
-        print("total_price: ", total_price)
-        virtual_account_edit_amount_duration(new_amount=total_price, transaction_ref=session.merchant_reference)
-
-    except SoftTimeLimitExceeded:
-        logger.warning(f"Soft time limit exceeded to handle editing of amount and duration for merchant_reference: {session.merchant_reference}, retrying...")
-        raise self.retry(exc=SoftTimeLimitExceeded(), countdown=1)
-
-    except Exception as exc:
-        logger.error(f"Failed to handle editing of amount and duration for merchant_reference : {session.merchant_reference}: {exc}")
-        if self.request.retries >= 10:
-            logger.error(f"Max retries reached for {session.merchant_reference}")
-            return
-        raise self.retry(exc=exc, countdown=min(2 ** self.request.retries, 3600))
- 
 
 
 # tasks.py
@@ -761,6 +656,7 @@ def send_weekly_reminder():
 
         for rid in restaurant_batch:
             _send_weekly_reminder_to_restaurant.delay(rid)
+
 
 @shared_task(bind=True, max_retries=3, rate_limit="20/s")
 def _send_weekly_reminder_to_restaurant(self, rid):
@@ -802,48 +698,3 @@ def _send_weekly_reminder_to_restaurant(self, rid):
             except Exception as e:
                 logger.error(f"Failed to send reminder to {telegram_id}: {e}")
                 raise self.retry(exc=e, countdown=2)
-
-
-
-# @shared_task(bind=True, soft_time_limit=200, max_retries=None)
-# def handle_retry_query_external_api(self, merchant_reference):
-#     try:
-#         requery_response = virtual_account_requery_transaction(merchant_reference)
-        
-#         if not requery_response.get('success'):
-#             return
-        
-#         rows = requery_response.get('requery_data', [])
-
-#         # next(): "This means give me the FIRST item from that filtered list or None"
-#         success_txn = next( 
-#             (txn for txn in rows if txn['transaction_status'].lower() == "success"),  # "Go through rows and pick only SUCCESS ones"
-#             None
-#         )
-#         if success_txn:
-#             pass
-
-#         # x = one item in rows, so we are looping through rows and compare the created_at which is bigger and extract the full dictionary row
-#         latest_txn = max(rows, key=lambda x: x['created_at']) # You get the full dictionary back, not just the date.
-#         status = latest_txn['transaction_status'].lower()
-        
-#         if status == "expired":
-#             logger.info(f"{merchant_reference} expired")
-#             pass
-#         if status == "mismatch":
-#             logger.info(f"{merchant_reference} mismatch")
-#             mismatch_message
-#             pass
-
-#     except SoftTimeLimitExceeded:
-#         logger.warning(f"Soft time limit exceeded to handle requery for merchant_reference: {merchant_reference}, retrying...")
-#         raise self.retry(exc=SoftTimeLimitExceeded(), countdown=1)
-
-#     except Exception as exc:
-#         logger.error(f"Failed to handle requery for merchant_reference : {merchant_reference}: {exc}")
-#         raise self.retry(exc=exc, countdown=min(2 ** self.request.retries, 3600))
-
-
-
-
-

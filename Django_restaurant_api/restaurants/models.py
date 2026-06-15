@@ -22,7 +22,6 @@ import random
 from .tasks import get_coordinates_for_address
 import logging
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -138,6 +137,9 @@ class Restaurant(models.Model):
     longitude = models.FloatField(null=True, blank=True)
     max_delivery_radius_km = models.FloatField(default=10.0)
     lga = models.CharField(max_length=100, null=True, blank=True)
+    bank_account_number = models.CharField(max_length=100, blank=True, null=True)
+    phone_number = models.CharField(max_length=100, blank=True, null=True)
+    bank_account_name = models.CharField(max_length=100, blank=True, null=True)
 
     # ========== TELEGRAM BOT FIELDS ==========
     bot_username = models.CharField(max_length=100, blank=True, null=True)
@@ -351,6 +353,8 @@ def remove_restaurant_webhook(sender, instance, **kwargs):
     if instance.bot_token:
         delete_webhook(instance)
 
+
+
 class RestaurantDeliveryOpeningHours(models.Model):
     restaurant = models.ForeignKey(Restaurant, db_index=True, on_delete=models.CASCADE, related_name='delivery_opening_hours')
     day_of_week = models.IntegerField(
@@ -361,25 +365,40 @@ class RestaurantDeliveryOpeningHours(models.Model):
     )
     open_time = models.TimeField(null=True, blank=True)
     close_time = models.TimeField(null=True, blank=True)
-    is_closed = models.BooleanField(default=False)
 
     class Meta:
-
-        # Add unique constraint (one entry per day per restaurant)
         unique_together = [['restaurant', 'day_of_week']]
-
         indexes = [
             models.Index(fields=['restaurant', 'day_of_week']),
         ]
 
-
     def clean(self):
-        if not self.is_closed:
-            if not self.open_time or not self.close_time:
-                raise ValidationError("Open and close time required if not closed")
 
-            if self.open_time >= self.close_time:
-                raise ValidationError("Open time must be before close time")
+        # Hotels can't set delivery hours
+        if self.restaurant.business_type == 'hotel':
+            raise ValidationError("Hotels cannot have delivery hours.")
+        
+        # Dine-in only restaurants can't set delivery hours
+        if self.restaurant.business_type == 'restaurant' and self.restaurant.service_mode == 'dine_in':
+            raise ValidationError("This restaurant is dine-in only.")
+        
+        # Only restaurants with delivery or vendors can set hours
+        if self.restaurant.business_type not in ('restaurant', 'vendor'):
+            raise ValidationError("Only restaurants and vendors can set delivery hours.")
+        
+        if self.restaurant.business_type == 'restaurant' and self.restaurant.service_mode not in ('delivery', 'both'):
+            raise ValidationError("This restaurant does not offer delivery.")
+        
+        # Both or neither
+        if (self.open_time and not self.close_time) or (self.close_time and not self.open_time):
+            raise ValidationError("Both open and close time must be set, or leave both empty for closed.")
+        
+        if self.open_time and self.close_time and self.open_time >= self.close_time:
+            raise ValidationError("Open time must be before close time.")
+
+    @property
+    def is_closed(self):
+        return self.open_time is None or self.close_time is None
 
 
 class RestaurantMembership(models.Model):
@@ -563,7 +582,7 @@ class DineInOTPSession(models.Model):
         )
     
     def __str__(self):
-        return f"Table {self.table_number} - {self.status} - {self.session_id[:8]}"
+        return f"Table {self.table_number} - {self.status} - {self.restaurant.name}"
 
 # 💬 IF YOU WANT NEXT
 

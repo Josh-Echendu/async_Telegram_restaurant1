@@ -73,16 +73,14 @@ class TelegramWhatsappAuthentication(BaseAuthentication):
     def authenticate(self, request):
         session_id = request.data.get('session_id')
         restaurant_id = request.parser_context["kwargs"].get("restaurant_id")
-        platform = request.data.get('platform')
+        platform = (request.data.get('platform') or "").lower()
         whatsapp_id = request.data.get("user_id")
-        mode = request.data.get('mode')
+        mode = (request.data.get('mode') or "").lower()
 
         print("request data for auth: ", request.data)
 
         if not all([restaurant_id, platform, mode]):
             raise AuthenticationFailed("Missing session authentication data")
-
-        platform = (platform or "").lower()
 
         # Get restaurant to check business_type
         restaurant = Restaurant.objects.filter(rid=restaurant_id).only('business_type', 'bot_token').first()
@@ -92,7 +90,7 @@ class TelegramWhatsappAuthentication(BaseAuthentication):
         is_hotel = restaurant and restaurant.business_type == 'hotel'
 
         if platform == 'whatsapp':
-            if mode and mode.lower() == 'dine_in' and session_id and not is_hotel:
+            if mode and mode == 'dine_in' and session_id and not is_hotel:
                 session = DineInOTPSession.objects.filter(
                     user__whatsapp_id=whatsapp_id,
                     status='verified',
@@ -102,6 +100,9 @@ class TelegramWhatsappAuthentication(BaseAuthentication):
 
                 if not session:
                     raise AuthenticationFailed("Invalid session")
+                
+                # save the dining session to the request 
+                request.dine_session=session
 
             # Optional: also validate Django session consistency
             if not (
@@ -125,7 +126,7 @@ class TelegramWhatsappAuthentication(BaseAuthentication):
             if not telegram_id:
                 raise AuthenticationFailed("Telegram user not found")
 
-            if mode and mode.lower() == 'dine_in' and session_id and not is_hotel:
+            if mode and mode == 'dine_in' and session_id and not is_hotel:
                 session = DineInOTPSession.objects.filter(
                     user__telegram_id=telegram_id,
                     status='verified',
@@ -135,6 +136,9 @@ class TelegramWhatsappAuthentication(BaseAuthentication):
 
                 if not session:
                     raise AuthenticationFailed("Invalid session")
+                
+                # save the dining session to the request 
+                request.dine_session=session
 
             # DRF expects : (user, auth) tuple, but we don't have a User object here since we're using Telegram IDs directly
             request.telegram_user_id = telegram_id

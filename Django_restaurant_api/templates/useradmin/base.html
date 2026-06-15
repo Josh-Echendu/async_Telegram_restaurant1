@@ -1,10 +1,11 @@
+
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="utf-8" />
-    <title>Nest Dashboard</title>
+    <title>{% block title %}Vendor Dashboard{% endblock %}</title>
     <meta http-equiv="x-ua-compatible" content="ie=edge" />
     <meta name="description" content="" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -12,216 +13,255 @@
     <meta property="og:type" content="" />
     <meta property="og:url" content="" />
     <meta property="og:image" content="" />
-    <!-- Favicon -->
-    <link rel="shortcut icon" type="image/x-icon" href="assets2/imgs/theme/favicon.svg" />
-    <!-- Template CSS -->
-    <link href="{% static 'assets2/css/main.css' %}" rel="stylesheet" type="text/css" />
+    
+    <link rel="shortcut icon" type="image/x-icon" href="{% static 'assets2/imgs/theme/favicon.svg' %}" />
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        [x-cloak] { display: none !important; }
+
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+        .nav-link-active {
+            background: #eef2ff;
+            color: #4338ca;
+            font-weight: 600;
+        }
+        .nav-link-active i { color: #4338ca; }
+    </style>
+
+    {% block extra_head %}{% endblock %}
 </head>
 
-<body>
-    <div class="screen-overlay"></div>
-    <aside class="navbar-aside" id="offcanvas_aside">
-        <div class="aside-top">
-            <a href="index.html" class="brand-wrap">
-                    <img src="{% static 'assets2/imgs/theme/logo.svg' %}" class="logo" alt="Nest Dashboard" />
-                </a>
-            <div>
-                <button class="btn btn-icon btn-aside-minimize"><i class="text-muted material-icons md-menu_open"></i></button>
-            </div>
-        </div>
-        <nav>
-            <ul class="menu-aside">
-                <li class="menu-item active">
-                    <a class="menu-link" href="{% url 'useradmin:dashboard' %}">
-                            <i class="icon material-icons md-home"></i>
-                            <span class="text">Dashboard</span>
-                        </a>
-                </li>
-                <li class="menu-item has-submenu">
-                    <a class="menu-link" href="{% url 'useradmin:dashboard-products' %}">
-                        <i class="icon material-icons md-shopping_bag"></i>
+<body class="bg-gray-50 antialiased" x-data="dashboardLayout" x-init="init()">
 
-                            <span class="text">Products</span>
-                        </a>
-                    
-                </li>
-                <li class="menu-item has-submenu">
-                    <a class="menu-link" href="{% url 'useradmin:dashboard-orders' %}">
-                            <i class="icon material-icons md-shopping_cart"></i>
-                            <span class="text">Orders</span>
-                        </a>
-                    <div class="submenu">
-                        <a href="page-orders-1.html">Order list 1</a>
-                        <a href="page-orders-2.html">Order list 2</a>
-                        <a href="page-orders-detail.html">Order detail</a>
-                    </div>
-                </li>
-                <!-- <li class="menu-item has-submenu">
-                    <a class="menu-link" href="page-sellers-cards.html">
-                            <i class="icon material-icons md-store"></i>
-                            <span class="text">Sellers</span>
-                        </a>
-                    <div class="submenu">
-                        <a href="page-sellers-cards.html">Sellers cards</a>
-                        <a href="page-sellers-list.html">Sellers list</a>
-                        <a href="page-seller-detail.html">Seller profile</a>
-                    </div>
-                </li> -->
-                <li class="menu-item has-submenu">
-                    <a class="menu-link" href="{% url 'useradmin:dashboard-add-products' %}">
-                            <i class="icon material-icons md-add_box"></i>
-                            <span class="text">Add product</span>
-                        </a>
-                    
-                </li>
-                <!-- <li class="menu-item has-submenu">
-                    <a class="menu-link" href="page-transactions-1.html">
-                            <i class="icon material-icons md-monetization_on"></i>
-                            <span class="text">Transactions</span>
-                        </a>
-                    <div class="submenu">
-                        <a href="page-transactions-1.html">Transaction 1</a>
-                        <a href="page-transactions-2.html">Transaction 2</a>
-                    </div>
-                </li> -->
-                <!-- <li class="menu-item has-submenu">
-                    <a class="menu-link" href="#">
-                            <i class="icon material-icons md-person"></i>
-                            <span class="text">Account</span>
-                        </a>
-                    <div class="submenu">
-                        <a href="page-account-login.html">User login</a>
-                        <a href="page-account-register.html">User registration</a>
-                        <a href="page-error-404.html">Error 404</a>
-                    </div>
-                </li> -->
-                <!-- <li class="menu-item">
-                    <a class="menu-link" href="page-reviews.html">
-                            <i class="icon material-icons md-comment"></i>
-                            <span class="text">Reviews</span>
-                        </a>
-                </li> -->
-                <!-- <li class="menu-item">
-                    <a class="menu-link" href="page-brands.html"> <i class="icon material-icons md-stars"></i> <span class="text">Brands</span> </a>
-                </li> -->
-                <li class="menu-item">
-                    <a class="menu-link" disabled href="#">
-                            <i class="icon material-icons md-pie_chart"></i>
-                            <span class="text">Statistics</span>
-                        </a>
-                </li>
-            </ul>
-            <hr />
-            <ul class="menu-aside">
-                <li class="menu-item has-submenu">
-                    <a class="menu-link" href="#">
-                            <i class="icon material-icons md-settings"></i>
-                            <span class="text">Settings</span>
-                        </a>
-                    <div class="submenu">
-                        <a href="page-settings-1.html">Setting sample 1</a>
-                        <a href="page-settings-2.html">Setting sample 2</a>
-                    </div>
-                </li>
-                <li class="menu-item">
-                    <a class="menu-link" href="page-blank.html">
-                            <i class="icon material-icons md-local_offer"></i>
-                            <span class="text"> Starter page </span>
-                        </a>
-                </li>
-            </ul>
-            <br />
-            <br />
+    <!-- Mobile Sidebar Overlay -->
+    <div 
+        x-show="sidebarOpen" 
+        x-cloak
+        class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+        @click="sidebarOpen = false"
+        x-transition.opacity
+    ></div>
+
+    <!-- Sidebar - fixed on all screen sizes -->
+    <aside 
+        :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+        class="fixed top-0 left-0 z-50 w-64 h-full bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 flex flex-col"
+    >
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <a href="{% url 'useradmin:dashboard' %}" class="flex items-center gap-2.5">
+                <img src="{% static 'assets2/imgs/theme/logo.svg' %}" class="h-8 w-auto" alt="Logo" />
+                <span class="text-lg font-bold text-gray-900">{{ restaurant.name }}</span>
+            </a>
+            <button @click="sidebarOpen = false" class="p-1.5 rounded-lg hover:bg-gray-100 lg:hidden">
+                <i class="fas fa-times text-gray-500 text-lg"></i>
+            </button>
+        </div>
+
+
+        <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+            <a href="{% url 'useradmin:dashboard' %}" 
+            class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if request.resolver_match.url_name == 'dashboard' %}nav-link-active{% endif %}">
+                <i class="fas fa-home w-5 text-center"></i>
+                <span>Dashboard</span>
+            </a>
+
+            <a href="{% url 'useradmin:dashboard-products' %}" 
+            class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'products' in request.path %}nav-link-active{% endif %}">
+                <i class="fas fa-box w-5 text-center"></i>
+                <span>Products</span>
+            </a>
+
+            <!-- ========== CATEGORIES (NEW) ========== -->
+            <a href="{% url 'useradmin:dashboard-categories' %}" 
+            class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'categories' in request.path %}nav-link-active{% endif %}">
+                <i class="fas fa-tags w-5 text-center"></i>
+                <span>Categories</span>
+            </a>
+
+            <!-- ========== ORDERS (DINE-IN) ========== -->
+            {% if restaurant.service_mode == 'dine_in' or restaurant.service_mode == 'both' %}
+            <a href="{% url 'useradmin:dashboard-dine_in-orders' %}" 
+            class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'orders' in request.path and request.GET.mode == 'dine_in' %}nav-link-active{% endif %}">
+                <i class="fas fa-utensils w-5 text-center"></i>
+                <span>Dine-in Orders</span>
+            </a>
+            {% endif %}
+
+            <!-- ========== ORDERS (DELIVERY) ========== -->
+            {% if restaurant.service_mode == 'delivery' or restaurant.service_mode == 'both' %}
+            <a href="{% url 'useradmin:dashboard-delivery-orders' %}" 
+            class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'orders' in request.path and request.GET.mode == 'delivery' %}nav-link-active{% endif %}">
+                <i class="fas fa-truck w-5 text-center"></i>
+                <span>Delivery Orders</span>
+            </a>
+            {% endif %}
+
+            <!-- ========== DELIVERY HOURS ========== -->
+            {% if restaurant.service_mode == 'delivery' or restaurant.service_mode == 'both' %}
+            <a href="{% url 'useradmin:delivery-hours' %}" 
+                class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'delivery-hours' in request.path %}nav-link-active{% endif %}">
+                    <i class="fas fa-clock w-5 text-center"></i>
+                    <span>Delivery Hours</span>
+            </a>
+            {% endif %}
+
+            {% if restaurant.business_type == 'restaurant' and restaurant.service_mode == 'dine_in' or restaurant.service_mode == 'both' %}
+            <a href="{% url 'useradmin:pos-config' %}" 
+            class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'pos-config' in request.path %}nav-link-active{% endif %}">
+                <i class="fas fa-credit-card w-5 text-center"></i>
+                <span>POS Config</span>
+            </a>
+            {% endif %}
+
+            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-400 cursor-not-allowed">
+                <i class="fas fa-chart-pie w-5 text-center"></i>
+                <span>Statistics</span>
+                <span class="ml-auto text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">Soon</span>
+            </a>
+
+            <hr class="my-3 border-gray-100" />
+
+            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                <i class="fas fa-gear w-5 text-center"></i>
+                <span>Settings</span>
+            </a>
+
+            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                <i class="fas fa-circle-question w-5 text-center"></i>
+                <span>Help Center</span>
+            </a>
         </nav>
+
+        <div class="px-3 py-4 border-t border-gray-100">
+            <a href="{% url 'userauths:admin_logout' %}" 
+               class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-600 hover:bg-red-50 transition-colors">
+                <i class="fas fa-right-from-bracket w-5 text-center"></i>
+                <span>Logout</span>
+            </a>
+        </div>
     </aside>
-    <main class="main-wrap">
-        <header class="main-header navbar">
-            <div class="col-search">
-                <form class="searchform">
-                    <div class="input-group">
-                        <input list="search_terms" type="text" class="form-control" placeholder="Search term" />
-                        <button class="btn btn-light bg" type="button"><i class="material-icons md-search"></i></button>
-                    </div>
-                    <datalist id="search_terms">
-                            <option value="Products"></option>
-                            <option value="New orders"></option>
-                            <option value="Apple iphone"></option>
-                            <option value="Ahmed Hassan"></option>
-                        </datalist>
-                </form>
-            </div>
-            <div class="col-nav">
-                <button class="btn btn-icon btn-mobile me-auto" data-trigger="#offcanvas_aside"><i class="material-icons md-apps"></i></button>
-                <ul class="nav">
-                    <li class="nav-item">
-                        <a class="nav-link btn-icon" href="#">
-                                <i class="material-icons md-notifications animation-shake"></i>
-                                <span class="badge rounded-pill">3</span>
+
+    <!-- Main Content -->
+    <div class="lg:pl-64 min-h-screen flex flex-col">
+        
+        <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-gray-100">
+            <div class="flex items-center justify-between px-4 sm:px-6 py-3">
+                
+                <div class="flex items-center gap-3">
+                    <button @click="sidebarOpen = !sidebarOpen" class="p-2 rounded-lg hover:bg-gray-100 lg:hidden">
+                        <i class="fas fa-bars text-gray-600 text-lg"></i>
+                    </button>
+                    
+                    <form class="hidden sm:flex items-center">
+                        <div class="relative">
+                            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                            <input 
+                                type="text" 
+                                placeholder="Search orders, products..." 
+                                class="w-56 lg:w-72 pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                            >
+                        </div>
+                    </form>
+                </div>
+
+                <div class="flex items-center gap-1 sm:gap-2">
+                    <button class="relative p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                        <i class="fas fa-bell text-gray-500 text-lg"></i>
+                        <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
+                    </button>
+
+                    <button @click="toggleFullscreen" class="p-2 rounded-lg hover:bg-gray-100 transition-colors hidden sm:block">
+                        <i class="fas fa-expand text-gray-500 text-lg"></i>
+                    </button>
+
+                    <div class="relative" x-data="{ open: false }">
+                        <button @click="open = !open" class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                            <img src="{% static 'assets2/imgs/people/avatar-2.png' %}" class="w-8 h-8 rounded-full object-cover border-2 border-gray-200" alt="User" />
+                            <span class="hidden sm:inline text-sm font-medium text-gray-700">{{ request.user.first_name|default:'Vendor' }}</span>
+                            <i class="fas fa-chevron-down text-gray-400 text-xs hidden sm:block"></i>
+                        </button>
+                        
+                        <div 
+                            x-show="open" 
+                            x-cloak
+                            @click.away="open = false"
+                            class="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50"
+                            x-transition
+                        >
+                            <a href="#" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                <i class="fas fa-user w-4"></i> Edit Profile
                             </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link btn-icon darkmode" href="#"> <i class="material-icons md-nights_stay"></i> </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="#" class="requestfullscreen nav-link btn-icon"><i class="material-icons md-cast"></i></a>
-                    </li>
-                    <li class="dropdown nav-item">
-                        <a class="dropdown-toggle" data-bs-toggle="dropdown" href="#" id="dropdownLanguage" aria-expanded="false"><i class="material-icons md-public"></i></a>
-                        <div class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownLanguage">
-                            <a class="dropdown-item text-brand" href="#"><img src="{% static 'assets2/imgs/theme/flag-us.png' %}" alt="English" />English</a>
-                            <a class="dropdown-item" href="#"><img src="{% static 'assets2/imgs/theme/flag-fr.png' %}" alt="Français" />Français</a>
-                            <a class="dropdown-item" href="#"><img src="{% static 'assets2/imgs/theme/flag-jp.png' %}" alt="Français" />日本語</a>
-                            <a class="dropdown-item" href="#"><img src="{% static 'assets2/imgs/theme/flag-cn.png' %}" alt="Français" />中国人</a>
+                            <a href="#" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                <i class="fas fa-wallet w-4"></i> Wallet
+                            </a>
+                            <a href="#" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                <i class="fas fa-file-invoice w-4"></i> Billing
+                            </a>
+                            <hr class="my-1 border-gray-100" />
+                            <a href="{% url 'userauths:admin_logout' %}" class="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+                                <i class="fas fa-right-from-bracket w-4"></i> Logout
+                            </a>
                         </div>
-                    </li>
-                    <li class="dropdown nav-item">
-                        <a class="dropdown-toggle" data-bs-toggle="dropdown" href="#" id="dropdownAccount" aria-expanded="false"> <img class="img-xs rounded-circle" src="{% static 'assets2/imgs/people/avatar-2.png' %}" alt="User" /></a>
-                        <div class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownAccount">
-                            <a class="dropdown-item" href="#"><i class="material-icons md-perm_identity"></i>Edit Profile</a>
-                            <a class="dropdown-item" href="#"><i class="material-icons md-settings"></i>Account Settings</a>
-                            <a class="dropdown-item" href="#"><i class="material-icons md-account_balance_wallet"></i>Wallet</a>
-                            <a class="dropdown-item" href="#"><i class="material-icons md-receipt"></i>Billing</a>
-                            <a class="dropdown-item" href="#"><i class="material-icons md-help_outline"></i>Help center</a>
-                            <div class="dropdown-divider"></div>
-                            <a class="dropdown-item text-danger" href="{% url 'userauths:admin_logout' %}"><i class="material-icons md-exit_to_app"></i>Logout</a>
-                        </div>
-                    </li>
-                </ul>
+                    </div>
+                </div>
             </div>
         </header>
-        
 
-        {% block content %}
-          
-        {% endblock content %}
+        <main class="flex-1">
+            {% block content %}{% endblock %}
+        </main>
 
-
-        <!-- content-main end// -->
-        <footer class="main-footer font-xs">
-            <div class="row pb-30 pt-15">
-                <div class="col-sm-6">
-                    <script>
-                        document.write(new Date().getFullYear());
-                    </script>
-                    &copy; Nest - HTML Ecommerce Template .
-                </div>
-                <div class="col-sm-6">
-                    <div class="text-sm-end">All rights reserved</div>
+        <footer class="border-t border-gray-100 px-4 sm:px-6 py-4">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-2">
+                <p class="text-xs text-gray-500">
+                    &copy; <span x-text="new Date().getFullYear()"></span> Fork & Co. All rights reserved.
+                </p>
+                <div class="flex items-center gap-4">
+                    <a href="#" class="text-xs text-gray-500 hover:text-gray-700">Privacy</a>
+                    <a href="#" class="text-xs text-gray-500 hover:text-gray-700">Terms</a>
+                    <a href="#" class="text-xs text-gray-500 hover:text-gray-700">Help</a>
                 </div>
             </div>
         </footer>
-    </main>
-    <script src="{% static 'assets2/js/vendors/jquery-3.6.0.min.js' %}"></script>
-    <script src="{% static 'assets2/js/vendors/bootstrap.bundle.min.js' %}"></script>
-    <script src="{% static 'assets2/js/vendors/select2.min.js' %}"></script>
-    <script src="{% static 'assets2/js/vendors/perfect-scrollbar.js' %}"></script>
-    <script src="{% static 'assets2/js/vendors/jquery.fullscreen.min.js' %}"></script>
-    <script src="{% static 'assets2/js/vendors/chart.js' %}"></script>
-    <!-- Main Script -->
-    <script src="{% static 'assets2/js/main.js?v=1.1' %}" type="text/javascript"></script>
-    <!-- <script src="{% static 'assets2/js/custom-chart.js' %}" type="text/javascript"></script> -->
+    </div>
+
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('dashboardLayout', () => ({
+                sidebarOpen: false,
+                
+                init() {
+                    window.addEventListener('resize', () => {
+                        if (window.innerWidth >= 1024) {
+                            this.sidebarOpen = false;
+                        }
+                    });
+                },
+
+                toggleFullscreen() {
+                    if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen();
+                    } else {
+                        document.exitFullscreen();
+                    }
+                }
+            }));
+        });
+    </script>
+
+    {% block extra_js %}{% endblock %}
 </body>
 
 </html>

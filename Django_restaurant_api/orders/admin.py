@@ -17,7 +17,7 @@ class CartAdmin(admin.ModelAdmin):
     list_display = ['telegram_user', 'product__title', 'product_image', 'quantity', 'date_added']
 
 class OrderBatchAdmin(admin.ModelAdmin):
-    list_display = ['telegram_user__telegram_id', 'telegram_user__username', 'bid', 'total_price', 'payment_status', 'date_created']
+    list_display = ['telegram_user__telegram_id', 'telegram_user__username', 'restaurant__name', 'total_price', 'payment_status', 'date_created']
 
 class OrderBatchItemAdmin(admin.ModelAdmin):
     list_display = ['batch', 'product__title', 'product_image', 'quantity', 'price', 'multiply_price']

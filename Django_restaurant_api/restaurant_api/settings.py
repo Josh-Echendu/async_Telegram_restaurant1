@@ -107,6 +107,7 @@ TEMPLATES = [
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
+                'userAdmin.context_processors.restaurant_context',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
@@ -348,7 +349,7 @@ VPAY_SANDBOX_SECRET_KEY = os.getenv('VPAY_SANDBOX_SECRET_KEY')
 VPAY_LIVE_PUBLIC_KEY = os.getenv('VPAY_LIVE_PUBLIC_KEY')
 VPAY_LIVE_SECRET_KEY = os.getenv('VPAY_LIVE_SECRET_KEY')
 VPAY_WEBHOOK_SECRET = os.getenv('VPAY_WEBHOOK_SECRET')
-VPAY_DOMAIN = 'live'  # or 'live'
+VPAY_DOMAIN = 'sandbox'  # or 'live'
 
 
 
@@ -371,4 +372,21 @@ MONIEPOINT_CONFIG = {
     "MAX_RETRIES": 3,
     "RETRY_BACKOFF_FACTOR": 0.5,     # exponential backoff multiplier
     "RETRY_STATUSES": [429, 500, 502, 503, 504],  # statuses to retry on
+}
+
+
+VPAY_CONFIG = {
+    "BASE_URL": "https://kola.vpay.africa",
+    "PUBLIC_KEY": os.getenv("VPAY_LIVE_PUBLIC_KEY"),
+    "USERNAME": os.getenv("VPAY_USERNAME"),
+    "PASSWORD": os.getenv("VPAY_PASSWORD"),
+    
+    # Re-query token caching
+    "ACCESS_TOKEN_CACHE_KEY": "vpay:access_token",
+    
+    # HTTP settings
+    "REQUEST_TIMEOUT": 15,
+    "MAX_RETRIES": 3,
+    "RETRY_BACKOFF_FACTOR": 0.5,
+    "RETRY_STATUSES": [429, 500, 502, 503, 504],
 }

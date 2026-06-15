@@ -15,8 +15,8 @@
   <link rel="stylesheet" href="https://maps.locationiq.com/v3/css/autocomplete.css">
 
   <!-- <script defer src="{% static 'js/address-autocomplete.js' %}"></script> -->
-  <!-- <script src="https://dropin-sandbox.vpay.africa/dropin/v1/initialise.js"></script> -->
-  <script src="https://dropin.vpay.africa/dropin/v1/initialise.js"></script>
+  <script src="https://dropin-sandbox.vpay.africa/dropin/v1/initialise.js"></script>
+  <!-- <script src="https://dropin.vpay.africa/dropin/v1/initialise.js"></script> -->
   
   <script>
       let tg = null;
@@ -1040,7 +1040,7 @@
               const options = {
                   amount: data.final_amount, // The backend pre-calculates base + channel fee
                   currency: 'NGN',
-                  domain: 'live',
+                  domain: 'sandbox',
                   key: data.public_key,
                   email: 'guest@hotel.com',
                   transactionref: data.transactionref,
@@ -1188,7 +1188,7 @@
               const options = {
                   amount: data.final_amount,
                   currency: 'NGN',
-                  domain: 'live',
+                  domain: 'sandbox',
                   key: data.public_key,
                   email: 'customer@example.com',
                   transactionref: data.transactionref,

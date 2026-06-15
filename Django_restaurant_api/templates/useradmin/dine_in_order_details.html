@@ -1,0 +1,222 @@
+{% extends 'useradmin/base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block content %}
+
+<div class="px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    
+    <!-- ==================== PAGE HEADER ==================== -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">Order #{{ order.session_id|slice:":12" }}</h1>
+            <p class="text-xs sm:text-sm text-gray-500 mt-0.5">{{ order.date_created|date:"d M, Y · g:i A" }} · {{ batches|length }} batch{{ batches|length|pluralize:"es" }}</p>
+        </div>
+        <a href="{% url 'useradmin:dashboard-dine_in-orders' %}" 
+           class="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1">
+            <i class="fas fa-arrow-left text-xs"></i> Back to Dine-in Orders
+        </a>
+    </div>
+
+    <!-- ==================== STATUS BAR ==================== -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="flex items-center gap-3 flex-wrap">
+                <span class="text-sm font-medium text-gray-700">Payment:</span>
+                {% if order.payment_status == 'paid' %}
+                    <span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full">Paid</span>
+                {% else %}
+                    <span class="text-xs font-medium text-red-700 bg-red-50 px-3 py-1 rounded-full">Unpaid</span>
+                {% endif %}
+                
+                <span class="text-gray-300">|</span>
+                
+                <span class="text-sm font-medium text-gray-700">Platform:</span>
+                <span class="text-xs font-medium text-gray-600 bg-gray-50 px-3 py-1 rounded-full">{{ order.platform|title|default:"—" }}</span>
+                
+                <span class="text-sm font-medium text-gray-700">Payment Method:</span>
+                <span class="text-xs font-medium text-gray-600 bg-gray-50 px-3 py-1 rounded-full">{{ order.transaction_type|title|default:"—" }}</span>
+                
+                {% if order.table_number %}
+                <span class="text-gray-300">|</span>
+                <span class="text-sm font-medium text-gray-700">Table:</span>
+                <span class="text-xs font-medium text-gray-600 bg-gray-50 px-3 py-1 rounded-full">Table {{ order.table_number }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== CUSTOMER + ORDER INFO ==================== -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+        
+        <!-- Customer -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+            <h3 class="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <span class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
+                    <i class="fas fa-user text-indigo-600 text-sm"></i>
+                </span>
+                Customer
+            </h3>
+            <div class="space-y-2 text-sm">
+                <p><span class="text-gray-500">Name:</span> <span class="font-medium">{{ order.telegram_user.first_name|default:"Guest" }} {{ order.telegram_user.last_name|default:"" }}</span></p>
+                {% if order.telegram_user.username %}
+                <p><span class="text-gray-500">Username:</span> <span class="font-medium">@{{ order.telegram_user.username }}</span></p>
+                {% endif %}
+                {% if order.table_number %}
+                <p><span class="text-gray-500">Table:</span> <span class="font-medium">Table {{ order.table_number }}</span></p>
+                {% endif %}
+                {% if order.room_number %}
+                <p><span class="text-gray-500">Room:</span> <span class="font-medium">{{ order.room_number }}</span></p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Order Info -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+            <h3 class="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <span class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+                    <i class="fas fa-receipt text-amber-600 text-sm"></i>
+                </span>
+                Order Info
+            </h3>
+            <div class="space-y-2 text-sm">
+                <p><span class="text-gray-500">Order ID:</span> <span class="font-medium font-mono">#{{ order.session_id|slice:":12" }}</span></p>
+                <p>
+                    <span class="text-gray-500">Type:</span> 
+                    <span class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">Dine-in</span>
+                </p>
+                {% if restaurant.business_type == 'restaurant' and order.dine_session %}
+                    <p>
+                        <span class="text-gray-500">Waiter:</span> 
+                        <span class="font-medium">@{{ order.dine_session.waiter_username|default:"Unknown" }}</span>
+                    </p>
+                    {% if order.dine_session.waiter_telegram_id %}
+                    <p>
+                        <a href="{% if order.dine_session.waiter_username %}https://t.me/{{ order.dine_session.waiter_username }}{% else %}tg://user?id={{ order.dine_session.waiter_telegram_id }}{% endif %}" 
+                            target="_blank"
+                            class="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-sky-500 hover:bg-sky-600 px-3 py-1.5 rounded-lg transition-colors">
+                                <i class="fab fa-telegram-plane"></i> Chat with Waiter
+                        </a>    
+                    </p>
+                    {% endif %}
+                {% endif %}
+                <p><span class="text-gray-500">Order Batches:</span> <span class="font-medium">{{ batches|length }}</span></p>
+                <p><span class="text-gray-500">Date:</span> <span class="font-medium">{{ order.date_created|date:"d M, Y · g:i A" }}</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== BATCHES ==================== -->
+    {% for batch in batches %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="px-4 sm:px-6 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gray-50/50">
+            <div class="flex items-center gap-3">
+                <span class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+                    <i class="fas fa-receipt text-indigo-600 text-xs"></i>
+                </span>
+                <div>
+                    <h3 class="text-sm font-bold text-gray-900">Batch #{{ batch.bid }}</h3>
+                    <p class="text-[10px] text-gray-500">{{ batch.items|length }} item{{ batch.items|length|pluralize }} · ₦{{ batch.total_price|intcomma }}</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                {% if batch.payment_status == 'paid' %}
+                    <span class="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">Paid</span>
+                {% else %}
+                    <span class="text-[10px] font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-full">Unpaid</span>
+                {% endif %}
+                {% if batch.notified_kitchen %}
+                    <span class="text-[10px] font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">Kitchen Notified</span>
+                {% endif %}
+                
+                <!-- Kitchen Status Update -->
+                <form method="POST" action="" class="flex items-center gap-1.5">
+                    {% csrf_token %}
+                    <select name="status" class="text-[10px] border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none">
+                        <option value="pending" {% if batch.status == 'pending' %}selected{% endif %}>Pending</option>
+                        <option value="processing" {% if batch.status == 'processing' %}selected{% endif %}>Processing</option>
+                        <option value="delivered" {% if batch.status == 'delivered' %}selected{% endif %}>Delivered</option>
+                    </select>
+                    <button type="submit" class="text-[10px] px-2.5 py-1.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+                        Update
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Desktop Table -->
+        <div class="hidden md:block overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-50">
+                        <th class="text-left px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Product</th>
+                        <th class="text-left px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Price</th>
+                        <th class="text-left px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
+                        <th class="text-right px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                    {% for item in batch.items %}
+                    <tr>
+                        <td class="px-6 py-3">
+                            <div class="flex items-center gap-3">
+                                <img src="{{ item.product.image.url }}" class="w-8 h-8 rounded-lg object-cover bg-gray-100" alt="{{ item.product.title }}" />
+                                <span class="text-sm font-medium text-gray-900">{{ item.product.title }}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-3 text-sm text-gray-700">₦{{ item.price|intcomma }}</td>
+                        <td class="px-6 py-3 text-sm text-gray-700">{{ item.quantity }}</td>
+                        <td class="px-6 py-3 text-sm font-semibold text-gray-900 text-right">₦{{ item.multiply_price|intcomma }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Mobile Cards -->
+        <div class="md:hidden divide-y divide-gray-50">
+            {% for item in batch.items %}
+            <div class="p-3 flex items-center gap-3">
+                <img src="{{ item.product.image.url }}" class="w-10 h-10 rounded-lg object-cover bg-gray-100 flex-shrink-0" alt="{{ item.product.title }}" />
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-gray-900 truncate">{{ item.product.title }}</p>
+                    <p class="text-xs text-gray-500">{{ item.quantity }} × ₦{{ item.price|intcomma }}</p>
+                </div>
+                <span class="text-sm font-bold text-gray-900">₦{{ item.multiply_price|intcomma }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- ==================== OVERALL TOTALS ==================== -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+        <div class="max-w-xs ml-auto space-y-2">
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-500">Subtotal</span>
+                <span class="font-medium">₦{{ order.total_batch_price|intcomma }}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-500">VAT (7.5%)</span>
+                <span class="font-medium text-amber-600">₦{{ vat_amount|intcomma }}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-500">bank fee</span>
+                <span class="font-medium text-amber-600">₦{{ order.bank_fee|intcomma }}</span>
+            </div>
+            <div class="border-t border-gray-200 pt-2 flex justify-between text-base font-bold">
+                <span>Total</span>
+                <span>₦{{ order.expected_amount|default:0|intcomma }}</span>
+            </div>
+            {% if order.amount_received %}
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-500">Settlement</span>
+                <span class="font-medium text-emerald-600">₦{{ order.amount_received|intcomma }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
