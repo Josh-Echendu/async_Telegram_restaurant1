@@ -27,5 +27,6 @@ COPY COMMON /app/COMMON
 # from WHATSAPP_BOT_API.manager.wa_manager import get_wa_client
 COPY TELEGRAM_BOT_API /app/TELEGRAM_BOT_API
 COPY WHATSAPP_BOT_API /app/WHATSAPP_BOT_API
+COPY UNOFFICIAL_WHATSAPP_API /app/UNOFFICIAL_WHATSAPP_API
 
 # CMD ["python", "-m", "arq", "workers.worker.WorkerSettings"]

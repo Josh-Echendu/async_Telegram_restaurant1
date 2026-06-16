@@ -1,9 +1,15 @@
-from tasks import handle_whatsapp_update, handle_telegram_update
+from tasks import handle_whatsapp_update, handle_telegram_update, process_whatsapp_messages
 from COMMON.redis import redis_settings
+import asyncio
 
+
+async def startup(ctx):
+    
+    # Start the WhatsApp message processor
+    asyncio.create_task(process_whatsapp_messages(ctx))
 
 class WorkerSettings:
-    functions = [handle_whatsapp_update, handle_telegram_update]
+    functions = [handle_whatsapp_update, handle_telegram_update, process_whatsapp_messages]
 
     # ARQ will: parse the URL, extract host, port, db, password
     # configure connection automatically

@@ -116,6 +116,12 @@ BUSINESS_TYPE = (
 
 # If a guest still manages to type the wrong room number after three chances to catch it, that's on them — not your system. But this catches 99% of mistakes.
 
+
+VENDOR_TYPE_CHOICES = (
+    ('cooked_food', 'Cooked Food Vendor'),
+    ('goods', 'Goods Vendor'),
+)
+
 class Restaurant(models.Model):
     rid = ShortUUIDField(unique=True, prefix='res', length=10, max_length=20, alphabet=ALPHABET, db_index=True)
     name = models.CharField(max_length=250)
@@ -133,9 +139,13 @@ class Restaurant(models.Model):
                              help_text="State or region where the restaurant is located"
     )
 
+    vendor_type = models.CharField(max_length=20, choices=VENDOR_TYPE_CHOICES, null=True, blank=True,
+        help_text="Only applies to vendors. Cooked food vendors have a 15km delivery limit."
+    )
+
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
-    max_delivery_radius_km = models.FloatField(default=10.0)
+    max_delivery_radius_km = models.FloatField(blank=True, null=True)
     lga = models.CharField(max_length=100, null=True, blank=True)
     bank_account_number = models.CharField(max_length=100, blank=True, null=True)
     phone_number = models.CharField(max_length=100, blank=True, null=True)
@@ -204,6 +214,17 @@ class Restaurant(models.Model):
     )
 
     def save(self, *args, **kwargs):
+
+        # ========== NEW: Auto-set delivery radius ==========
+        if self.business_type == 'restaurant' and self.service_mode in ('delivery', 'both'):
+            self.max_delivery_radius_km = 15
+
+        elif self.business_type == 'vendor' and self.vendor_type == 'cooked_food':
+            self.max_delivery_radius_km = 15
+
+        else:
+            self.max_delivery_radius_km = None  # Unlimited for goods vendors
+
         if self.business_type == "vendor":
             self.max_tables = 0
             if self.service_mode != "delivery":
@@ -242,6 +263,17 @@ class Restaurant(models.Model):
         super().save(*args, **kwargs)
 
     def clean(self):
+
+        # Restaurant delivery radius
+        if self.business_type == 'restaurant' and self.service_mode != 'dine_in':
+            if self.max_delivery_radius_km > 15:
+                raise ValidationError("Restaurant delivery radius cannot exceed 15km.")
+        
+        # Cooked food vendor radius
+        if self.business_type == 'vendor' and self.vendor_type == 'cooked_food':
+            if self.max_delivery_radius_km > 15:
+                raise ValidationError("Cooked food vendors cannot exceed 15km delivery radius.")
+        
         if self.kitchen_chat_id and not str(self.kitchen_chat_id).startswith("-"):
             raise ValidationError("Kitchen chat ID must be a group ID (negative number)")
         

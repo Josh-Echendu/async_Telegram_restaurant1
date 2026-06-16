@@ -1,0 +1,20 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Add git alongside curl
+RUN apk add --no-cache curl git
+
+# Copy package.json and install Node dependencies
+COPY UNOFFICIAL_WHATSAPP_API/package.json ./
+RUN npm install
+
+# Copy the Node.js code
+COPY UNOFFICIAL_WHATSAPP_API/ /app/
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+EXPOSE 3000
+
+CMD ["node", "worker.js"]

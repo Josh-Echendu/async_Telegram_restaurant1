@@ -10,7 +10,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.core.paginator import Paginator
 import math
-
+from django.conf import settings
 from orders.models import KITCHEN_STATUS_CHOICES, OrderBatch, Product, OrderBatchItem, Category, CheckoutSession
 from userAuths.models import TelegramUser, AdminUser
 from .forms import AddProductForm, AddCategoryForm
@@ -23,7 +23,7 @@ from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.http import JsonResponse
 from django.db.models import Count, Q
-
+import json
 
 
 
@@ -610,6 +610,18 @@ def pos_config(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
     return render(request, 'useradmin/pos_config.html', {'restaurant': restaurant})
 
+# Bot: "Order confirmed! 🍽️
+#       Jollof Rice - ₦2,000
+#       Chicken - ₦1,500
+#       Total: ₦3,500
+      
+#       Reply STOP to opt out of messages"
+
+# Actually honor "STOP" messages. If a customer opts out, flag them. Don't send confirmations to opted-out numbers. 
+# This is a WhatsApp requirement, not optional.
+
+# Don't send identical message templates. Add slight variations — timestamps, order IDs, restaurant names.
+# Identical messages across multiple bots look like a bot farm.
 
 
 @admin_required
@@ -617,11 +629,81 @@ def shop_settings(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
     return render(request, 'useradmin/settings.html', {'restaurant': restaurant})
 
+
+
+# [providers.models."custom:http://localhost:11434"]
+# base_url = "http://localhost:11434"
+# max_tokens = 4096
+# temperature = 0.8
+# timeout_secs = 600
+# wire_api = "chat_completions"
+
+@require_POST
 @admin_required
 def update_shop_settings(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
-    return render(request, 'useradmin/settings.html', {'restaurant': restaurant})
+    
+    # ---- business_type ----
+    if 'business_type' in request.POST:
+        if restaurant.business_type:
+            return JsonResponse({'error': 'Business type cannot be changed after registration.'}, status=400)
+        value = (request.POST['business_type'] or "").lower()
+        if value not in ('restaurant', 'vendor', 'hotel'):
+            return JsonResponse({'error': 'Invalid business type.'}, status=400)
+        restaurant.business_type = value
+        if value == 'vendor':
+            restaurant.service_mode = 'delivery'
+        elif value == 'hotel':
+            restaurant.service_mode = 'dine_in'
 
+    # ---- vendor_type ----
+    if 'vendor_type' in request.POST:
+        if restaurant.vendor_type:
+            return JsonResponse({'error': 'Vendor type cannot be changed after registration.'}, status=400)
+        value = request.POST['vendor_type']
+        if value not in ('cooked_food', 'goods'):
+            return JsonResponse({'error': 'Invalid vendor type.'}, status=400)
+        restaurant.vendor_type = value
+
+    # ---- all other fields ----
+    updatable_fields = [
+        'first_name', 'last_name', 'phone_number',
+        'name', 'description', 'state', 'lga', 'address',
+        'service_mode', 'delivery_fee',
+        'max_tables', 'timezone', 'is_accepting_orders',
+        'bank_account_name', 'bank_account_number',
+        'bot_username', 'bot_token', 'is_bot_active',
+        'whatsapp_business_phone', 'whatsapp_business_account_id',
+        'whatsapp_phone_number_id', 'whatsapp_access_token', 'is_whatsapp_active',
+        'kitchen_chat_id', 'delivery_chat_id',
+    ]
+    
+    for field in updatable_fields:
+        if field in request.POST:
+            value = request.POST[field]
+            if value == 'true':
+                value = True
+            elif value == 'false':
+                value = False
+            setattr(restaurant, field, value)
+
+    if 'image' in request.FILES:
+        restaurant.image = request.FILES['image']
+
+    restaurant.save()
+
+    # After save, register in Redis for baileys
+    if restaurant.whatsapp_business_phone:
+        import redis
+        r = redis.Redis.from_url(settings.REDIS_URL)
+        r.hset('whatsapp:restaurants', restaurant.rid, restaurant.whatsapp_business_phone)
+
+        setup_data = r.hget('whatsapp:setup', restaurant.rid)
+        if setup_data:
+            data = json.loads(setup_data)
+            pairing_code = data.get('pairingCode')
+
+    return JsonResponse({'success': True})
 
 
 

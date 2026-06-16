@@ -204,10 +204,46 @@
             <div class="p-5 sm:p-6">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
 
+                    <!-- Business Type (Parent — shown first, locked after registration) -->
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Business Type</label>
+                        {% if not restaurant.business_type %}
+                            <!-- Onboarding: user hasn't picked yet — show dropdown -->
+                            <select name="business_type" x-model="form.business_type"
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all bg-white">
+                                <option value="">Select business type...</option>
+                                <option value="restaurant">Restaurant</option>
+                                <option value="vendor">Vendor</option>
+                                <option value="hotel">Hotel</option>
+                            </select>
+                            <p class="text-[10px] text-amber-500 mt-1">Required — this cannot be changed later</p>
+                        {% else %}
+                            <!-- Registered: locked -->
+                            <input 
+                                type="text" 
+                                value="{% if restaurant.business_type == 'restaurant' %}Restaurant{% elif restaurant.business_type == 'vendor' %}Vendor{% elif restaurant.business_type == 'hotel' %}Hotel{% endif %}"
+                                disabled
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed"
+                            >
+                            <p class="text-[10px] text-gray-400 mt-1">Business type cannot be changed after registration</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Service Mode (Child — depends on business type) -->
                     <div>
                         <label class="block text-xs font-semibold text-gray-700 mb-1.5">Service Mode</label>
                         
-                        {% if restaurant.business_type == 'restaurant' %}
+                        {% if not restaurant.business_type %}
+                            <!-- Onboarding: no business type selected yet — show placeholder -->
+                            <input 
+                                type="text" 
+                                value="Select business type first"
+                                disabled
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-400 cursor-not-allowed"
+                            >
+                            <p class="text-[10px] text-gray-400 mt-1">Service mode is determined by your business type</p>
+                        
+                        {% elif restaurant.business_type == 'restaurant' %}
                             <!-- Restaurant: can choose any mode -->
                             <select name="service_mode" x-model="form.service_mode"
                                 class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all bg-white">
@@ -220,11 +256,11 @@
                             <!-- Hotel: locked to dine-in -->
                             <input 
                                 type="text" 
-                                value="Dine-in Only"
+                                value="Dine-in Only (Room Service)"
                                 disabled
                                 class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed"
                             >
-                            <p class="text-[10px] text-gray-400 mt-1">Hotels only support dine-in (room service)</p>
+                            <p class="text-[10px] text-gray-400 mt-1">Hotels only support dine-in room service</p>
                         
                         {% elif restaurant.business_type == 'vendor' %}
                             <!-- Vendor: locked to delivery -->
@@ -234,42 +270,52 @@
                                 disabled
                                 class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed"
                             >
-                            <p class="text-[10px] text-gray-400 mt-1">vendors only support delivery</p>
+                            <p class="text-[10px] text-gray-400 mt-1">Vendors only support delivery</p>
                         {% endif %}
                     </div>
 
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Business Type</label>
-                        <input 
-                            type="text" 
-                            value="{% if restaurant.business_type == 'restaurant' %}Restaurant{% elif restaurant.business_type == 'vendor' %}Vendor{% elif restaurant.business_type == 'hotel' %}Hotel{% endif %}"
-                            disabled
-                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed"
-                        >
-                        <p class="text-[10px] text-gray-400 mt-1">Business type cannot be changed after registration</p>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Fee (₦)</label>
-                        <input 
-                            type="number" 
-                            name="delivery_fee" 
-                            x-model="form.delivery_fee"
-                            value="{{ restaurant.delivery_fee|default:'0' }}"
-                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
-                            placeholder="500"
-                        >
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Prep Time (minutes)</label>
-                        <input 
-                            type="number" 
-                            name="average_preparation_time" 
-                            x-model="form.average_preparation_time"
-                            value="{{ restaurant.average_preparation_time|default:'30' }}"
-                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
-                            placeholder="30"
-                        >
-                    </div>
+                    <!-- Vendor Type (only for vendors — shown during onboarding) -->
+                    {% if restaurant.business_type == 'vendor' %}
+                        {% if not restaurant.vendor_type %}
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">
+                                What do you sell? <span class="text-red-500">*</span>
+                            </label>
+                            <select name="vendor_type" x-model="form.vendor_type"
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all bg-white">
+                                <option value="">Select vendor type...</option>
+                                <option value="cooked_food">Cooked Food (meals, soups, bulk catering)</option>
+                                <option value="goods">General Goods (clothes, shoes, books, etc.)</option>
+                            </select>
+                            <p class="text-[10px] text-amber-500 mt-1">Required — determines your delivery distance</p>
+                        </div>
+                        {% else %}
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Vendor Type</label>
+                            <input 
+                                type="text" 
+                                value="{% if restaurant.vendor_type == 'cooked_food' %}Cooked Food Vendor{% elif restaurant.vendor_type == 'goods' %}Goods Vendor{% endif %}"
+                                disabled
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed"
+                            >
+                            <p class="text-[10px] text-gray-400 mt-1">Vendor type cannot be changed after registration</p>
+                        </div>
+                        {% endif %}
+                    {% endif %}
+
+                    {% if restaurant.business_type == 'vendor' or restaurant.business_type == 'restaurant' and restaurant.service_mode != 'dine_in' %}
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Fee (₦)</label>
+                            <input 
+                                type="number" 
+                                name="delivery_fee" 
+                                x-model="form.delivery_fee"
+                                value="{{ restaurant.delivery_fee|default:'0' }}"
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                                placeholder="500"
+                            >
+                        </div>
+                    {% endif %}
                     {% if restaurant.business_type == 'restaurant' and restaurant.service_mode != 'delivery' %}
                     <div>
                         <label class="block text-xs font-semibold text-gray-700 mb-1.5">Max Tables</label>
@@ -283,19 +329,7 @@
                         >
                     </div>
                     {% endif %}
-                    {% if restaurant.business_type != 'hotel' and restaurant.service_mode != 'dine_in' %}
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Radius (km)</label>
-                        <input 
-                            type="number" 
-                            name="max_delivery_radius_km" 
-                            x-model="form.max_delivery_radius_km"
-                            value="{{ restaurant.max_delivery_radius_km|default:'10' }}"
-                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
-                            placeholder="10"
-                        >
-                    </div>
-                    {% endif %}
+                    
                     <div>
                         <label class="block text-xs font-semibold text-gray-700 mb-1.5">Timezone</label>
                         <select name="timezone" x-model="form.timezone"
@@ -598,23 +632,24 @@
                 lga: '{{ restaurant.lga|default:"" }}',
                 address: '{{ restaurant.address|default:"" }}',
                 service_mode: '{{ restaurant.service_mode|default:"" }}',
-                // business_type: '{{ restaurant.business_type|default:"" }}',
+                business_type: '{{ restaurant.business_type|default:"" }}',
                 delivery_fee: '{{ restaurant.delivery_fee|default:"0" }}',
-                average_preparation_time: '{{ restaurant.average_preparation_time|default:"30" }}',
+                // average_preparation_time: '{{ restaurant.average_preparation_time|default:"30" }}',
                 max_tables: '{{ restaurant.max_tables|default:"10" }}',
-                max_delivery_radius_km: '{{ restaurant.max_delivery_radius_km|default:"10" }}',
+                vendor_type: '{{ restaurant.vendor_type|default:"" }}',
+                // max_delivery_radius_km: '{{ restaurant.max_delivery_radius_km|default:"10" }}',
                 timezone: '{{ restaurant.timezone|default:"Africa/Lagos" }}',
-                is_accepting_orders: {{ restaurant.is_accepting_orders|yesno:"true,false" }},
+                is_accepting_orders: '{{ restaurant.is_accepting_orders|yesno:"true,false" }}',
                 bank_account_name: '{{ restaurant.bank_account_name|default:"" }}',
                 bank_account_number: '{{ restaurant.bank_account_number|default:"" }}',
                 bot_username: '{{ restaurant.bot_username|default:"" }}',
                 bot_token: '{{ restaurant.bot_token|default:"" }}',
-                is_bot_active: {{ restaurant.is_bot_active|yesno:"true,false" }},
+                is_bot_active: '{{ restaurant.is_bot_active|yesno:"true,false" }}',
                 whatsapp_business_phone: '{{ restaurant.whatsapp_business_phone|default:"" }}',
                 whatsapp_business_account_id: '{{ restaurant.whatsapp_business_account_id|default:"" }}',
                 whatsapp_phone_number_id: '{{ restaurant.whatsapp_phone_number_id|default:"" }}',
                 whatsapp_access_token: '{{ restaurant.whatsapp_access_token|default:"" }}',
-                is_whatsapp_active: {{ restaurant.is_whatsapp_active|yesno:"true,false" }},
+                is_whatsapp_active: '{{ restaurant.is_whatsapp_active|yesno:"true,false" }}',
                 kitchen_chat_id: '{{ restaurant.kitchen_chat_id|default:"" }}',
                 delivery_chat_id: '{{ restaurant.delivery_chat_id|default:"" }}',
             },
@@ -651,9 +686,8 @@
                         formData.append('service_mode', this.form.service_mode);
                         formData.append('business_type', this.form.business_type);
                         formData.append('delivery_fee', this.form.delivery_fee);
-                        formData.append('average_preparation_time', this.form.average_preparation_time);
+                        formData.append('vendor_type', this.form.vendor_type);
                         formData.append('max_tables', this.form.max_tables);
-                        formData.append('max_delivery_radius_km', this.form.max_delivery_radius_km);
                         formData.append('timezone', this.form.timezone);
                         formData.append('is_accepting_orders', this.form.is_accepting_orders);
                     } else if (section === 'bank') {

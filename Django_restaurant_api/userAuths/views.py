@@ -128,6 +128,7 @@ class WhatsAppUserCreateAPIView(APIView):
 
         whatsapp_id = data.get("whatsapp_id")
         phone_number = data.get("phone_number")
+        platform = data.get('platform')
         
         # WhatsApp requires phone number
         if not phone_number:
@@ -143,11 +144,22 @@ class WhatsAppUserCreateAPIView(APIView):
         }
 
         try:
-            user, created = TelegramUser.objects.update_or_create(
-                whatsapp_id=whatsapp_id,
-                defaults=defaults,
-            )
+            user=None
+            created=None
 
+            # Unofficial: identify by phone_number
+            if platform == 'whatsapp2' and not whatsapp_id:
+                user, created = TelegramUser.objects.update_or_create(
+                    phone_number=phone_number,
+                    defaults=defaults,
+                )
+            else:
+                # Official: identify by whatsapp_id
+                user, created = TelegramUser.objects.update_or_create(
+                    whatsapp_id=whatsapp_id,
+                    defaults=defaults,
+                )
+            
             RestaurantMembership.objects.get_or_create(
                 user=user,
                 restaurant=restaurant
@@ -205,13 +217,16 @@ class CreateAuthTokenAPIView(APIView):
         
         platform = (platform or "").lower()
 
-        if platform not in ['whatsapp']:
+        if platform not in ['whatsapp', 'whatsapp2']:
             return Response(
                 {"error": "Invalid platform. Must be 'whatsapp' or 'telegram'"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        active_user = get_object_or_404(TelegramUser, whatsapp_id=user_id)
+        if platform == 'whatsapp':
+            active_user = get_object_or_404(TelegramUser, whatsapp_id=user_id)
+        else:
+            active_user = get_object_or_404(TelegramUser, phone_number=user_id)
         
         # ✅ Verify restaurant exists
         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)

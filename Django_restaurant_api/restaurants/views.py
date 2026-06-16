@@ -34,7 +34,7 @@ def get_restaurant_internal(request, platform, rid=None):
     
     platform = platform.lower()
 
-    if platform == 'telegram':
+    if platform in ['telegram', 'whatsapp2']:
         restaurant = Restaurant.objects.filter(rid=rid).first()
     elif platform == 'whatsapp':
         restaurant = Restaurant.objects.filter(whatsapp_phone_number_id=phone_id).first()
@@ -79,7 +79,7 @@ def get_restaurant_internal(request, platform, rid=None):
         "open_time": open_time,
         "close_time": close_time,
         "time_zone": restaurant.timezone,
-        "is_closed": delivery_opening_hours.is_closed if delivery_opening_hours else None,
+        "is_closed": delivery_opening_hours.is_closed() if delivery_opening_hours else None,
 
         # WhatsApp Specifics
         "wa_token": restaurant.whatsapp_access_token, # Your EncryptedField
