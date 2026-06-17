@@ -675,7 +675,6 @@ def update_shop_settings(request, restaurant_id=None):
         'bot_username', 'bot_token', 'is_bot_active',
         'whatsapp_business_phone', 'whatsapp_business_account_id',
         'whatsapp_phone_number_id', 'whatsapp_access_token', 'is_whatsapp_active',
-        'kitchen_chat_id', 'delivery_chat_id',
     ]
     
     for field in updatable_fields:
@@ -697,14 +696,27 @@ def update_shop_settings(request, restaurant_id=None):
         import redis
         r = redis.Redis.from_url(settings.REDIS_URL)
         r.hset('whatsapp:restaurants', restaurant.rid, restaurant.whatsapp_business_phone)
-
-        setup_data = r.hget('whatsapp:setup', restaurant.rid)
-        if setup_data:
-            data = json.loads(setup_data)
-            pairing_code = data.get('pairingCode')
+        # Worker.js will pick this up within 5 seconds and generate pairing code
 
     return JsonResponse({'success': True})
 
+
+
+def get_whatsapp_pairing_code(request, restaurant_id=None):
+    restaurant = get_admin_restaurant(request, restaurant_id)
+    
+    import redis, json
+    r = redis.Redis.from_url(settings.REDIS_URL)
+    data = r.hget('whatsapp:setup', restaurant.rid)
+    
+    if data:
+        setup = json.loads(data)
+        return JsonResponse({
+            'code': setup.get('pairingCode'),
+            'qr': setup.get('qr'),
+        })
+    
+    return JsonResponse({'error': 'No pairing code available'}, status=404)
 
 
 

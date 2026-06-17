@@ -214,7 +214,7 @@ class Restaurant(models.Model):
     )
 
     def save(self, *args, **kwargs):
-
+        
         # ========== NEW: Auto-set delivery radius ==========
         if self.business_type == 'restaurant' and self.service_mode in ('delivery', 'both'):
             self.max_delivery_radius_km = 15
@@ -224,6 +224,19 @@ class Restaurant(models.Model):
 
         else:
             self.max_delivery_radius_km = None  # Unlimited for goods vendors
+
+        # Normalize WhatsApp phone number
+        if self.whatsapp_business_phone:
+            if self.whatsapp_business_phone.startswith("+234"):
+                self.whatsapp_business_phone = self.whatsapp_business_phone.strip()
+            else:
+                clean_phone = ''.join(filter(str.isdigit, self.whatsapp_business_phone))
+                if clean_phone.startswith('0') and len(clean_phone) == 11:
+                    clean_phone = '234' + clean_phone[1:]
+                elif not clean_phone.startswith('234') and len(clean_phone) == 10:
+                    clean_phone = '234' + clean_phone
+                if clean_phone:
+                    self.whatsapp_business_phone = clean_phone
 
         if self.business_type == "vendor":
             self.max_tables = 0
@@ -263,27 +276,26 @@ class Restaurant(models.Model):
         super().save(*args, **kwargs)
 
     def clean(self):
-
-        # Restaurant delivery radius
-        if self.business_type == 'restaurant' and self.service_mode != 'dine_in':
-            if self.max_delivery_radius_km > 15:
-                raise ValidationError("Restaurant delivery radius cannot exceed 15km.")
-        
-        # Cooked food vendor radius
-        if self.business_type == 'vendor' and self.vendor_type == 'cooked_food':
-            if self.max_delivery_radius_km > 15:
-                raise ValidationError("Cooked food vendors cannot exceed 15km delivery radius.")
         
         if self.kitchen_chat_id and not str(self.kitchen_chat_id).startswith("-"):
             raise ValidationError("Kitchen chat ID must be a group ID (negative number)")
-        
+   
+
         if self.is_whatsapp_active:
-            if not self.whatsapp_phone_number_id:
-                raise ValidationError("WhatsApp Phone Number ID required when WhatsApp is active")
-            if not self.whatsapp_access_token:
-                raise ValidationError("WhatsApp Access Token required when WhatsApp is active")
-            if not self.whatsapp_business_phone:
-                raise ValidationError("WhatsApp Business Phone required when WhatsApp is active")
+
+            # Hotels and dine-in restaurants use OFFICIAL WhatsApp
+            if self.business_type == 'hotel' or (self.business_type == 'restaurant' and self.service_mode in ('dine_in', 'both')):
+                if not self.whatsapp_phone_number_id:
+                    raise ValidationError("WhatsApp Phone Number ID required for official WhatsApp")
+                if not self.whatsapp_access_token:
+                    raise ValidationError("WhatsApp Access Token required for official WhatsApp")
+                if not self.whatsapp_business_phone:
+                    raise ValidationError("WhatsApp Business Phone required")
+            
+            # Vendors and delivery-only restaurants use UNOFFICIAL WhatsApp
+            else:
+                if not self.whatsapp_business_phone:
+                    raise ValidationError("WhatsApp Business Phone required to link your device")
 
     def get_bot_token(self):
         return self.bot_token
@@ -311,9 +323,7 @@ class Restaurant(models.Model):
         elif not clean_phone.startswith('234') and len(clean_phone) == 10:
             clean_phone = '234' + clean_phone
 
-        if not terminal:
-            return f"https://wa.me/{clean_phone}"
-        else:
+        if clean_phone:
             return clean_phone
 
     def restaurant_image(self):

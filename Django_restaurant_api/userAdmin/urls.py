@@ -3,7 +3,8 @@ from .views import (change_order_status, categories, add_category,
                     edit_category, delete_category, dashboard,
                     edit_product, products, add_product, delete_product,
                     delivery_hours, update_delivery_hours, dine_in_orders, delivery_orders,
-                    dine_in_order_details, delivery_order_details, pos_config, shop_settings, update_shop_settings
+                    dine_in_order_details, delivery_order_details, pos_config, shop_settings,
+                    update_shop_settings, get_whatsapp_pairing_code
                     
 )
 
@@ -35,6 +36,7 @@ urlpatterns = [
     path("pos-config/", pos_config, name="pos-config"),
     path("shop-settings/", shop_settings, name="shop-settings"),
     path("shop-settings/update/", update_shop_settings, name="update-shop-settings"),
+    path("whatsapp-pairing-code/", get_whatsapp_pairing_code, name="whatsapp-pairing-code"),
 
 
 
