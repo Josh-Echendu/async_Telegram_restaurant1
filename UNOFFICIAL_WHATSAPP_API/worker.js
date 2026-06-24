@@ -160,6 +160,8 @@ async function startBot(rid, phoneNumber) {
             if (!data) return;
             
             const msg = JSON.parse(data);
+            console.log(`📤 [${rid}] SENDING to ${msg.wa_id}: ${msg.text?.substring(0, 50)}`);
+
             const jid = `${msg.wa_id}@s.whatsapp.net`;
 
             if (msg.text) {

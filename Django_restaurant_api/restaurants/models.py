@@ -127,7 +127,7 @@ class Restaurant(models.Model):
     name = models.CharField(max_length=250)
     description = models.TextField(blank=True, null=True)
     image = models.ImageField(upload_to=resturant_image_path, blank=True, null=True)
-
+    
     first_name = models.CharField(max_length=100, null=True, blank=True)
     last_name = models.CharField(max_length=100, null=True, blank=True)
     

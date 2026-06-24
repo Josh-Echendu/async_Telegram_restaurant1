@@ -6,6 +6,7 @@ from WHATSAPP_BOT_API.manager.wa_manager import get_wa_client
 from UNOFFICIAL_WHATSAPP_API.manager.wa_manager import get_wa_client
 from UNOFFICIAL_WHATSAPP_API.services.restaurant_cache import get_restaurant
 import json
+from PYDOLL_TELEGRAM_WEB_AUTOMATION.web_automation.main import main
 
 
 
@@ -128,23 +129,11 @@ from UNOFFICIAL_WHATSAPP_API.services.restaurant_cache import get_restaurant
 from UNOFFICIAL_WHATSAPP_API.handlers.echo_handler import echo
 from UNOFFICIAL_WHATSAPP_API.handlers.button_handler import handle_order_buttons
 
-
 async def process_whatsapp_messages(ctx):
-    """
-    Main WhatsApp message processor.
-    Reads from Redis, routes to handlers, pushes replies back to Redis.
-    """
-
+    print("🔥 process_whatsapp_messages started — waiting for messages...")
+    
     while True:
-
-        # 3. ctx['redis'] (ARQ's built-in)
-        redis = ctx['redis']
-        
-        # Block until a message arrives from baileys
-        data = await redis.brpop('whatsapp:incoming')
-        # _, data = redis_client.brpop('whatsapp:incoming')
-
-
+        _, data = await redis_client.brpop('whatsapp:incoming')
         msg = json.loads(data)
 
         rid = msg['rid']
@@ -155,28 +144,83 @@ async def process_whatsapp_messages(ctx):
 
         print(f"📩 [{rid}] {wa_id} ({push_name}): {text[:100]}")
 
-        # Get restaurant from cache/DB
         restaurant = await get_restaurant(rid)
         if not restaurant:
             print(f"❌ Restaurant not found: {rid}")
             continue
 
-        # Route to the correct handler
         result = None
-
         if msg_type == 'buttons_response':
             callback_data = msg.get('callback_data', '')
             result = await handle_order_buttons(wa_id, callback_data, restaurant)
         else:
             result = await echo(wa_id, text, push_name, restaurant)
 
-        # Push reply to Redis for baileys to send
         if result:
-            redis_client.lpush(f'whatsapp:outbound:{rid}', json.dumps({
+            key = f'whatsapp:outbound:{rid}'
+            payload = json.dumps({
                 'wa_id': wa_id,
                 'text': result.get('text'),
-                'button_text': result.get('button_text'),
                 'buttons': result.get('buttons'),
-            }))
+            })
+            print(f"📤 Pushing to {key}: {payload[:100]}")
+            await redis_client.lpush(key, payload)
+            print(f"📤 Push complete")
 
-        print(f"📤 [{rid}] Reply queued for {wa_id}")
+
+
+from contextlib import asynccontextmanager
+BOTFATHER_LOCK_KEY = "lock:botfather"
+
+
+@asynccontextmanager # 👉 “This function is used like a controlled block (enter + exit safely)”
+async def botfather_lock(redis): # redis → your Redis client connection
+    
+    # This creates a redis lock object i.e “A digital padlock stored inside Redis”
+    lock = redis.lock(
+        BOTFATHER_LOCK_KEY, # the key that all workers share/use, “Everyone who wants BotFather must request THIS SAME KEY”
+        timeout=300, # auto-release if worker using the lock dies
+        blocking_timeout=120  # wait max 2 min if busy
+    )
+
+    # 👉 “Did I successfully get the lock?” True → you got the lock (you can proceed), False → someone else i.e another worker already has it (you are blocked or rejected)
+    acquired  = await lock.acquire()
+
+    # is acquired is false
+    if not acquired:
+        raise Exception("Bot is busy")
+    
+    try:
+        yield
+    finally:
+        await lock.release()
+
+
+async def create_telegram_bot(ctx, rid):
+
+    while True:
+        _, data = await redis_client.brpop('telegram:incoming')
+        task = json.loads(data)
+        print('task_msg: ', task)
+
+        async with botfather_lock(ctx["redis"]):
+            await process_telegram_task(ctx, task)
+
+
+
+async def process_telegram_task(ctx, task):
+
+    action = task["action"]
+
+    if action == "create_bot":
+        await create_bot(ctx, task)
+
+    elif action == "set_about":
+        await set_about(ctx, task)
+
+    elif action == "set_picture":
+        await set_picture(ctx, task)
+
+    elif action == "set_name":
+        await set_name(ctx, task)
+        

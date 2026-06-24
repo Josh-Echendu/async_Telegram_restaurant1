@@ -27,7 +27,7 @@ def get_restaurant_internal(request, platform, rid=None):
     if api_key != settings.INTERNAL_API_KEY:
         return Response({"error": "unauthorized"}, status=403)
     
-    phone_id = request.headers.get("X-PHONE-ID")        
+    phone_id = request.headers.get("X-PHONE-ID")     
     
     if not platform:
         return Response({"error": "Wrong data"}, status=404)
@@ -61,8 +61,7 @@ def get_restaurant_internal(request, platform, rid=None):
     open_time = delivery_opening_hours.open_time if delivery_opening_hours else None
     close_time = delivery_opening_hours.close_time if delivery_opening_hours else None
 
-
-    return Response({
+    data = {
 
         # Telegram specific fields
         "rid": restaurant.rid,
@@ -79,14 +78,16 @@ def get_restaurant_internal(request, platform, rid=None):
         "open_time": open_time,
         "close_time": close_time,
         "time_zone": restaurant.timezone,
-        "is_closed": delivery_opening_hours.is_closed() if delivery_opening_hours else None,
+        "is_closed": delivery_opening_hours.is_closed if delivery_opening_hours else None,
 
         # WhatsApp Specifics
         "wa_token": restaurant.whatsapp_access_token, # Your EncryptedField
         "wa_phone_id": restaurant.whatsapp_phone_number_id,
         "wa_waba_id": restaurant.whatsapp_business_account_id,
         "is_wa_active": restaurant.is_whatsapp_active,
-    })
+    }
+    print('full data: ', data)
+    return Response(data)
 
 
 # 📅 Mapping (VERY IMPORTANT)

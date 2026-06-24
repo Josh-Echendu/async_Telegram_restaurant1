@@ -10,6 +10,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.core.paginator import Paginator
 import math
+import redis
 from django.conf import settings
 from orders.models import KITCHEN_STATUS_CHOICES, OrderBatch, Product, OrderBatchItem, Category, CheckoutSession
 from userAuths.models import TelegramUser, AdminUser
@@ -693,10 +694,12 @@ def update_shop_settings(request, restaurant_id=None):
 
     # After save, register in Redis for baileys
     if restaurant.whatsapp_business_phone:
-        import redis
         r = redis.Redis.from_url(settings.REDIS_URL)
         r.hset('whatsapp:restaurants', restaurant.rid, restaurant.whatsapp_business_phone)
         # Worker.js will pick this up within 5 seconds and generate pairing code
+
+    
+    
 
     return JsonResponse({'success': True})
 

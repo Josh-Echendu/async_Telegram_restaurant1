@@ -1,15 +1,67 @@
-from tasks import handle_whatsapp_update, handle_telegram_update, process_whatsapp_messages
+from tasks import create_telegram_bot, handle_whatsapp_update, handle_telegram_update, process_whatsapp_messages
 from COMMON.redis import redis_settings
 import asyncio
+import logging
+
+from pydoll.browser import Chrome
+from pydoll.browser.options import ChromiumOptions
+import os
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 async def startup(ctx):
+    print("🚀 STARTUP CALLED")
+    logger.info("🚀 STARTUP CALLED — launching WhatsApp processor")
+    print("🚀 STARTUP CALLED — launching WhatsApp processor")  # This should print to stdout
     
-    # Start the WhatsApp message processor
-    asyncio.create_task(process_whatsapp_messages(ctx))
+    try:
+        # Test Redis connection
+        await ctx['redis'].ping()
+        print("✅ Redis connected")
+        asyncio.create_task(process_whatsapp_messages(ctx))
+    except Exception as e:
+        print(f"❌ Redis error: {e}")
+
+    # Browser
+    try:
+        browser = await start_browser()
+        tab = await browser.start()
+
+        ctx["browser"] = browser
+        ctx["telegram_tab"] = tab
+
+        await ctx['telegram_tab'].go_to("https://web.telegram.org/a/", timeout=120)
+
+        print("✅ Telegram loaded")
+
+    except Exception as e:
+        print(f"❌ Browser session error: {e}")
+
+browser = None
+tab = None
+
+async def start_browser():
+    options = ChromiumOptions()
+
+    session_folder = os.path.abspath(
+        r"C:\Users\Admin\Music\async_Telegram_restaurant\PYDOLL_TELEGRAM_WEB_AUTOMATION\web_automation\telegram_persistent_profile"
+    )
+    os.makedirs(session_folder, exist_ok=True)
+
+    options.binary_location = r"C:\Users\Admin\AppData\Local\Google\Chrome\Application\chrome.exe"
+    options.add_argument(f"--user-data-dir={session_folder}")
+
+    return Chrome(options=options)
+
 
 class WorkerSettings:
-    functions = [handle_whatsapp_update, handle_telegram_update, process_whatsapp_messages]
+    functions = [handle_whatsapp_update, handle_telegram_update, create_telegram_bot]
+
+    # ✅ This is the missing piece - register the startup function
+    on_startup = startup  # <-- ADD THIS
+
 
     # ARQ will: parse the URL, extract host, port, db, password
     # configure connection automatically
@@ -25,3 +77,8 @@ class WorkerSettings:
     keep_result = 10         # 1 hour
     max_tries = 5              # retries
     queue_name = "restaurant_jobs"  # queue name
+
+    # ✅ Add this to debug
+    def __init__(self):
+        print("🔧 WorkerSettings initialized")
+        print(f"   on_startup = {self.on_startup}")
