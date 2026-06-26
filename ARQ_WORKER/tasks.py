@@ -2,11 +2,11 @@ import logging
 from telegram import Update
 from TELEGRAM_BOT_API.manager.bot_manager import get_bot
 from TELEGRAM_BOT_API.core.config import get_user_session, save_user_session
+from TELEGRAM_BOT_API.PYOGRAM.main import setup_restaurant_telegram
 from WHATSAPP_BOT_API.manager.wa_manager import get_wa_client
 from UNOFFICIAL_WHATSAPP_API.manager.wa_manager import get_wa_client
 from UNOFFICIAL_WHATSAPP_API.services.restaurant_cache import get_restaurant
 import json
-from PYDOLL_TELEGRAM_WEB_AUTOMATION.web_automation.main import main
 
 
 
@@ -57,6 +57,61 @@ async def handle_telegram_update(ctx, update_data: dict, restaurant: dict):
     # ⚡ 4. Process the Handlers (start, echo, payment, etc.)
     await bot_app.process_update(update)
 
+
+
+# ARQ_WORKER/tasks.py - Add this function
+async def process_telegram_setup(ctx):
+    """
+    ARQ task that continuously processes telegram setup requests
+    """    
+    while True:
+        # Block until a message arrives
+        _, data = await redis_client.brpop('telegram:setup')
+        task = json.loads(data)
+        
+        restaurant_id = task['restaurant_id']
+        restaurant_name = task['restaurant_name']
+        bot_username = task['bot_username']
+        owner_telegram_id = task['owner_telegram_id']
+        owner_name = task.get('owner_name', 'Restaurant Owner')
+        
+        logger.info(f"📦 Processing Telegram setup for {restaurant_name}")
+        
+        for i in range(3):
+            try:
+                # Call your Kurigram setup function
+                result = await setup_restaurant_telegram(
+                    restaurant_name=restaurant_name,
+                    bot_username=bot_username,
+                    owner_telegram_id=owner_telegram_id,
+                    owner_name=owner_name
+                )
+                
+                # ✅ Success: Push success to Redis for Django to pick up
+                await redis_client.lpush(
+                    "telegram:setup:results",
+                    json.dumps({
+                        "restaurant_id": restaurant_id,
+                        "group_id": result['group_id'],
+                        "status": "success"
+                    })
+                )
+                
+                logger.info(f"✅ Setup complete for {restaurant_name}: group_id={result['group_id']}")
+                
+            except Exception as e:
+                logger.error(f"❌ Setup failed for {restaurant_name}: {e}")
+                
+                if i == 2:
+                    # ❌ Failed - Update Django with error
+                    await redis_client.lpush(
+                        "telegram:setup:results",
+                        json.dumps({
+                            "restaurant_id": restaurant_id,
+                            "status": "failed",
+                            "error": str(e)
+                        })
+                    )
 
 
 async def handle_whatsapp_update(
@@ -118,6 +173,8 @@ async def handle_whatsapp_update(
         print("✅ WhatsApp handlers executed successfully")
     except Exception:
         logger.exception("❌ Error in Pywa handler")
+
+
 
 
 
@@ -196,31 +253,14 @@ async def botfather_lock(redis): # redis → your Redis client connection
         await lock.release()
 
 
-async def create_telegram_bot(ctx, rid):
+# async def create_telegram_bot(ctx, rid):
 
-    while True:
-        _, data = await redis_client.brpop('telegram:incoming')
-        task = json.loads(data)
-        print('task_msg: ', task)
+#     while True:
+#         _, data = await redis_client.brpop('telegram:incoming')
+#         task = json.loads(data)
+#         print('task_msg: ', task)
 
-        async with botfather_lock(ctx["redis"]):
-            await process_telegram_task(ctx, task)
+#         async with botfather_lock(ctx["redis"]):
+#             await process_telegram_task(ctx, task)
 
 
-
-async def process_telegram_task(ctx, task):
-
-    action = task["action"]
-
-    if action == "create_bot":
-        await create_bot(ctx, task)
-
-    elif action == "set_about":
-        await set_about(ctx, task)
-
-    elif action == "set_picture":
-        await set_picture(ctx, task)
-
-    elif action == "set_name":
-        await set_name(ctx, task)
-        

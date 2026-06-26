@@ -1,0 +1,65 @@
+My recommendation:
+
+```text
+Django
+   |
+Redis Queue
+   |
+ARQ Worker
+   |
+Pydoll Automation
+   |
+Single Chrome Profile
+   |
+Single Telegram Session
+   |
+BotFather
+```
+
+1. **Do not use FastAPI for Pydoll automation.**
+
+   * Browser tasks are long-running.
+   * No need for HTTP requests between Django and Pydoll.
+
+2. **Use ARQ jobs instead.**
+
+   * When a restaurant creates or updates a bot, Django pushes a job to Redis.
+   * ARQ picks up the job and executes the automation.
+
+3. **Run one dedicated Pydoll worker.**
+
+   * Separate from your Telegram and WhatsApp logic.
+   * Responsible only for BotFather/browser automation.
+
+4. **Use one persistent Chrome profile.**
+
+   * Stay logged into Telegram Web.
+   * Avoid logging in again for every job.
+
+5. **Keep one browser instance alive.**
+
+   * Don't launch Chrome for every task.
+   * Reuse the same browser session.
+
+6. **Process BotFather jobs one at a time.**
+
+   * Creating bots.
+   * Updating descriptions.
+   * Updating photos.
+   * Updating usernames.
+   * Updating about text.
+
+7. **Use a Redis lock (`botfather_lock`).**
+
+   * Prevent multiple jobs from talking to BotFather simultaneously.
+   * Ensures reliable automation.
+
+8. **Allow restaurant owners to update bot information from your dashboard.**
+
+   * Description.
+   * About text.
+   * Profile photo.
+   * Other branding details.
+   * Trigger background ARQ jobs when they make changes.
+
+In short: **Django → Redis → ARQ → Single Pydoll Worker → Single Telegram Session → BotFather**. This is the architecture I would choose.

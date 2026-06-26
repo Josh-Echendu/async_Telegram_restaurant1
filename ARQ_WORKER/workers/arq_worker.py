@@ -1,10 +1,8 @@
-from tasks import create_telegram_bot, handle_whatsapp_update, handle_telegram_update, process_whatsapp_messages
+from tasks import handle_whatsapp_update, handle_telegram_update, process_whatsapp_messages, process_telegram_setup  
 from COMMON.redis import redis_settings
 import asyncio
 import logging
 
-from pydoll.browser import Chrome
-from pydoll.browser.options import ChromiumOptions
 import os
 
 logging.basicConfig(level=logging.INFO)
@@ -21,43 +19,46 @@ async def startup(ctx):
         await ctx['redis'].ping()
         print("✅ Redis connected")
         asyncio.create_task(process_whatsapp_messages(ctx))
+
+        asyncio.create_task(process_telegram_setup(ctx))
+        print("✅ Telegram Setup connected")
+        print('✅ love')
+
     except Exception as e:
         print(f"❌ Redis error: {e}")
 
-    # Browser
-    try:
-        browser = await start_browser()
-        tab = await browser.start()
+    # # Browser
+    # try:
+    #     browser = await start_browser()
+    #     tab = await browser.start()
 
-        ctx["browser"] = browser
-        ctx["telegram_tab"] = tab
+    #     ctx["browser"] = browser
+    #     ctx["telegram_tab"] = tab
 
-        await ctx['telegram_tab'].go_to("https://web.telegram.org/a/", timeout=120)
+    #     await ctx['telegram_tab'].go_to("https://web.telegram.org/a/", timeout=120)
 
-        print("✅ Telegram loaded")
+    #     print("✅ Telegram loaded")
 
-    except Exception as e:
-        print(f"❌ Browser session error: {e}")
+    # except Exception as e:
+    #     print(f"❌ Browser session error: {e}")
 
-browser = None
-tab = None
 
-async def start_browser():
-    options = ChromiumOptions()
+# async def start_browser():
+#     options = ChromiumOptions()
 
-    session_folder = os.path.abspath(
-        r"C:\Users\Admin\Music\async_Telegram_restaurant\PYDOLL_TELEGRAM_WEB_AUTOMATION\web_automation\telegram_persistent_profile"
-    )
-    os.makedirs(session_folder, exist_ok=True)
+#     session_folder = os.path.abspath(
+#         r"C:\Users\Admin\Music\async_Telegram_restaurant\PYDOLL_TELEGRAM_WEB_AUTOMATION\web_automation\telegram_persistent_profile"
+#     )
+#     os.makedirs(session_folder, exist_ok=True)
 
-    options.binary_location = r"C:\Users\Admin\AppData\Local\Google\Chrome\Application\chrome.exe"
-    options.add_argument(f"--user-data-dir={session_folder}")
+#     options.binary_location = r"C:\Users\Admin\AppData\Local\Google\Chrome\Application\chrome.exe"
+#     options.add_argument(f"--user-data-dir={session_folder}")
 
-    return Chrome(options=options)
+#     return Chrome(options=options)
 
 
 class WorkerSettings:
-    functions = [handle_whatsapp_update, handle_telegram_update, create_telegram_bot]
+    functions = [handle_whatsapp_update, handle_telegram_update]
 
     # ✅ This is the missing piece - register the startup function
     on_startup = startup  # <-- ADD THIS

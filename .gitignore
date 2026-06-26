@@ -2,3 +2,5 @@
 __pycache__/
 venv/
 .env.*
+.venv.PYDOLL_TELEGRAM_WEB_AUTOMATION/
+web_automation/telegram_persistent_profile

@@ -215,7 +215,7 @@ async def main():
             print("Selected Nigeria")
 
             # 4. Enter phone number
-            await safe_type(tab, "//input[@id='sign-in-phone-number']", "9131634156", timeout=120)
+            await safe_type(tab, "//input[@id='sign-in-phone-number']", "XXXXXXXXXXX", timeout=120)
             print("Entered phone number")
 
             # 5. Click Next

@@ -1,4 +1,4 @@
-from config import app, ADMIN_USER_ID, RATE_LIMIT_DELAY, logger
+from .config_file import app, RATE_LIMIT_DELAY, logger
 from pyrogram.enums import ChatType, ChatMemberStatus
 from pyrogram.errors import FloodWait, RPCError
 import asyncio

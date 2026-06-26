@@ -20,7 +20,7 @@ wa = WhatsApp(
     phone_id=os.getenv("WHATSAPP_PHONE_ID"),
     token=os.getenv("WHATSAPP_TOKEN"),
     server=app,  # Attaches webhook to FastAPI
-    verify_token=os.getenv("VERIFY_TOKEN"),
+    verify_token=os.getenv("META_VERIFY_TOKEN"),
     callback_url="https://your-ngrok-url.ngrok.io",  # Will be replaced
 )
 

@@ -1,7 +1,5 @@
 
 
-
-
 from pathlib import Path
 import os
 from dotenv import load_dotenv
@@ -15,7 +13,6 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 DEBUG = os.getenv("DEBUG") == "True"
 
 FIELD_ENCRYPTION_KEY = os.getenv("FIELD_ENCRYPTION_KEY")
-TELEGRAM_BOT_TOKEN = os.getenv("BOT_TOKEN")
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
 
 NGROK_DJANGO =  os.getenv("NGROK_DJANGO") # your DRF server
@@ -25,6 +22,13 @@ WHATSAPP_INTERNAL_API_KEY = os.getenv("WHATSAPP_INTERNAL_API_KEY")  # For verify
 
 TERMINAL_PUBLIC_KEY = os.getenv("TERMINAL_PUBLIC_KEY")
 TERMINAL_SECRET_KEY = os.getenv("TERMINAL_SECRET_KEY")
+
+
+META_APP_ID = os.getenv('META_APP_ID') 
+META_CONFIG_ID = os.getenv('META_CONFIG_ID')
+META_APP_SECRET = os.getenv('META_APP_SECRET')
+META_REDIRECT_URI = os.getenv('META_REDIRECT_URI')
+
 
 LOCATIONIQ_KEY = os.getenv("LOCATIONIQ_KEY")
 MAIADDY_API_KEY = os.getenv("MAIADDY_API_KEY")

@@ -3,6 +3,63 @@
 
 {% block content %}
 
+<!-- Facebook SDK for WhatsApp Embedded Signup -->
+<div id="fb-root"></div>
+<script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+
+<script>
+  window.fbAsyncInit = function() {
+    FB.init({
+      appId: '{{ app_id }}',
+      cookie: true,
+      xfbml: true,
+      version: 'v20.0'
+    });
+  };
+
+  function launchWhatsAppOnboarding() {
+    FB.login(function(response) {
+      if (response.authResponse) {
+        const code = response.authResponse.code;
+        sendCodeToBackend(code);
+      } else {
+        console.error('User cancelled or did not authorize.');
+      }
+    }, {
+      config_id: '{{ app_config }}',
+      response_type: 'code',
+      override_default_response_type: true
+    });
+  }
+
+  function sendCodeToBackend(code) {
+    const csrf = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+    
+    fetch('/api/v1/auth/meta-callback/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrf,
+      },
+      body: JSON.stringify({ 
+        code: code,
+        restaurant_slug: '{{ restaurant.rid }}'
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        alert('WhatsApp connected successfully!');
+        window.location.reload();
+      } else {
+        alert('Failed to connect: ' + (data.error || 'Unknown error'));
+      }
+    })
+    .catch(err => console.error('Error:', err));
+  }
+</script>
+
+
 <div class="px-4 sm:px-6 lg:px-8 py-6 space-y-6" x-data="shopSettings">
     
     <!-- ==================== PAGE HEADER ==================== -->
@@ -454,6 +511,20 @@
                                 placeholder="••••••••••••••••"
                             >
                         </div>
+                        <!-- In the Bot Settings section, after Bot Token -->
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Owner Telegram Username</label>
+                            <input 
+                                type="text" 
+                                name="owner_telegram_username" 
+                                x-model="form.owner_telegram_username"
+                                value="{{ restaurant.owner_telegram_username|default:'' }}"
+                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
+                                placeholder="@restaurant_owner"
+                            >
+                            <p class="text-[10px] text-gray-400 mt-1">The Telegram username of the restaurant owner (will be added as admin)</p>
+                        </div>
+
                         <div class="flex items-center gap-3">
                             <label class="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" name="is_bot_active" x-model="form.is_bot_active"
@@ -468,7 +539,43 @@
                     </div>
                 </div>
 
-                <!-- Unofficial WhatsApp Sub-Section -->
+                <!-- Official WhatsApp (for Hotels & Dine-in Restaurants) -->
+                {% if restaurant.business_type == 'hotel' or restaurant.business_type == 'restaurant' and restaurant.service_mode != 'delivery' %}
+                <div class="border border-gray-100 rounded-xl p-4 sm:p-5">
+                    <div class="flex items-center gap-2 mb-4">
+                        <i class="fab fa-whatsapp text-green-500 text-lg"></i>
+                        <h4 class="text-sm font-bold text-gray-900">WhatsApp Business (Official)</h4>
+                    </div>
+                    
+                    {% if not restaurant.whatsapp_phone_number_id %}
+                    <!-- Not connected — show onboarding button -->
+                    <div class="text-center py-6">
+                        <div class="w-14 h-14 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fab fa-whatsapp text-2xl text-green-500"></i>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-4">Connect your WhatsApp Business account to start receiving orders</p>
+                        
+                        <button onclick="launchWhatsAppOnboarding()" 
+                            class="inline-flex items-center gap-2 px-6 py-3 bg-green-500 text-white font-medium rounded-xl hover:bg-green-600 transition-colors shadow-lg shadow-green-200">
+                            <i class="fab fa-whatsapp"></i>
+                            Connect WhatsApp
+                        </button>
+                        <p class="text-[10px] text-gray-400 mt-2">You'll be redirected to Meta to authorize</p>
+                    </div>
+                    {% else %}
+                    <!-- Connected — show status -->
+                    <div class="bg-green-50 rounded-xl p-4 flex items-center gap-3">
+                        <i class="fas fa-check-circle text-green-500 text-lg"></i>
+                        <div>
+                            <p class="text-sm font-semibold text-green-800">WhatsApp Connected</p>
+                            <p class="text-xs text-green-600">Your customers can now message you on WhatsApp</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% else %}
+                <!-- Unofficial WhatsApp (for Vendors & Delivery-only Restaurants) -->
                 <div class="border border-gray-100 rounded-xl p-4 sm:p-5">
                     <div class="flex items-center gap-2 mb-4">
                         <i class="fab fa-whatsapp text-green-500 text-lg"></i>
@@ -508,41 +615,7 @@
                         {% endif %}
                     </div>
                 </div>
-
-                <!-- Chat Groups -->
-                <!-- <div class="border border-gray-100 rounded-xl p-4 sm:p-5">
-                    <div class="flex items-center gap-2 mb-4">
-                        <i class="fas fa-comments text-indigo-500 text-lg"></i>
-                        <h4 class="text-sm font-bold text-gray-900">Chat Groups</h4>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Kitchen Chat ID</label>
-                            <input 
-                                type="text" 
-                                name="kitchen_chat_id" 
-                                x-model="form.kitchen_chat_id"
-                                value="{{ restaurant.kitchen_chat_id|default:'' }}"
-                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
-                                placeholder="-1001234567890"
-                            >
-                            <p class="text-[10px] text-gray-400 mt-1">Negative number for Telegram group ID</p>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Delivery Chat ID</label>
-                            <input 
-                                type="text" 
-                                name="delivery_chat_id" 
-                                x-model="form.delivery_chat_id"
-                                value="{{ restaurant.delivery_chat_id|default:'' }}"
-                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
-                                placeholder="-1001234567890"
-                            >
-                            <p class="text-[10px] text-gray-400 mt-1">Negative number for Telegram group ID</p>
-                        </div>
-                    </div>
-                </div> -->
-
+                {% endif %}
                 <div class="mt-5">
                     <button type="button" @click="saveSection('bot')" 
                         :disabled="saving === 'bot'"
@@ -689,6 +762,7 @@
                 bot_username: '{{ restaurant.bot_username|default:"" }}',
                 bot_token: '{{ restaurant.bot_token|default:"" }}',
                 is_bot_active: '{{ restaurant.is_bot_active|yesno:"true,false" }}',
+                owner_telegram_username: '{{ restaurant.owner_telegram_username|default:"" }}',
                 whatsapp_business_phone: '{{ restaurant.whatsapp_business_phone|default:"" }}',
                 whatsapp_business_account_id: '{{ restaurant.whatsapp_business_account_id|default:"" }}',
                 whatsapp_phone_number_id: '{{ restaurant.whatsapp_phone_number_id|default:"" }}',
@@ -786,6 +860,8 @@
                         formData.append('bot_username', this.form.bot_username);
                         formData.append('bot_token', this.form.bot_token);
                         formData.append('is_bot_active', this.form.is_bot_active);
+                        formData.append('owner_telegram_username', this.owner_telegram_username);
+
                         formData.append('whatsapp_business_phone', this.form.whatsapp_business_phone);
                         formData.append('whatsapp_business_account_id', this.form.whatsapp_business_account_id);
                         formData.append('whatsapp_phone_number_id', this.form.whatsapp_phone_number_id);

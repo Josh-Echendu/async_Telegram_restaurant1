@@ -4,7 +4,7 @@ from .views import (change_order_status, categories, add_category,
                     edit_product, products, add_product, delete_product,
                     delivery_hours, update_delivery_hours, dine_in_orders, delivery_orders,
                     dine_in_order_details, delivery_order_details, pos_config, shop_settings,
-                    update_shop_settings, get_whatsapp_pairing_code
+                    update_shop_settings, get_whatsapp_pairing_code, metaoauthhandshake_api_view
                     
 )
 
@@ -32,6 +32,9 @@ urlpatterns = [
 
     path("orders/dine-in/<str:session_id>/", dine_in_order_details, name="dine-in-order-details"),
     path("orders/delivery/<str:session_id>/", delivery_order_details, name="delivery-order-details"),
+
+    # meta callback
+    path('api/v1/auth/meta-callback/', metaoauthhandshake_api_view, name='meta-callback'),
 
     path("pos-config/", pos_config, name="pos-config"),
     path("shop-settings/", shop_settings, name="shop-settings"),

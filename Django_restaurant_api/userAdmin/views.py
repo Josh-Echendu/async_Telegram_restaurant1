@@ -10,6 +10,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.core.paginator import Paginator
 import math
+from django.db import transaction, IntegrityError
+from django.core.cache import cache
 import redis
 from django.conf import settings
 from orders.models import KITCHEN_STATUS_CHOICES, OrderBatch, Product, OrderBatchItem, Category, CheckoutSession
@@ -25,7 +27,12 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.http import JsonResponse
 from django.db.models import Count, Q
 import json
+import logging
+import httpx
 
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_admin_restaurant(request, restaurant_id=None):
@@ -494,7 +501,6 @@ def delivery_orders(request, restaurant_id=None):
     unpaid_batches = stats['unpaid_batches']
     total_revenue = stats['total_revenue'] or 0
 
-    
     total_vat_price=sessions.aggregate(vat=Sum('vat_amount'))['vat'] or 0
     paginator = Paginator(sessions, 20)
     page = request.GET.get('page')
@@ -519,8 +525,6 @@ def delivery_orders(request, restaurant_id=None):
     }
 
     return render(request, 'useradmin/delivery_orders.html', context)
-
-
 
 @admin_required
 def dine_in_order_details(request, session_id, restaurant_id=None):
@@ -628,7 +632,17 @@ def pos_config(request, restaurant_id=None):
 @admin_required
 def shop_settings(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
-    return render(request, 'useradmin/settings.html', {'restaurant': restaurant})
+
+    app_id = settings.META_APP_ID
+    app_config = settings.META_CONFIG_ID
+
+    context = {
+        "restaurant": restaurant,
+        "app_id": app_id,
+        "app_config": app_config,
+    }
+
+    return render(request, 'useradmin/settings.html', context)
 
 
 
@@ -673,7 +687,7 @@ def update_shop_settings(request, restaurant_id=None):
         'service_mode', 'delivery_fee',
         'max_tables', 'timezone', 'is_accepting_orders',
         'bank_account_name', 'bank_account_number',
-        'bot_username', 'bot_token', 'is_bot_active',
+        'bot_username', 'bot_token', 'is_bot_active', "owner_telegram_username",  # ← ADD COMMA HERE
         'whatsapp_business_phone', 'whatsapp_business_account_id',
         'whatsapp_phone_number_id', 'whatsapp_access_token', 'is_whatsapp_active',
     ]
@@ -696,10 +710,21 @@ def update_shop_settings(request, restaurant_id=None):
     if restaurant.whatsapp_business_phone:
         r = redis.Redis.from_url(settings.REDIS_URL)
         r.hset('whatsapp:restaurants', restaurant.rid, restaurant.whatsapp_business_phone)
-        # Worker.js will pick this up within 5 seconds and generate pairing code
 
-    
-    
+    if restaurant.bot_username and restaurant.bot_token and restaurant.owner_telegram_username:
+        # Push task to Redis for ARQ
+        task_data = {
+            "restaurant_id": restaurant.rid,
+            "restaurant_name": restaurant.name,
+            "bot_username": restaurant.bot_username,
+            "owner_telegram_id": restaurant.owner_telegram_username,  # This is @username
+            "owner_name": restaurant.first_name
+        }
+
+        r = redis.Redis.from_url(settings.REDIS_URL)
+        r.lpush("telegram:setup", json.dumps(task_data))  # ← FIXED queue name
+
+        logger.info(f"📦 Telegram setup queued for {restaurant.name}")
 
     return JsonResponse({'success': True})
 
@@ -722,6 +747,88 @@ def get_whatsapp_pairing_code(request, restaurant_id=None):
     return JsonResponse({'error': 'No pairing code available'}, status=404)
 
 
+class MetaOauthHandshakeView(APIView):
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        code = data.get('code')
+        restaurant_rid = data.get('restaurant_slug')
+
+        if not code or not restaurant_rid:
+            return JsonResponse({'error': 'Missing code or restaurant ID'}, status=400)
+
+        # Rate limit
+        cache_key = f'meta_onboarding:{restaurant_rid}'
+        if cache.get(cache_key):
+            return JsonResponse({'error': 'Please wait before trying again.'}, status=429)
+        cache.set(cache_key, True, 60)
+
+        # Get restaurant
+        try:
+            restaurant = Restaurant.objects.get(rid=restaurant_rid)
+        except Restaurant.DoesNotExist:
+            return JsonResponse({'error': 'Restaurant not found'}, status=404)
+
+        # Block re-connection
+        if restaurant.is_whatsapp_active and restaurant.whatsapp_phone_number_id:
+            return JsonResponse({
+                'error': 'WhatsApp is already connected.',
+            }, status=400)
+
+        # ------------------------------------------------------------------
+        # Step 1 ONLY: Exchange code for access token (fast, 1 API call)
+        # ------------------------------------------------------------------
+        token_url = 'https://graph.facebook.com/v20.0/oauth/access_token'
+        token_params = {
+            'client_id': settings.META_APP_ID,
+            'client_secret': settings.META_APP_SECRET,
+            'code': code,
+            # 'redirect_uri': settings.META_REDIRECT_URI,
+        }
+
+        for i in range(3):
+            try:
+                token_response = httpx.get(token_url, params=token_params, timeout=10)
+                token_data = token_response.json()
+
+                if 'access_token' not in token_data:
+                    return JsonResponse({
+                        'error': 'Failed to get access token. Please try again.',
+                        'details': token_data,
+                    }, status=400)
+
+                access_token = token_data['access_token']
+
+            except Exception as e:
+                logger.debug(f"failed to get access token for restaurant={restaurant.name} with an id={restaurant_rid}" , e)
+
+                if i == 2:
+                    return JsonResponse({
+                        'error': 'Connection to Meta failed. Please try again.',
+                    }, status=500)
+
+        # ------------------------------------------------------------------
+        # Save token immediately — Steps 2-4 run in background
+        # ------------------------------------------------------------------
+        restaurant.whatsapp_access_token = access_token
+        restaurant.whatsapp_setup_status = 'pending'  # New field (see below)
+        restaurant.save(update_fields=['whatsapp_access_token', 'whatsapp_setup_status'])
+
+        # Queue the remaining steps as a background task
+        from .tasks import complete_whatsapp_onboarding
+        complete_whatsapp_onboarding.delay(restaurant_rid)
+
+        return JsonResponse({
+            'success': True,
+            'message': 'WhatsApp is being set up. This may take a minute.',
+        })
+
+metaoauthhandshake_api_view = MetaOauthHandshakeView.as_view()
 
 
 @admin_required

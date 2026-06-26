@@ -153,6 +153,7 @@ class Restaurant(models.Model):
 
     # ========== TELEGRAM BOT FIELDS ==========
     bot_username = models.CharField(max_length=100, blank=True, null=True)
+    owner_telegram_username = models.CharField(max_length=100, blank=True, null=True)
     bot_token = EncryptedCharField(max_length=255, null=True)
     is_bot_active = models.BooleanField(default=True, db_index=True)
     webhook_secret_token = models.CharField(max_length=255, default=uuid.uuid4, null=True, blank=True,
@@ -160,6 +161,15 @@ class Restaurant(models.Model):
     )    
     
     # ========== WHATSAPP BUSINESS FIELDS ==========
+    whatsapp_verified_name = models.CharField(max_length=255, null=True, blank=True, 
+        help_text="WhatsApp Bussiness Verified Name"
+    )
+
+    # restaurants/models.py
+    whatsapp_setup_status = models.CharField(max_length=20,
+        choices=(('pending', 'Pending'), ('in_progress', 'In Progress'), ('completed', 'Completed'), ('failed', 'Failed'),), default='pending',
+        help_text='Status of WhatsApp onboarding after initial token exchange'
+    )
     whatsapp_business_account_id = models.CharField(max_length=255, null=True, blank=True,
         help_text="WhatsApp Business Account ID (WABA ID)"
     )
@@ -190,15 +200,12 @@ class Restaurant(models.Model):
     delivery_chat_id = models.BigIntegerField(null=True, blank=True, 
         help_text="Telegram delivery group chat ID OR WhatsApp delivery group ID"
     )
-
     service_mode = models.CharField(max_length=20, choices=SERVICE_MODE_CHOICES, db_index=True,
         help_text="Primary service mode of the business", 
     )
-
     max_tables = models.PositiveSmallIntegerField(default=0, 
         help_text="Amount of tables a restaurant has for dine-in orders"
     )
-    
     average_preparation_time = models.PositiveIntegerField(default=30, 
         help_text="Minutes - How long food usually takes before it is ready"
     )
@@ -280,19 +287,14 @@ class Restaurant(models.Model):
         if self.kitchen_chat_id and not str(self.kitchen_chat_id).startswith("-"):
             raise ValidationError("Kitchen chat ID must be a group ID (negative number)")
    
-
         if self.is_whatsapp_active:
-
-            # Hotels and dine-in restaurants use OFFICIAL WhatsApp
+            # Official WhatsApp (Meta OAuth) — all three fields come from the handshake
             if self.business_type == 'hotel' or (self.business_type == 'restaurant' and self.service_mode in ('dine_in', 'both')):
-                if not self.whatsapp_phone_number_id:
-                    raise ValidationError("WhatsApp Phone Number ID required for official WhatsApp")
-                if not self.whatsapp_access_token:
-                    raise ValidationError("WhatsApp Access Token required for official WhatsApp")
-                if not self.whatsapp_business_phone:
-                    raise ValidationError("WhatsApp Business Phone required")
-            
-            # Vendors and delivery-only restaurants use UNOFFICIAL WhatsApp
+                # These are auto-filled by Meta OAuth — just confirm they exist
+                if not self.whatsapp_phone_number_id or not self.whatsapp_access_token:
+                    raise ValidationError("WhatsApp connection incomplete. Please reconnect via Meta.")
+
+            # Unofficial WhatsApp (Baileys) — only phone number needed
             else:
                 if not self.whatsapp_business_phone:
                     raise ValidationError("WhatsApp Business Phone required to link your device")

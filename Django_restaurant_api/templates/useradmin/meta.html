@@ -1,0 +1,53 @@
+<div id="fb-root"></div>
+<script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+
+<button onclick="launchWhatsAppOnboarding()" style="padding: 12px 24px; background-color: #25D366; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">
+    Connect Restaurant WhatsApp
+</button>
+
+<script>
+  window.fbAsyncInit = function() {
+    FB.init({
+      appId      : '{{ app_id }}', // Vibeflow Automation App ID
+      cookie     : true,
+      xfbml      : true,
+      version    : 'v20.0'
+    });
+  };
+
+  function launchWhatsAppOnboarding() {
+    FB.login(function(response) {
+      if (response.authResponse) {
+        // Meta successfully authenticated the user and returned a short-lived authorization code
+        const code = response.authResponse.code;
+        
+        // Pass this temporary code along to your Django async view
+        sendCodeToBackend(code);
+      } else {
+        console.error('User cancelled login or did not fully authorize the app.');
+      }
+    }, {
+        
+      // Your newly minted Configuration ID that sets the WhatsApp variant template
+      config_id: '{{ app_config }}', 
+      response_type: 'code',
+      override_default_response_type: true
+    });
+  }
+
+  function sendCodeToBackend(code) {
+
+    // Points directly to your Django server's auth routing endpoint
+    fetch('/api/v1/auth/meta-callback/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+          code: code,
+          restaurant_slug: '{{ restaurant.rid }}' // Dynamic identifier from your app state
+      })
+    })
+    .then(res => res.json())
+    .then(data => alert('Handshake complete! Restaurant connected.'))
+    .catch(err => console.error('Error exchanging token:', err));
+  }
+</script>

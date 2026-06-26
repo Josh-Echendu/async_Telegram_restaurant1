@@ -15,6 +15,7 @@ DRF_URL = "http://web:8000"
 logger = logging.getLogger(__name__)
 
 async def get_restaurant(phone_id: str, max_retries = 3):
+    
     # 🔥 Check if cached data is from a different day
     if phone_id in cache:
         cached_data = cache[f"res_{phone_id}"]
@@ -51,6 +52,7 @@ async def get_restaurant(phone_id: str, max_retries = 3):
                 
             except Exception as e:
                 print(f"Error checking day change: {e}")
+                
                 # If error, assume cache is stale and delete it
                 del cache[f"res_{phone_id}"]
                 if f"{phone_id}_timestamp" in cache:

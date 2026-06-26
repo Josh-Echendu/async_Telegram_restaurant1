@@ -1,8 +1,8 @@
-from config import logger
-from operations import (
+from .operations import (
     establish_bot_contact, create_telegram_group, add_member_to_group,
     promote_to_admin, send_test_message, leave_group
 )
+from .config_file import logger
 from datetime import datetime
 from typing import Dict, Any
 
