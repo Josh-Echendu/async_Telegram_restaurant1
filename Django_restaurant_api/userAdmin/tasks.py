@@ -140,8 +140,10 @@ logger = logging.getLogger(__name__)
 
 
 @worker_ready.connect
-def at_start(sender, **kwargs):
-    """Runs immediately when Celery worker starts."""
+def start_telegram_listener(sender, **kwargs):
+    logger.info("🤖 Starting Telegram result listener...")
+    
+    # Your new at_start() logic
     process_telegram_setup_results_worker.delay()
 
 

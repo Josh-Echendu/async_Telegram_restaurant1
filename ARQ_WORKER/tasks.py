@@ -111,7 +111,6 @@ async def process_telegram_setup(ctx):
                         json.dumps({
                             "restaurant_id": restaurant_id,
                             "status": "failed",
-                            "result": None,
                             "error": str(e)
                         })
                     )

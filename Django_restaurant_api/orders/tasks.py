@@ -23,7 +23,6 @@ from django.core.cache import cache
 from pywa import WhatsApp  # ← synchronous version
 from pywa.types import Button
 from payments.tasks import requery_transaction
-from userAdmin.tasks import process_telegram_setup_results_worker
 
 import logging
 logger = logging.getLogger(__name__)
@@ -38,7 +37,6 @@ logger = logging.getLogger(__name__)
 @worker_ready.connect # @worker_ready.connect → run when Celery worker starts
 def at_start(sender, **kwargs):
     """Runs immediately when Celery worker starts."""
-    process_telegram_setup_results_worker.delay()
     # retry_unsent_orders_notifications.delay()
     # retry_unsent_payment_notifications.delay()
     # requery_transaction.delay()
