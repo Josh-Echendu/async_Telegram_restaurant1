@@ -17,6 +17,7 @@ API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
 PHONE_NUMBER = os.getenv("PHONE_NUMBER")
 SESSION_STRING = os.getenv("SESSION_STRING")
+ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")
 
 
 

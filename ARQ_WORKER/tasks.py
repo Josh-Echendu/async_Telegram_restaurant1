@@ -65,7 +65,6 @@ async def process_telegram_setup(ctx):
     ARQ task that continuously processes telegram setup requests
     """    
     while True:
-        # Block until a message arrives
         _, data = await redis_client.brpop('telegram:setup')
         task = json.loads(data)
         
@@ -73,46 +72,49 @@ async def process_telegram_setup(ctx):
         restaurant_name = task['restaurant_name']
         bot_username = task['bot_username']
         owner_telegram_id = task['owner_telegram_id']
+        service_mode = (task['service_mode'] or "").lower()
         owner_name = task.get('owner_name', 'Restaurant Owner')
         
         logger.info(f"📦 Processing Telegram setup for {restaurant_name}")
         
-        for i in range(3):
+        for attempt in range(3):
             try:
-                # Call your Kurigram setup function
                 result = await setup_restaurant_telegram(
                     restaurant_name=restaurant_name,
                     bot_username=bot_username,
                     owner_telegram_id=owner_telegram_id,
-                    owner_name=owner_name
+                    owner_name=owner_name,
+                    service_mode=service_mode
                 )
                 
-                # ✅ Success: Push success to Redis for Django to pick up
+                # ✅ Success
                 await redis_client.lpush(
                     "telegram:setup:results",
                     json.dumps({
                         "restaurant_id": restaurant_id,
-                        "group_id": result['group_id'],
+                        "service_mode": service_mode,
+                        "result": result,
                         "status": "success"
                     })
                 )
                 
-                logger.info(f"✅ Setup complete for {restaurant_name}: group_id={result['group_id']}")
+                logger.info(f"✅ Setup complete for {restaurant_name}")
+                break  # ← EXIT on success
                 
             except Exception as e:
-                logger.error(f"❌ Setup failed for {restaurant_name}: {e}")
+                logger.error(f"❌ Setup attempt {attempt + 1} failed for {restaurant_name}: {e}")
                 
-                if i == 2:
-                    # ❌ Failed - Update Django with error
+                if attempt == 2:
+                    # ❌ Failed after 3 attempts
                     await redis_client.lpush(
                         "telegram:setup:results",
                         json.dumps({
                             "restaurant_id": restaurant_id,
                             "status": "failed",
+                            "result": None,
                             "error": str(e)
                         })
                     )
-
 
 async def handle_whatsapp_update(
     ctx,

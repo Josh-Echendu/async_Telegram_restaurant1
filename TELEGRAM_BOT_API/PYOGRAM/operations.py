@@ -2,6 +2,7 @@ from .config_file import app, RATE_LIMIT_DELAY, logger
 from pyrogram.enums import ChatType, ChatMemberStatus
 from pyrogram.errors import FloodWait, RPCError
 import asyncio
+from pyrogram.types import ChatAdministratorRights
 
 
 async def establish_bot_contact(bot_username: str):
@@ -53,37 +54,40 @@ async def add_member_to_group(group_id: int, member_id: str):
             raise
 
 
-async def promote_to_admin(group_id: int, member_id: str, permissions: dict = None):
-    """
-    Promote a member to admin with specified permissions
-    """
+async def promote_to_admin(group_id: int, member_id: int | str, is_hidden: bool = False):
     logger.info(f"Promoting {member_id} to admin in group {group_id}")
-    
-    # Default permissions for a restaurant bot
-    default_permissions = {
-        "can_send_messages": True,
-        "can_delete_messages": True,
-        "can_manage_chat": True,
-        "can_invite_users": True,
-        "can_restrict_members": False,
-        "can_pin_messages": True,
-        "can_promote_members": False
-    }
-    
-    permissions = permissions or default_permissions
-    
+    logger.info(type(member_id))
+    logger.info(repr(member_id))
+
     async with app:
         try:
-            # Get the chat member and promote
-            await app.promote_chat_member(
-                group_id,
-                member_id,
-                **permissions
+            rights = ChatAdministratorRights(
+                is_anonymous=is_hidden, 
+                can_manage_chat=False,
+                can_delete_messages=False,
+                can_manage_video_chats=False,
+                can_restrict_members=False,
+                can_promote_members=False,
+                can_change_info=False,
+                can_invite_users=True,
+                can_post_stories=False,
+                can_edit_stories=False,
+                can_delete_stories=False,
+                can_pin_messages=True,
+                can_manage_topics=False,
             )
+
+            await app.promote_chat_member(
+                chat_id=group_id,
+                user_id=member_id,
+                privileges=rights,
+            )
+
             await asyncio.sleep(RATE_LIMIT_DELAY)
             logger.info(f"✅ {member_id} promoted to admin")
+
         except Exception as e:
-            logger.error(f"❌ Failed to promote: {e}")
+            logger.exception(f"❌ Failed to promote {member_id}: {e}")
             raise
 
 

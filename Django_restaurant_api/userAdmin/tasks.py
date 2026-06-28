@@ -5,6 +5,9 @@ from django.conf import settings
 from django.utils import timezone
 import logging
 from django.db import transaction
+from restaurants.models import Restaurant
+
+
 
 
 
@@ -13,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 @shared_task(bind=True, max_retries=5, default_retry_delay=30)
 def complete_whatsapp_onboarding(self, restaurant_rid):
-    from restaurants.models import Restaurant
     
     try:
         restaurant = Restaurant.objects.get(rid=restaurant_rid)
@@ -120,3 +122,69 @@ def complete_whatsapp_onboarding(self, restaurant_rid):
             restaurant.save(update_fields=['whatsapp_setup_status'])
             logger.error(f"💀 Onboarding permanently failed after {self.max_retries} retries")
             raise
+
+
+import json
+import time
+import redis
+
+from celery import shared_task
+from celery.signals import worker_ready
+from django.db import transaction
+from django.conf import settings
+import redis
+import json
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+@worker_ready.connect
+def at_start(sender, **kwargs):
+    """Runs immediately when Celery worker starts."""
+    process_telegram_setup_results_worker.delay()
+
+
+@shared_task(bind=True, max_retries=5)
+def process_telegram_setup_results_worker(self):
+    r = redis.Redis.from_url(settings.REDIS_URL)
+
+    while True:
+        try:
+            # Block and wait for results (with timeout)
+            result_data = r.brpop("telegram:setup:results", timeout=5)
+
+            if result_data:
+                _, data = result_data
+                data = json.loads(data)
+                result = data.get('result', {})
+
+                if data['status'] == 'success':
+                    restaurant = Restaurant.objects.filter(rid=data['restaurant_id']).first()
+                    
+                    if not restaurant:
+                        logger.warning(f"Restaurant not found: {data['restaurant_id']}")
+                        continue
+
+                    with transaction.atomic():
+                        if data['service_mode'] in ['dine_in', 'both']:
+                            restaurant.kitchen_chat_id = result.get('dine_in_group_id')
+                            logger.info(f"✅ Dine-in group saved for {restaurant.name}")
+
+                        if data['service_mode'] in ['delivery', 'both']:
+                            restaurant.delivery_chat_id = result.get('delivery_group_id')
+                            logger.info(f"✅ Delivery group saved for {restaurant.name}")
+
+                        restaurant.save(update_fields=['delivery_chat_id', 'kitchen_chat_id'])
+                        logger.info(f"🎉 Telegram onboarding COMPLETED for {restaurant.name}")
+
+                else:
+                    logger.error(f"❌ Setup failed: {data.get('error')}")
+
+        except Exception as e:
+            if self.request.retries < self.max_retries:
+                logger.error(f"Error processing result: {e}")
+                raise self.retry(exc=e, countdown=min(2 ** self.request.retries, 60))
+            else:
+                logger.error(f"❌ Max retries reached. Giving up.")
+                raise

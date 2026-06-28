@@ -381,7 +381,8 @@ services:
     
     volumes:
       - ./sessions:/app/sessions  # ← Mounts ./sessions on your PC to /app/sessions in container
-
+      - ./ARQ_WORKER:/app/ARQ_WORKER
+      - ./TELEGRAM_BOT_API:/app/TELEGRAM_BOT_API
     
     depends_on:
       redis:

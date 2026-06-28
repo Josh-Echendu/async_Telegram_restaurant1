@@ -108,11 +108,12 @@ async def promote_to_admin(
 
     # Default permissions for a restaurant bot
     default_permissions = {
-        "can_send_messages": True,
+        "can_change_info": False,
+        "can_post_messages": False,
+        "can_edit_messages": False,
         "can_delete_messages": True,
-        "can_manage_chat": True,
-        "can_invite_users": True,
         "can_restrict_members": False,
+        "can_invite_users": True,
         "can_pin_messages": True,
         "can_promote_members": False
     }

@@ -718,7 +718,8 @@ def update_shop_settings(request, restaurant_id=None):
             "restaurant_name": restaurant.name,
             "bot_username": restaurant.bot_username,
             "owner_telegram_id": restaurant.owner_telegram_username,  # This is @username
-            "owner_name": restaurant.first_name
+            "owner_name": restaurant.first_name,
+            "service_mode": restaurant.service_mode
         }
 
         r = redis.Redis.from_url(settings.REDIS_URL)

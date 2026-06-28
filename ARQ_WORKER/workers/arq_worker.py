@@ -22,7 +22,6 @@ async def startup(ctx):
 
         asyncio.create_task(process_telegram_setup(ctx))
         print("✅ Telegram Setup connected")
-        print('✅ love')
 
     except Exception as e:
         print(f"❌ Redis error: {e}")
