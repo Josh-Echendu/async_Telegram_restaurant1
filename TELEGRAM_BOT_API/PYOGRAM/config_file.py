@@ -14,6 +14,14 @@ from COMMON.config import SESSION_STRING, API_HASH, API_ID, PHONE_NUMBER, ADMIN_
 # Rate limiting
 RATE_LIMIT_DELAY = 2  # Seconds between API calls
 
+
+
+# Suppress Pyrogram logs
+logging.getLogger("pyrogram").setLevel(logging.WARNING)
+logging.getLogger("pyrogram.connection").setLevel(logging.WARNING)
+logging.getLogger("pyrogram.session").setLevel(logging.WARNING)
+logging.getLogger("pyrogram.dispatcher").setLevel(logging.WARNING)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,

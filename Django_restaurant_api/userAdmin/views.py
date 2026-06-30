@@ -657,6 +657,8 @@ def shop_settings(request, restaurant_id=None):
 @admin_required
 def update_shop_settings(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
+    print("POST data:", request.POST)
+    print("vendor_type:", request.POST.get('vendor_type'))
     
     # ---- business_type ----
     if 'business_type' in request.POST:
@@ -684,7 +686,7 @@ def update_shop_settings(request, restaurant_id=None):
     updatable_fields = [
         'first_name', 'last_name', 'phone_number',
         'name', 'description', 'state', 'lga', 'address',
-        'service_mode', 'delivery_fee',
+        'service_mode', 'delivery_fee', 'vendor_type',
         'max_tables', 'timezone', 'is_accepting_orders',
         'bank_account_name', 'bank_account_number',
         'bot_username', 'bot_token', 'is_bot_active', "owner_telegram_username",  # ← ADD COMMA HERE
@@ -706,46 +708,22 @@ def update_shop_settings(request, restaurant_id=None):
 
     restaurant.save()
 
-    # After save, register in Redis for baileys
-    if restaurant.whatsapp_business_phone:
-        r = redis.Redis.from_url(settings.REDIS_URL)
-        r.hset('whatsapp:restaurants', restaurant.rid, restaurant.whatsapp_business_phone)
-
-    if restaurant.bot_username and restaurant.bot_token and restaurant.owner_telegram_username:
-        # Push task to Redis for ARQ
+    # Telegram: Only if bot fields were submitted
+    bot_fields_submitted = any(f in request.POST for f in ['bot_username', 'bot_token', 'owner_telegram_username'])
+    if bot_fields_submitted and restaurant.bot_username and restaurant.bot_token and restaurant.owner_telegram_username:
         task_data = {
             "restaurant_id": restaurant.rid,
             "restaurant_name": restaurant.name,
             "bot_username": restaurant.bot_username,
-            "owner_telegram_id": restaurant.owner_telegram_username,  # This is @username
+            "owner_telegram_id": restaurant.owner_telegram_username,
             "owner_name": restaurant.first_name,
             "service_mode": restaurant.service_mode
         }
-
         r = redis.Redis.from_url(settings.REDIS_URL)
-        r.lpush("telegram:setup", json.dumps(task_data))  # ← FIXED queue name
-
+        r.lpush("telegram:setup", json.dumps(task_data))
         logger.info(f"📦 Telegram setup queued for {restaurant.name}")
 
     return JsonResponse({'success': True})
-
-
-
-def get_whatsapp_pairing_code(request, restaurant_id=None):
-    restaurant = get_admin_restaurant(request, restaurant_id)
-    
-    import redis, json
-    r = redis.Redis.from_url(settings.REDIS_URL)
-    data = r.hget('whatsapp:setup', restaurant.rid)
-    
-    if data:
-        setup = json.loads(data)
-        return JsonResponse({
-            'code': setup.get('pairingCode'),
-            'qr': setup.get('qr'),
-        })
-    
-    return JsonResponse({'error': 'No pairing code available'}, status=404)
 
 
 class MetaOauthHandshakeView(APIView):

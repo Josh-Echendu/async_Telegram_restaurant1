@@ -352,40 +352,45 @@ def manage_restaurant_webhook(sender, instance, created, **kwargs):
     if instance.is_bot_active and instance.bot_token:
         register_telegram_webhook(instance)
 
-    # 2. Detect location change using cached old values
-    location_changed = False
-    
-    if created:
-        location_changed = True
-    else:
-        old_lga = getattr(instance, '_old_lga', None)
-        old_state = getattr(instance, '_old_state', None)
-        old_address = getattr(instance, '_old_address', None)
-        old_latitude = getattr(instance, '_old_latitude', None)
-        old_longitude = getattr(instance, '_old_longitude', None)
+    vendor_type = (instance.vendor_type or "").lower()
+    service_mode = (instance.service_mode or "").lower()
+
+    if vendor_type == 'cooked_food' or service_mode == 'both':       
         
-        location_changed = (
-            old_lga != instance.lga or
-            old_state != instance.state or
-            old_address != instance.address or
-            old_latitude != instance.latitude or
-            old_longitude != instance.longitude
-        )
+        # 2. Detect location change using cached old values
+        location_changed = False
         
-        print(f"SIGNAL: Old values - lga={old_lga}, state={old_state}, address={old_address}, latitude={old_latitude}, longitude={old_longitude}")
-        print(f"SIGNAL: New values - lga={instance.lga}, state={instance.state}, address={instance.address}")
+        if created:
+            location_changed = True
+        else:
+            old_lga = getattr(instance, '_old_lga', None)
+            old_state = getattr(instance, '_old_state', None)
+            old_address = getattr(instance, '_old_address', None)
+            old_latitude = getattr(instance, '_old_latitude', None)
+            old_longitude = getattr(instance, '_old_longitude', None)
+            
+            location_changed = (
+                old_lga != instance.lga or
+                old_state != instance.state or
+                old_address != instance.address or
+                old_latitude != instance.latitude or
+                old_longitude != instance.longitude
+            )
+            
+            print(f"SIGNAL: Old values - lga={old_lga}, state={old_state}, address={old_address}, latitude={old_latitude}, longitude={old_longitude}")
+            print(f"SIGNAL: New values - lga={instance.lga}, state={instance.state}, address={instance.address}")
 
-    print(f"SIGNAL: location_changed={location_changed}, longitude={instance.longitude}, latitude={instance.latitude}")
+        print(f"SIGNAL: location_changed={location_changed}, longitude={instance.longitude}, latitude={instance.latitude}")
 
-    # 3. Skip if nothing changed
-    if not location_changed:
-        print("SIGNAL: No location change, skipping")
-        return
+        # 3. Skip if nothing changed
+        if not location_changed:
+            print("SIGNAL: No location change, skipping")
+            return
 
-    # 4. Call directly
-    print("SIGNAL: Triggering Terminal address sync...")
-    result = get_coordinates_for_address.delay(lga=instance.lga, state=instance.state, restaurant_id=instance.rid)
-    print(f"SIGNAL: Terminal sync result = {result}")
+        # 4. Call directly
+        print("SIGNAL: Triggering Terminal address sync...")
+        result = get_coordinates_for_address.delay(lga=instance.lga, state=instance.state, restaurant_id=instance.rid)
+        print(f"SIGNAL: Terminal sync result = {result}")
 
 
 

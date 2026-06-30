@@ -478,9 +478,11 @@ def admin_login_view(request, restaurant_id=None):
     return render(request, 'userauths/admin_login.html')
 
 
-def admin_logout_view(request):
+def admin_logout_view(request, restaurant_id=None):
+    from userAdmin.views import get_admin_restaurant
+    restaurant_id= get_admin_restaurant(request, restaurant_id)
     logout(request)
-    return redirect("userauths:admin_login")
+    return redirect("userauths:admin_login", restaurant_id=restaurant_id)
 
 
 

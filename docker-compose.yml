@@ -348,24 +348,24 @@ services:
       - backend
 
 
-  whatsapp_baileys:
-      build:
-        context: .
-        dockerfile: Dockerfile.unoffcial_whatsapp
-      container_name: whatsapp_baileys
-      restart: unless-stopped
-      env_file: .env
-      ports:
-        - "3000:3000"   # Health check endpoint
-      volumes:
-        - whatsapp_auth:/app/auth                            # Persist QR sessions
-        - ./UNOFFICIAL_WHATSAPP_API/package.json:/app/package.json    # For live dev
-        - ./UNOFFICIAL_WHATSAPP_API/worker.js:/app/worker.js          # For live dev
-      depends_on:
-        redis:
-          condition: service_started
-      networks:
-        - backend
+  # whatsapp_baileys:
+  #     build:
+  #       context: .
+  #       dockerfile: Dockerfile.unoffcial_whatsapp
+  #     container_name: whatsapp_baileys
+  #     restart: unless-stopped
+  #     env_file: .env
+  #     ports:
+  #       - "3000:3000"   # Health check endpoint
+  #     volumes:
+  #       - ./UNOFFICIAL_WHATSAPP_API/whatsapp_auth:/app/auth                            # Persist QR sessions
+  #       - ./UNOFFICIAL_WHATSAPP_API/package.json:/app/package.json    # For live dev
+  #       - ./UNOFFICIAL_WHATSAPP_API/worker.js:/app/worker.js          # For live dev
+  #     depends_on:
+  #       redis:
+  #         condition: service_started
+  #     networks:
+  #       - backend
 
   
   arq_worker:

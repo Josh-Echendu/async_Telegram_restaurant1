@@ -28,7 +28,9 @@
     }, {
       config_id: '{{ app_config }}',
       response_type: 'code',
-      override_default_response_type: true
+      override_default_response_type: true,
+      scope: 'pages_manage_creation,pages_read_engagement,pages_manage_metadata'  // ← ADD THIS
+
     });
   }
 
@@ -200,27 +202,35 @@
                             </label>
                         </div>
                     </div>
+
                     <div>
                         <label class="block text-xs font-semibold text-gray-700 mb-1.5">State</label>
-                        <input 
-                            type="text" 
+                        <select 
                             name="state" 
                             x-model="form.state"
-                            value="{{ restaurant.state|default:'' }}"
-                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
-                            placeholder="Lagos"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all bg-white"
                         >
+                            <option value="">Select state...</option>
+                            <template x-for="state in statesList" :key="state">
+                                <option x-bind:value="state" x-text="state"></option>
+                            </template>
+                        </select>
                     </div>
+
                     <div>
                         <label class="block text-xs font-semibold text-gray-700 mb-1.5">LGA</label>
-                        <input 
-                            type="text" 
+                        <select 
                             name="lga" 
                             x-model="form.lga"
-                            value="{{ restaurant.lga|default:'' }}"
-                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
-                            placeholder="Eti-Osa"
+                            class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all bg-white"
+                            :disabled="!form.state"
                         >
+                            <option value="">Select LGA...</option>
+                            <template x-for="lga in (allLgas[form.state] || [])" :key="lga">
+                                <option x-bind:value="lga" x-text="lga"></option>
+                            </template>
+                        </select>
+                        <p class="text-[10px] text-gray-400 mt-1" x-show="!form.state">Please select a state first</p>
                     </div>
                     <div class="sm:col-span-2">
                         <label class="block text-xs font-semibold text-gray-700 mb-1.5">Address</label>
@@ -573,48 +583,6 @@
                     </div>
                     {% endif %}
                 </div>
-
-                {% else %}
-                <!-- Unofficial WhatsApp (for Vendors & Delivery-only Restaurants) -->
-                <div class="border border-gray-100 rounded-xl p-4 sm:p-5">
-                    <div class="flex items-center gap-2 mb-4">
-                        <i class="fab fa-whatsapp text-green-500 text-lg"></i>
-                        <h4 class="text-sm font-bold text-gray-900">WhatsApp Bot</h4>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Business Phone</label>
-                            <input 
-                                type="text" 
-                                name="whatsapp_business_phone" 
-                                x-model="form.whatsapp_business_phone"
-                                value="{{ restaurant.whatsapp_business_phone|default:'' }}"
-                                class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all"
-                                placeholder="2348012345678"
-                            >
-                            <p class="text-[10px] text-gray-400 mt-1">Enter phone number with country code, no + or spaces</p>
-                        </div>
-
-                        {% if restaurant.whatsapp_business_phone %}
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-700 mb-1.5">WhatsApp Link</label>
-                            <div class="flex items-center gap-2">
-                                <input 
-                                    type="text" 
-                                    value="https://wa.me/{{ restaurant.whatsapp_business_phone }}"
-                                    readonly
-                                    class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-600"
-                                >
-                                <button type="button" onclick="navigator.clipboard.writeText('https://wa.me/{{ restaurant.whatsapp_business_phone }}')"
-                                    class="px-3 py-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors text-sm">
-                                    <i class="fas fa-copy"></i>
-                                </button>
-                            </div>
-                            <p class="text-[10px] text-gray-400 mt-1">Share this link with customers to start chatting</p>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
                 {% endif %}
                 <div class="mt-5">
                     <button type="button" @click="saveSection('bot')" 
@@ -658,68 +626,6 @@
             </div>
         </div>
 
-        <!-- ==================== WHATSAPP PAIRING MODAL ==================== -->
-        <div x-show="whatsappModal.show" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" @keydown.escape.window="whatsappModal.show = false">
-            <div class="relative bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden" @click.away="whatsappModal.show = false">
-                
-                <!-- Header -->
-                <div class="bg-gradient-to-r from-green-500 to-emerald-600 px-6 pt-8 pb-10 text-center">
-                    <div class="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-                        <i class="fab fa-whatsapp text-4xl text-green-500"></i>
-                    </div>
-                    <h2 class="text-xl font-bold text-white">Link Your WhatsApp</h2>
-                    <p class="text-green-100 text-sm mt-1">Scan the QR code or enter the pairing code</p>
-                </div>
-
-                <!-- Content -->
-                <div class="px-6 pb-8 pt-6 text-center">
-                    
-                    <!-- Loading -->
-                    <div x-show="whatsappModal.loading" class="py-8">
-                        <i class="fas fa-spinner fa-pulse text-3xl text-green-500"></i>
-                        <p class="text-sm text-gray-500 mt-3">Generating pairing code...</p>
-                    </div>
-
-                    <!-- Pairing Code -->
-                    <div x-show="!whatsappModal.loading && whatsappModal.code" class="space-y-5">
-                        <div>
-                            <p class="text-xs text-gray-500 uppercase tracking-wider font-medium mb-2">Pairing Code</p>
-                            <div class="bg-gray-50 rounded-2xl py-4 px-6 inline-block">
-                                <span class="text-3xl font-extrabold text-gray-900 tracking-[0.3em]" x-text="whatsappModal.code"></span>
-                            </div>
-                        </div>
-
-                        <div class="bg-amber-50 rounded-xl p-4 text-left">
-                            <p class="text-xs font-semibold text-amber-800 mb-2">📋 How to connect:</p>
-                            <ol class="text-xs text-amber-700 space-y-1.5 list-decimal list-inside">
-                                <li>Open <strong>WhatsApp</strong> on your phone</li>
-                                <li>Go to <strong>Settings</strong> → <strong>Linked Devices</strong></li>
-                                <li>Tap <strong>Link a Device</strong></li>
-                                <li>Tap <strong>Enter code manually</strong> (or scan QR)</li>
-                                <li>Enter the code shown above</li>
-                            </ol>
-                        </div>
-
-                        <p class="text-[10px] text-gray-400">Waiting for you to connect...</p>
-                    </div>
-
-                    <!-- Error -->
-                    <div x-show="!whatsappModal.loading && whatsappModal.error" class="py-4">
-                        <i class="fas fa-circle-exclamation text-red-400 text-3xl mb-2"></i>
-                        <p class="text-sm text-red-600" x-text="whatsappModal.error"></p>
-                    </div>
-                </div>
-
-                <!-- Close Button -->
-                <div class="px-6 pb-5">
-                    <button @click="whatsappModal.show = false" 
-                        class="w-full py-3 border-2 border-gray-200 rounded-xl text-gray-600 font-medium text-sm hover:bg-gray-50 transition-colors">
-                        Close
-                    </button>
-                </div>
-            </div>
-        </div>
-
     </form>
 </div>
 
@@ -739,6 +645,19 @@
 
     document.addEventListener('alpine:init', () => {
         Alpine.data('shopSettings', () => ({
+
+            // ===== DATA =====
+            allLgas: {},
+            statesList: [],
+            init() {
+                fetch('/static/data/nigeria-lgas.json')
+                    .then(r => r.json())
+                    .then(data => {
+                        this.allLgas = data;
+                        this.statesList = Object.keys(data);
+                    })
+                    .catch(e => console.error('Failed to load LGAs:', e));
+            },
             form: {
                 first_name: '{{ restaurant.first_name|default:"" }}',
                 last_name: '{{ restaurant.last_name|default:"" }}',
@@ -771,52 +690,7 @@
             },
             saving: null,
             notification: { show: false, message: '', type: 'success' },
-            whatsappModal: {
-                show: false,
-                loading: false,
-                code: '',
-                error: '',
-            },
 
-            async fetchPairingCode() {
-                this.whatsappModal.show = true;
-                this.whatsappModal.loading = true;
-                this.whatsappModal.code = '';
-                this.whatsappModal.error = '';
-
-                // Retry up to 10 times, every 3 seconds (30 seconds total)
-                const maxRetries = 10;
-                const retryDelay = 3000;
-
-                for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                    try {
-                        const response = await axios.get('{% url "useradmin:whatsapp-pairing-code" %}');
-                        const data = response.data;
-                        
-                        if (data.code) {
-                            this.whatsappModal.code = data.code;
-                            this.whatsappModal.loading = false;
-                            return;  // Success — stop retrying
-                        }
-                    } catch (error) {
-                        // 404 means not ready yet — keep retrying
-                        if (error.response?.status !== 404) {
-                            this.whatsappModal.error = 'Something went wrong. Please try again.';
-                            this.whatsappModal.loading = false;
-                            return;
-                        }
-                    }
-
-                    // Not ready yet — wait and retry
-                    if (attempt < maxRetries) {
-                        await new Promise(r => setTimeout(r, retryDelay));
-                    }
-                }
-
-                // All retries exhausted
-                this.whatsappModal.error = 'Pairing code not available. Please wait a moment and click "Save Changes" again.';
-                this.whatsappModal.loading = false;
-            },
 
             showNotification(message, type = 'success') {
                 this.notification.message = message;
@@ -847,9 +721,8 @@
                     } else if (section === 'operations') {
                         formData.append('service_mode', this.form.service_mode);
                         formData.append('delivery_fee', this.form.delivery_fee);
-                        if (!'{{ restaurant.vendor_type }}') {
-                            formData.append('vendor_type', this.form.vendor_type);
-                        }
+                        formData.append('vendor_type', this.form.vendor_type || '');  // ← ADD THIS
+
                         formData.append('max_tables', this.form.max_tables);
                         formData.append('timezone', this.form.timezone);
                         formData.append('is_accepting_orders', this.form.is_accepting_orders);
@@ -861,11 +734,9 @@
                         formData.append('bot_token', this.form.bot_token);
                         formData.append('is_bot_active', this.form.is_bot_active);
                         formData.append('owner_telegram_username', this.form.owner_telegram_username);
+                    
 
                         formData.append('whatsapp_business_phone', this.form.whatsapp_business_phone);
-                        formData.append('whatsapp_business_account_id', this.form.whatsapp_business_account_id);
-                        formData.append('whatsapp_phone_number_id', this.form.whatsapp_phone_number_id);
-                        formData.append('whatsapp_access_token', this.form.whatsapp_access_token);
                         formData.append('is_whatsapp_active', this.form.is_whatsapp_active);
 
                     }

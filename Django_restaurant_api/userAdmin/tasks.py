@@ -6,6 +6,10 @@ from django.utils import timezone
 import logging
 from django.db import transaction
 from restaurants.models import Restaurant
+import json
+import redis
+from celery.signals import worker_ready
+import logging
 
 
 
@@ -124,17 +128,6 @@ def complete_whatsapp_onboarding(self, restaurant_rid):
             raise
 
 
-import json
-import time
-import redis
-
-from celery import shared_task
-from celery.signals import worker_ready
-from django.db import transaction
-from django.conf import settings
-import redis
-import json
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +135,7 @@ logger = logging.getLogger(__name__)
 @worker_ready.connect
 def start_telegram_listener(sender, **kwargs):
     logger.info("🤖 Starting Telegram result listener...")
-    
+
     # Your new at_start() logic
     process_telegram_setup_results_worker.delay()
 
@@ -169,11 +162,11 @@ def process_telegram_setup_results_worker(self):
                         continue
 
                     with transaction.atomic():
-                        if data['service_mode'] in ['dine_in', 'both']:
+                        if data.get('service_mode') in ['dine_in', 'both']:
                             restaurant.kitchen_chat_id = result.get('dine_in_group_id')
                             logger.info(f"✅ Dine-in group saved for {restaurant.name}")
 
-                        if data['service_mode'] in ['delivery', 'both']:
+                        if data.get('service_mode') in ['delivery', 'both']:
                             restaurant.delivery_chat_id = result.get('delivery_group_id')
                             logger.info(f"✅ Delivery group saved for {restaurant.name}")
 
@@ -182,6 +175,7 @@ def process_telegram_setup_results_worker(self):
 
                 else:
                     logger.error(f"❌ Setup failed: {data.get('error')}")
+                    break
 
         except Exception as e:
             if self.request.retries < self.max_retries:
