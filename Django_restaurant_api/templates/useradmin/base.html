@@ -61,7 +61,13 @@
     >
         <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <a href="{% url 'useradmin:dashboard' %}" class="flex items-center gap-2.5">
-                <img src="{% static 'assets2/imgs/theme/logo.svg' %}" class="h-8 w-auto" alt="Logo" />
+                {% if restaurant.image %}
+                    <img src="{{ restaurant.image.url }}" class="h-8 w-auto" alt="Logo" />
+                {% else %}
+                    <div class="h-8 w-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+                        <i class="fas fa-store text-indigo-600 text-sm"></i>
+                    </div>
+                {% endif %}
                 <span class="text-lg font-bold text-gray-900">{{ restaurant.name }}</span>
             </a>
             <button @click="sidebarOpen = false" class="p-1.5 rounded-lg hover:bg-gray-100 lg:hidden">
@@ -138,7 +144,7 @@
                 <span>Settings</span>
             </a>
 
-            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+            <a href="https://t.me/{{support}}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                 <i class="fas fa-circle-question w-5 text-center"></i>
                 <span>Help Center</span>
             </a>
@@ -188,7 +194,13 @@
 
                     <div class="relative" x-data="{ open: false }">
                         <button @click="open = !open" class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-                            <img src="{% static 'assets2/imgs/people/avatar-2.png' %}" class="w-8 h-8 rounded-full object-cover border-2 border-gray-200" alt="User" />
+                            {% if restaurant.image %}
+                                <img src="{{ restaurant.image.url }}" class="w-8 h-8 rounded-full object-cover border-2 border-gray-200" alt="User" />
+                            {% else %}
+                                <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center border-2 border-gray-200">
+                                    <i class="fas fa-user text-indigo-600 text-sm"></i>
+                                </div>
+                            {% endif %}
                             <span class="hidden sm:inline text-sm font-medium text-gray-700">{{ request.user.first_name|default:'Vendor' }}</span>
                             <i class="fas fa-chevron-down text-gray-400 text-xs hidden sm:block"></i>
                         </button>
@@ -200,7 +212,7 @@
                             class="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50"
                             x-transition
                         >
-                            <a href="#" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                            <a href="{% url 'useradmin:shop-settings' %}" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                                 <i class="fas fa-user w-4"></i> Edit Profile
                             </a>
                             <a href="#" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
@@ -219,9 +231,11 @@
             </div>
         </header>
 
+
         <main class="flex-1">
             {% block content %}{% endblock %}
         </main>
+        
 
         <footer class="border-t border-gray-100 px-4 sm:px-6 py-4">
             <div class="flex flex-col sm:flex-row items-center justify-between gap-2">

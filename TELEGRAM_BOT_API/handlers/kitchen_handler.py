@@ -6,6 +6,7 @@ from TELEGRAM_BOT_API.core.config import get_user_session, save_user_session
 
 async def waiter_generate_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("Jesusssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss")
+
     """
     Waiter command: /gencode 5
     Generates OTP for table 5
@@ -17,7 +18,18 @@ async def waiter_generate_code(update: Update, context: ContextTypes.DEFAULT_TYP
 
     waiter = update.effective_user
     args = context.args
-    print("waiter: ", waiter)
+
+    waiter_id = waiter.id
+    print("waiter_id: ", waiter_id)
+    
+    user_session = await get_user_session(waiter_id)  # Or use a different key for groups
+    
+    business_type = user_session.get('business_type')
+
+    print("business_type: ", business_type)
+    if business_type and business_type.lower() != 'restaurant':
+        return
+
 
     if not args:
         await update.message.reply_text("Usage: /gencode <table_number>")
@@ -34,8 +46,7 @@ async def waiter_generate_code(update: Update, context: ContextTypes.DEFAULT_TYP
     # ✅ FIXED: effective_chat.id not effect_chat.id
     chat_id = update.effective_chat.id
     print(f"Chat ID: {chat_id}")
-    waiter_id = waiter.id
-    print("waiter_id: ", waiter_id)
+
     
     # ✅ FIXED: Add await and use correct function name
     # You need to implement get_restaurant_id_from_chat() or store in context.chat_data
@@ -43,6 +54,7 @@ async def waiter_generate_code(update: Update, context: ContextTypes.DEFAULT_TYP
     print("user_session kichen handler: ", user_session)
     
     restaurant_id = user_session.get('current_rid')
+
 
     payload_kitchen = {
         "waiter_telegram_id": waiter.id,

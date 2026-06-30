@@ -130,6 +130,7 @@ def dashboard(request, restaurant_id=None):
         "latest_orders": latest_orders,
         "restaurant_id": restaurant_id,
         "restaurant": restaurant,
+        "support": settings.SUPPORT_USERNAME
     }
 
     return render(request, "useradmin/dashboard.html", context)
@@ -493,13 +494,23 @@ def delivery_orders(request, restaurant_id=None):
         total_batches=Count('id'),
         paid_batches=Count('id', filter=Q(payment_status='paid')),
         unpaid_batches=Count('id', filter=Q(payment_status='unpaid')),
-        total_revenue=Sum('total_price', filter=Q(payment_status='paid'))
+        total_revenue=Sum('total_price', filter=Q(payment_status='paid')),
     )
+
+    # Get delivery_fee from CheckoutSession
+    delivery_fee = CheckoutSession.objects.filter(
+        id__in=session_ids,
+        payment_status='paid'
+    ).aggregate(
+        total_delivery_fee=Sum('delivery_fee')
+    )['total_delivery_fee'] or 0
+    print("total_delivery_fee", delivery_fee)
 
     total_batches = stats['total_batches']
     paid_batches = stats['paid_batches']
     unpaid_batches = stats['unpaid_batches']
     total_revenue = stats['total_revenue'] or 0
+    
 
     total_vat_price=sessions.aggregate(vat=Sum('vat_amount'))['vat'] or 0
     paginator = Paginator(sessions, 20)
@@ -522,6 +533,7 @@ def delivery_orders(request, restaurant_id=None):
         'selected_date': selected_date,
         'today_str': today.isoformat(),
         'yesterday_str': yesterday.isoformat(),
+        'delivery_fee': delivery_fee
     }
 
     return render(request, 'useradmin/delivery_orders.html', context)
@@ -644,73 +656,187 @@ def shop_settings(request, restaurant_id=None):
 
     return render(request, 'useradmin/settings.html', context)
 
-
-
-# [providers.models."custom:http://localhost:11434"]
-# base_url = "http://localhost:11434"
-# max_tokens = 4096
-# temperature = 0.8
-# timeout_secs = 600
-# wire_api = "chat_completions"
-
-@require_POST
 @admin_required
-def update_shop_settings(request, restaurant_id=None):
+@require_POST
+@transaction.atomic
+def update_account_settings(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
-    print("POST data:", request.POST)
-    print("vendor_type:", request.POST.get('vendor_type'))
     
-    # ---- business_type ----
-    if 'business_type' in request.POST:
-        if restaurant.business_type:
-            return JsonResponse({'error': 'Business type cannot be changed after registration.'}, status=400)
-        value = (request.POST['business_type'] or "").lower()
-        if value not in ('restaurant', 'vendor', 'hotel'):
-            return JsonResponse({'error': 'Invalid business type.'}, status=400)
-        restaurant.business_type = value
-        if value == 'vendor':
-            restaurant.service_mode = 'delivery'
-        elif value == 'hotel':
-            restaurant.service_mode = 'dine_in'
-
-    # ---- vendor_type ----
-    if 'vendor_type' in request.POST:
-        if restaurant.vendor_type:
-            return JsonResponse({'error': 'Vendor type cannot be changed after registration.'}, status=400)
-        value = request.POST['vendor_type']
-        if value not in ('cooked_food', 'goods'):
-            return JsonResponse({'error': 'Invalid vendor type.'}, status=400)
-        restaurant.vendor_type = value
-
-    # ---- all other fields ----
-    updatable_fields = [
-        'first_name', 'last_name', 'phone_number',
-        'name', 'description', 'state', 'lga', 'address',
-        'service_mode', 'delivery_fee', 'vendor_type',
-        'max_tables', 'timezone', 'is_accepting_orders',
-        'bank_account_name', 'bank_account_number',
-        'bot_username', 'bot_token', 'is_bot_active', "owner_telegram_username",  # ← ADD COMMA HERE
-        'whatsapp_business_phone', 'whatsapp_business_account_id',
-        'whatsapp_phone_number_id', 'whatsapp_access_token', 'is_whatsapp_active',
-    ]
+    first_name = request.POST.get('first_name')
+    last_name = request.POST.get('last_name')
+    phone_number = request.POST.get('phone_number')
     
-    for field in updatable_fields:
-        if field in request.POST:
-            value = request.POST[field]
-            if value == 'true':
-                value = True
-            elif value == 'false':
-                value = False
-            setattr(restaurant, field, value)
+    # Validation
+    if not first_name:
+        return JsonResponse({'error': 'First name is required.'}, status=400)
+    if not last_name:
+        return JsonResponse({'error': 'Last Name is required.'}, status=400)
+    if not phone_number:
+        return JsonResponse({'error': 'Phone Number is required.'}, status=400)
+    
+    restaurant.first_name = first_name
+    restaurant.last_name = last_name
+    restaurant.phone_number = phone_number
+    restaurant.save()
+    
+    return JsonResponse({'success': True})
 
+
+
+@admin_required
+@require_POST
+@transaction.atomic
+@admin_required
+@require_POST
+def update_business_settings(request, restaurant_id=None):
+    restaurant = get_admin_restaurant(request, restaurant_id)
+    
+    name = request.POST.get('name')
+    description = request.POST.get('description')
+    state = request.POST.get('state')
+    lga = request.POST.get('lga')
+    address = request.POST.get('address')
+    
+    # ✅ REMOVE THIS LINE
+    # if 'image' not in request.FILES:
+    #     return JsonResponse({'error': 'No Business Logo provided.'}, status=400)
+
+    if not name:
+        return JsonResponse({'error': 'Business name is required.'}, status=400)
+    
+    if not address:
+        return JsonResponse({'error': 'Business address is required.'}, status=400)
+    
+    if not state:
+        return JsonResponse({'error': 'Business state is required.'}, status=400)
+    
+    if not lga:
+        return JsonResponse({'error': 'Business lga is required.'}, status=400)
+    
+    restaurant.name = name
+    restaurant.description = description
+    restaurant.state = state
+    restaurant.lga = lga
+    restaurant.address = address
+    
+    # ✅ Only upload if a new image is provided
     if 'image' in request.FILES:
         restaurant.image = request.FILES['image']
-
+    
     restaurant.save()
+    
+    return JsonResponse({'success': True})
 
-    # Telegram: Only if bot fields were submitted
-    bot_fields_submitted = any(f in request.POST for f in ['bot_username', 'bot_token', 'owner_telegram_username'])
-    if bot_fields_submitted and restaurant.bot_username and restaurant.bot_token and restaurant.owner_telegram_username:
+@admin_required
+@require_POST
+@transaction.atomic
+def update_operations_settings(request, restaurant_id=None):
+    restaurant = get_admin_restaurant(request, restaurant_id)
+    business_type = (restaurant.business_type or "").lower()
+
+    service_mode = request.POST.get('service_mode')
+    delivery_fee = request.POST.get('delivery_fee')
+    max_tables = request.POST.get('max_tables')
+    vendor_type = request.POST.get('vendor_type')
+    
+    if service_mode not in ['dine_in', 'delivery', 'both']:
+        return JsonResponse({'error': 'Invalid service mode.'}, status=400)
+    
+    # Vendor must have vendor_type
+    if business_type == 'vendor' and not vendor_type:
+        return JsonResponse({'error': 'Vendor type is required.'}, status=400)
+    
+    # Only require delivery_fee if service_mode includes delivery
+    if service_mode in ['delivery', 'both'] and not delivery_fee:
+        return JsonResponse({'error': 'Delivery fee is required for delivery mode.'}, status=400)
+    
+    # Only require max_tables if business is restaurant AND service includes dine_in
+    if business_type == 'restaurant' and service_mode in ['dine_in', 'both'] and not max_tables:
+        return JsonResponse({'error': 'Max tables is required for dine-in mode.'}, status=400)
+    
+    restaurant.service_mode = service_mode
+    restaurant.delivery_fee = delivery_fee
+    restaurant.max_tables = max_tables
+    restaurant.vendor_type = vendor_type
+    restaurant.save()
+    print("vendor_type: ", vendor_type)
+    
+    return JsonResponse({'success': True})
+ 
+
+@admin_required
+@require_POST
+@transaction.atomic
+def update_bank_settings(request, restaurant_id=None):
+    restaurant = get_admin_restaurant(request, restaurant_id)
+    
+    bank_account_name = request.POST.get('bank_account_name')
+    bank_account_number = request.POST.get('bank_account_number')
+
+    if not bank_account_name:
+        return JsonResponse({'error': 'bank_account_name is required.'}, status=400)
+    
+    if not bank_account_number:
+        return JsonResponse({'error': 'bank_account_number is required.'}, status=400)
+    
+    restaurant.bank_account_name = bank_account_name
+    restaurant.bank_account_number = bank_account_number
+    restaurant.save()
+    
+    return JsonResponse({'success': True})
+
+
+# userAdmin/views.py
+@admin_required
+@require_POST
+@transaction.atomic
+def toggle_shop_status(request, restaurant_id=None):
+    restaurant = get_admin_restaurant(request, restaurant_id)
+    
+    is_accepting_orders = request.POST.get('is_accepting_orders') == 'true'
+    print("is_accepting_orders: ", is_accepting_orders)
+    restaurant.is_accepting_orders = is_accepting_orders
+    restaurant.save()
+    
+    return JsonResponse({'success': True})
+
+@admin_required
+@require_POST
+@transaction.atomic
+def update_bot_settings(request, restaurant_id=None):
+    restaurant = get_admin_restaurant(request, restaurant_id)
+    
+    bot_username = request.POST.get('bot_username')
+    bot_token = request.POST.get('bot_token')
+    owner_telegram_username = request.POST.get('owner_telegram_username')
+
+    if not bot_username:
+        return JsonResponse({'error': 'bot_username is required.'}, status=400)
+    
+    if not bot_token:
+        return JsonResponse({'error': 'bot_token is required.'}, status=400)
+    
+    if not owner_telegram_username:
+        return JsonResponse({'error': 'owner_telegram_username is required.'}, status=400)
+    
+    
+    restaurant.bot_username = bot_username
+    restaurant.bot_token = bot_token
+    restaurant.owner_telegram_username = owner_telegram_username
+    restaurant.save()
+    
+    # Queue Telegram setup if needed
+    if bot_username and bot_token and owner_telegram_username:
+        # # Check if groups already exist based on service_mode
+        # has_dine_in_group = restaurant.service_mode in ['dine_in', 'both'] and restaurant.kitchen_chat_id
+        # has_delivery_group = restaurant.service_mode in ['delivery', 'both'] and restaurant.delivery_chat_id
+        
+
+        # if has_dine_in_group or has_delivery_group:
+        #     logger.info(f"⏭️ Skipping Telegram setup for {restaurant.name} — groups already exist")
+        #     print(f"⏭️ Skipping Telegram setup for {restaurant.name} — groups already exist")
+
+        # else:
         task_data = {
             "restaurant_id": restaurant.rid,
             "restaurant_name": restaurant.name,
@@ -722,8 +848,9 @@ def update_shop_settings(request, restaurant_id=None):
         r = redis.Redis.from_url(settings.REDIS_URL)
         r.lpush("telegram:setup", json.dumps(task_data))
         logger.info(f"📦 Telegram setup queued for {restaurant.name}")
-
+    
     return JsonResponse({'success': True})
+
 
 
 class MetaOauthHandshakeView(APIView):
@@ -818,7 +945,7 @@ def change_order_status(request, bid, restaurant_id=None):
 
     if request.method == "POST":
         order = get_object_or_404(
-            OrderBatch.objects.select_related('telegram_user'),
+            OrderBatch.objects.select_related('checkout_session'),
             bid=bid,
             restaurant=restaurant
         )
@@ -836,7 +963,7 @@ def change_order_status(request, bid, restaurant_id=None):
     else:
         messages.error(request, "Invalid status.")
 
-    return redirect("useradmin:order-details", bid=bid)
+    return redirect("useradmin:dine-in-order-details", session_id=order.checkout_session.session_id)
 
 
 

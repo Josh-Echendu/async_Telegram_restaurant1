@@ -19,6 +19,7 @@ NGROK_DJANGO =  os.getenv("NGROK_DJANGO") # your DRF server
 NGROK_FAST_API = os.getenv('NGROK_FAST_API')
 
 WHATSAPP_INTERNAL_API_KEY = os.getenv("WHATSAPP_INTERNAL_API_KEY")  # For verifying WhatsApp requests to Django
+SUPPORT_USERNAME = os.getenv("SUPPORT_USERNAME")
 
 TERMINAL_PUBLIC_KEY = os.getenv("TERMINAL_PUBLIC_KEY")
 TERMINAL_SECRET_KEY = os.getenv("TERMINAL_SECRET_KEY")

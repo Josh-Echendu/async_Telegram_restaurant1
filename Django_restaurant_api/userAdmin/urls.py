@@ -4,7 +4,9 @@ from .views import (change_order_status, categories, add_category,
                     edit_product, products, add_product, delete_product,
                     delivery_hours, update_delivery_hours, dine_in_orders, delivery_orders,
                     dine_in_order_details, delivery_order_details, pos_config, shop_settings,
-                    update_shop_settings, metaoauthhandshake_api_view
+                    metaoauthhandshake_api_view, update_account_settings,
+                    update_business_settings, update_operations_settings, update_bank_settings,
+                    update_bot_settings, toggle_shop_status
                     
 )
 
@@ -33,14 +35,20 @@ urlpatterns = [
     path("orders/dine-in/<str:session_id>/", dine_in_order_details, name="dine-in-order-details"),
     path("orders/delivery/<str:session_id>/", delivery_order_details, name="delivery-order-details"),
 
-    # meta callback
-    path('api/v1/auth/meta-callback/', metaoauthhandshake_api_view, name='meta-callback'),
 
     path("pos-config/", pos_config, name="pos-config"),
+
+    # settings url
     path("shop-settings/", shop_settings, name="shop-settings"),
-    path("shop-settings/update/", update_shop_settings, name="update-shop-settings"),
-
-
+    path('settings/account/', update_account_settings, name='update-account-settings'),
+    path('settings/business/', update_business_settings, name='update-business-settings'),
+    path('settings/toggle-shop-status/', toggle_shop_status, name='toggle-shop-status'),
+    path('settings/operations/', update_operations_settings, name='update-operations-settings'),
+    path('settings/bank/', update_bank_settings, name='update-bank-settings'),
+    path('settings/bot/', update_bot_settings, name='update-bot-settings'),
+    
+    # meta callback
+    path('api/v1/auth/meta-callback/', metaoauthhandshake_api_view, name='meta-callback'),
 
     path("change_status/<str:bid>/", change_order_status, name="order-change-status"),
 ]

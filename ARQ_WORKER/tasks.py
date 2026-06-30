@@ -77,6 +77,20 @@ async def process_telegram_setup(ctx):
         
         logger.info(f"📦 Processing Telegram setup for {restaurant_name}")
         
+        # Check if already processed
+        lock_key = f"telegram:setup:lock:{restaurant_id}"
+
+        # acquire lock if it does not exist: setnx = "set if not exists"
+        lock_acquired = await redis_client.setnx(lock_key, "processing")
+        
+        if not lock_acquired:
+            logger.info(f"Setup for {restaurant_id} already in progress")
+            print(f"Setup for {restaurant_id} already in progress")
+            continue
+
+        # Set expiry to prevent deadlock
+        await redis_client.expire(lock_key, 300)  # 5 minutes
+
         for attempt in range(3):
             try:
                 result = await setup_restaurant_telegram(
@@ -99,6 +113,7 @@ async def process_telegram_setup(ctx):
                 )
                 
                 logger.info(f"✅ Setup complete for {restaurant_name}")
+                await redis_client.delete(lock_key)
                 break  # ← EXIT on success
                 
             except Exception as e:

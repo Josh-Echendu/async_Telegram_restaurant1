@@ -130,7 +130,7 @@
                 {% endif %}
                 
                 <!-- Kitchen Status Update -->
-                <form method="POST" action="" class="flex items-center gap-1.5">
+                <form method="POST" action="{% url 'useradmin:order-change-status' bid=batch.bid %}" class="flex items-center gap-1.5">
                     {% csrf_token %}
                     <select name="status" class="text-[10px] border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none">
                         <option value="pending" {% if batch.status == 'pending' %}selected{% endif %}>Pending</option>
