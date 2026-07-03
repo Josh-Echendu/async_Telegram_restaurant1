@@ -147,6 +147,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         grand_total = response.get('grand_total')
         kitchen_chat_id = response.get('kitchen_chat_id')
         waiter_telegram_id = response.get('waiter_telegram_id')
+        waiter_username = response.get('waiter_username')
         
         emoji = "💵" if payment_type == "cash" else "💳"
         method = "collect cash" if payment_type == "cash" else "with a POS machine"
@@ -176,18 +177,23 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for attempt in range(1, max_retries + 1):
             try:
                 if waiter_telegram_id:
+                    keyboard = [[InlineKeyboardButton("✅ Confirm Payment", callback_data=f"confirm_payment:{session_id}")]]
+    
+                    waiter_message = (
+                        f"💳 <b>PAYMENT REQUEST</b> 💳\n\n"
+                        f"Table: <code>{table}</code>\n"
+                        f"Subtotal: <b>₦{total:,}</b>\n"
+                        f"VAT(7.5%): <b>₦{vat_amount:,}</b>\n\n"
+                        f"Grand Total: <b>₦{grand_total:,}</b>\n\n"
+                        f"Method: {emoji} {payment_type.upper()}\n\n"
+                        f"👨‍💼 <i>Waiter, please proceed to Table {table}.</i>"
+                    )
+                    
                     await context.bot.send_message(
                         chat_id=waiter_telegram_id,
-                        text=(
-                            f"💳 <b>PAYMENT REQUEST</b> 💳\n\n"
-                            f"Table: <code>{table}</code>\n"
-                            f"Subtotal: <b>₦{total:,}</b>\n"
-                            f"VAT(7.5%): <b>₦{vat_amount:,}</b>\n\n"
-                            f"Grand Total: <b>₦{grand_total:,}</b>\n\n"
-                            f"Method: {emoji} {payment_type.upper()}\n\n"
-                            f"👨‍💼 <i>Waiter, please proceed to Table {table}.</i>"
-                        ),
-                        parse_mode="HTML"
+                        text=waiter_message,
+                        parse_mode="HTML",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
                     )
                     success = True
                     break
@@ -206,6 +212,19 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=update.effective_user.id,
                 text="⚠️ We're having trouble notifying staff. Please inform your waiter manually."
             )
+        
+        # 6. Start 5-minute escalation timer
+        asyncio.create_task(
+            escalate_payment_after_timeout(
+                context,
+                session_id,
+                waiter_id,
+                table,
+                grand_total_formatted,
+                payment_type,
+                kitchen_chat_id
+            )
+        )
     
 
 
