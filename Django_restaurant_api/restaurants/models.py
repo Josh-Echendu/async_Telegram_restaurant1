@@ -37,18 +37,6 @@ def resturant_image_path(instance, filename):
 #     table_number = models.CharField(max_length=10)
 #     is_active = models.BooleanField(default=True)
 
-SERVICE_MODE_CHOICES = (
-    ('dine_in', 'In-Restaurant Only'),
-    ('delivery', 'Delivery Only'),
-    ('both', 'Dine-in & Delivery'),
-)
-
-BUSINESS_TYPE = (
-    ("restaurant", "Restaurant"),
-    ("vendor", "Vendor"),
-    ("hotel", "Hotel"),
-)
-
 
 
     # | Feature         | Restaurant   | Food Vendor     |
@@ -122,6 +110,26 @@ VENDOR_TYPE_CHOICES = (
     ('goods', 'Goods Vendor'),
 )
 
+
+# models.py
+HOTEL_SERVICE_CHOICES = [
+    ('dine_in', 'Restaurant (Dine-in)'),
+    ('room_service', 'Room Service Only'),
+    ('both', 'Both Restaurant & Room Service'),
+]
+
+SERVICE_MODE_CHOICES = (
+    ('dine_in', 'In-Restaurant Only'),
+    ('delivery', 'Delivery Only'),
+    ('both', 'Dine-in & Delivery'),
+)
+
+BUSINESS_TYPE = (
+    ("restaurant", "Restaurant"),
+    ("vendor", "Vendor"),
+    ("hotel", "Hotel"),
+)
+
 class Restaurant(models.Model):
     rid = ShortUUIDField(unique=True, prefix='res', length=10, max_length=20, alphabet=ALPHABET, db_index=True)
     name = models.CharField(max_length=250)
@@ -136,11 +144,23 @@ class Restaurant(models.Model):
     )
 
     state = models.CharField(max_length=100, null=True, blank=True, 
-                             help_text="State or region where the restaurant is located"
+        help_text="State or region where the restaurant is located"
+    )
+
+    business_type = models.CharField(max_length=20, choices=BUSINESS_TYPE, db_index=True,
+        help_text="Type of business: Restaurant, Vendor, or Hotel", 
+    )
+
+    service_mode = models.CharField(max_length=20, choices=SERVICE_MODE_CHOICES, db_index=True,
+        help_text="Primary service mode of the business", blank=True, null=True
     )
 
     vendor_type = models.CharField(max_length=20, choices=VENDOR_TYPE_CHOICES, null=True, blank=True,
         help_text="Only applies to vendors. Cooked food vendors have a 15km delivery limit."
+    )
+
+    hotel_service_type = models.CharField(max_length=20, choices=HOTEL_SERVICE_CHOICES, blank=True, null=True,
+        help_text="Only applies to hotels. Determines if the hotel has a restaurant, room service, or both."
     )
 
     latitude = models.FloatField(null=True, blank=True)
@@ -200,20 +220,14 @@ class Restaurant(models.Model):
     delivery_chat_id = models.BigIntegerField(null=True, blank=True, 
         help_text="Telegram delivery group chat ID OR WhatsApp delivery group ID"
     )
-    service_mode = models.CharField(max_length=20, choices=SERVICE_MODE_CHOICES, db_index=True,
-        help_text="Primary service mode of the business", 
-    )
-    max_tables = models.PositiveSmallIntegerField(default=0, 
+
+    max_tables = models.PositiveSmallIntegerField(default=10, 
         help_text="Amount of tables a restaurant has for dine-in orders"
     )
     average_preparation_time = models.PositiveIntegerField(default=30, 
         help_text="Minutes - How long food usually takes before it is ready"
     )
     delivery_fee = models.DecimalField(max_digits=1000, decimal_places=2, default=0)
-
-    business_type = models.CharField(max_length=20, choices=BUSINESS_TYPE, db_index=True,
-        help_text="Type of business: Restaurant, Vendor, or Hotel", 
-    )
 
     timezone = models.CharField(max_length=50, default='Africa/Lagos',
         choices=[(tz, tz) for tz in pytz.common_timezones],
@@ -232,6 +246,82 @@ class Restaurant(models.Model):
         else:
             self.max_delivery_radius_km = None  # Unlimited for goods vendors
 
+        # ──────────────────────────────────────────────
+        # 1. VENDOR VALIDATION
+        # ──────────────────────────────────────────────
+        if self.business_type == "vendor":
+            
+            # Vendor must have vendor_type
+            if not self.vendor_type:
+                raise ValidationError({
+                    "vendor_type": "Vendor must choose a vendor type (Cooked Food or Goods)."
+                })
+
+            # Vendor is always delivery-only
+            self.service_mode = "delivery"
+            self.max_tables = 0
+
+            # Vendor must have delivery fee
+            if not self.delivery_fee or self.delivery_fee <= 0:
+                raise ValidationError({
+                    "delivery_fee": "Vendor must set a delivery fee."
+                })
+
+        # ──────────────────────────────────────────────
+        # 2. HOTEL VALIDATION
+        # ──────────────────────────────────────────────
+        if self.business_type == "hotel":
+            
+            if self.hotel_service_type == "dine_in":
+                self.service_mode = "dine_in"
+
+            elif self.hotel_service_type == "room_service":
+                self.service_mode = "delivery"
+
+            elif self.hotel_service_type == "both":
+                self.service_mode = "both"
+            
+            # Hotel must have a service type
+            if not self.hotel_service_type:
+                raise ValidationError({
+                    "hotel_service_type": "Hotel must choose a service type (Dine-in, Room Service, or Both)."
+                })
+
+            # Dine-in or Both → require tables
+            if self.hotel_service_type in ["dine_in", "both"]:
+                if not self.max_tables or self.max_tables < 1:
+                    raise ValidationError({
+                        "max_tables": "Hotel with dine-in service must have at least 1 table."
+                    })
+
+            # Room Service only → no tables needed
+            elif self.hotel_service_type == "room_service":
+                self.max_tables = 0
+
+        # ──────────────────────────────────────────────
+        # 3. RESTAURANT VALIDATION
+        # ──────────────────────────────────────────────
+        if self.business_type == "restaurant":
+            
+            # Service mode must be set
+            if not self.service_mode:
+                raise ValidationError({
+                    "service_mode": "Restaurant must choose a service mode (Dine-in, Delivery, or Both)."
+                })
+
+            # Dine-in or Both → require tables
+            if self.service_mode in ["dine_in", "both"]:
+                if not self.max_tables or self.max_tables < 1:
+                    raise ValidationError({
+                        "max_tables": "Restaurant with dine-in service must have at least 1 table."
+                    })
+
+            # Delivery only → no tables needed
+            elif self.service_mode == "delivery":
+                self.max_tables = 0
+
+
+
         # Normalize WhatsApp phone number
         if self.whatsapp_business_phone:
             if self.whatsapp_business_phone.startswith("+234"):
@@ -244,20 +334,7 @@ class Restaurant(models.Model):
                     clean_phone = '234' + clean_phone
                 if clean_phone:
                     self.whatsapp_business_phone = clean_phone
-
-        if self.business_type == "vendor":
-            self.max_tables = 0
-            if self.service_mode != "delivery":
-                self.service_mode = "delivery"
-
-        elif self.business_type == "restaurant":
-            if not self.service_mode:
-                raise ValidationError("Restaurant must choose a service mode")
-
-        elif self.business_type == "hotel":
-            self.service_mode = "dine_in"
-            self.max_tables = 0
-
+        
         # Capture old values BEFORE saving
         if self.pk:
             try:

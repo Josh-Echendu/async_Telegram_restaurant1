@@ -1,35 +1,21 @@
 # handlers/button_handler.py - EXACT COPY FROM ORIGINAL FILE
 from datetime import timezone, datetime
 from datetime import time
+import json
+import math
 from TELEGRAM_BOT_API.services.restaurant_cache import get_restaurant
-from .order_handler import choose_table
 from TELEGRAM_BOT_API.core.config import *
 from TELEGRAM_BOT_API.utils.cart_utils import *
 from TELEGRAM_BOT_API.utils.image_utils import *
 from TELEGRAM_BOT_API.utils.kitchen_utils import *
-from .kitchen_handler import api_get_user_order_batches, update_batch_table
+from .kitchen_handler import api_get_user_order_batches, handle_pos_cash_payment, update_batch_table
 from .dynamic_virtual import generate_dynamic_virtual_account
 from .echo_handler import payment_keyboard
 import pytz
+import math
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-
-
-EMOJI_NUMBERS = {
-    1: "1️⃣", 2: "2️⃣", 3: "3️⃣",
-    4: "4️⃣", 5: "5️⃣", 6: "6️⃣",
-    7: "7️⃣", 8: "8️⃣", 9: "9️⃣",
-    10: "🔟",
-    11: "1️⃣1️⃣",
-    12: "1️⃣2️⃣",
-    13: "1️⃣3️⃣",
-    14: "1️⃣4️⃣",
-    15: "1️⃣5️⃣",
-    16: "1️⃣6️⃣",
-    17: "1️⃣7️⃣",
-    18: "1️⃣8️⃣",
-    19: "1️⃣9️⃣",
-    20: "2️⃣0️⃣"
-}
+logger = logging.getLogger(__name__)
 
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -38,41 +24,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     print("Button clicked data:", data)
 
-    if data == 'bank_transfer':
-
-        await query.answer("Processing payment...")
-        await query.message.reply_text("⏳ Generating account...")
-        
-        virtual_account = await generate_dynamic_virtual_account(update, context)
-        if not virtual_account:
-            return None
-
-        # Define the new buttons you want to show
-        keyboard = [
-            [InlineKeyboardButton("Back ⬅️", callback_data='back_to_payment_menu')]
-        ]
-
-        bank = virtual_account.get('bank')
-        bank_account_name = virtual_account.get('account_name') or "FORKCO"
-        bank_account_number = virtual_account.get('account_number')
-
-        account_info = (
-            f"🏦 Bank: <b>{bank}</b>\n\n"
-            f"🔢 Account Number: <code>{bank_account_number}</code>\n\n"
-            f"👤 Account Name: <b>{bank_account_name}</b>"
-        )
-
-        await query.edit_message_text(
-            # chat_id=update.effective_chat.id,
-            text=f"📝 <b>Account Details</b>\n\n"
-                f"Please make your payment to the following account:\n\n"
-                f"{account_info}\n\n"
-                f"💡 Tap and hold the account number to copy.",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="HTML"
-        )
-        
-    elif data == "back_to_payment_menu":
+    if data == "back_to_payment_menu":
         # await query.message.delete()
 
         await query.edit_message_text(
@@ -106,87 +58,29 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Remove buttons completely after delivered
             await query.edit_message_reply_markup(reply_markup=None)
 
-    elif data.startswith("table_"):
-        user_id = update.effective_chat.id
 
-        user_session = await get_user_session(user_id)
-        table_number = user_session['table_number']
-        table_number_emoji = EMOJI_NUMBERS.get(table_number)
-
-        print("table_number emoji: ", table_number)
-
-        keyboard = [
-            [
-                InlineKeyboardButton("YES", callback_data="yes"),
-                InlineKeyboardButton("NO", callback_data="no"),
-            ]
-        ]
-
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await query.edit_message_text(
-            text=f"Are you sure you are on Table {table_number}? Please cross check your Table",
-            reply_markup=reply_markup
-        )
-
-    elif data == "yes":
-        await menu_keyboard(update, query)
-
-    elif data == "no":
-
-        user_session = await get_user_session(update.effective_user.id)
-        max_tables = user_session['max_tables']
-
-        keyboard = []
-        row = []
-
-        for i in range(1, max_tables + 1):
-            emoji = EMOJI_NUMBERS.get(i, str(i))  # fallback to normal number
-
-            button = InlineKeyboardButton(
-                text=emoji,
-                callback_data=f"table_{i}"
-            )
-
-            row.append(button)
-
-            if len(row) == 3:
-                keyboard.append(row)
-                row = []
-
-        if row:
-            keyboard.append(row)
-
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await query.edit_message_text(
-            text="Please select your correct table.",
-            reply_markup=reply_markup
-        )
 
     elif data == "order_dine_in":
         user_session = await get_user_session(update.effective_user.id)
         user_session['user_service_mode'] = 'dine_in'
+        user_session.pop('table_number', None)
         await save_user_session(update.effective_user.id, user_session)
 
         await query.answer("🍽️ Dine-in Menu 📜🍔 coming right up! 🎉")
+        await menu_keyboard(update, query)
 
-        business_type = user_session.get('business_type')
-        if business_type and business_type.lower() == 'hotel':
-            await menu_keyboard(update, query)
-            return
-        await choose_table(update, query)
 
     elif data == "order_delivery":
-        restaurant_data = await get_user_session(update.effective_user.id)
-        business_type = restaurant_data['business_type']
-        service_mode = restaurant_data['service_mode']
+        user_session = await get_user_session(update.effective_user.id)
+        business_type = user_session.get('business_type', '').lower()
+        service_mode = (user_session.get('service_mode') or "").lower()
         
-        # 🔥 Check delivery hours ONLY for restaurants that offer delivery
-        if service_mode.lower() in ['delivery', 'both']:
+        # 🔥 Check delivery hours ONLY for restaurants that offer delivery/both and for vendors
+        if service_mode in ['delivery', 'both'] and business_type != 'hotel':
             is_available, message = await is_delivery_available(update)
             
             if not is_available:
+                await query.answer("🚫 Delivery not available", show_alert=False)
                 await context.bot.send_message(
                     text=message,
                     chat_id=update.effective_user.id
@@ -194,28 +88,128 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return  # 🔥 IMPORTANT: Stop here, don't proceed
         
         # ✅ Only reach here if:
-        # - Business is VENDOR, OR
-        # - Restaurant AND delivery is available
-        user_session = await get_user_session(update.effective_user.id)
+        # - Business is HOTEL (room service), OR
+        # - Restaurant/Vendor AND delivery is available
         user_session['user_service_mode'] = 'delivery'
         user_session.pop('table_number', None)
-        
         await save_user_session(update.effective_user.id, user_session)
         
         await query.answer("🚚 Delivery Menu 📜🍔 coming right up! 🎉")
         await menu_keyboard(update, query)
 
+    
+    elif data == "bank_transfer":
+        user_id = update.effective_user.id
+        
+        redis_key = f"telegram_dine_user_session:{user_id}"
+        data = await redis_client.get(redis_key)
+        
+        if not data:
+            await update.message.reply_text("❌ No active order found. Please start a new order.")
+            return
+        
+        session_data = json.loads(data)
+        
+        session_id = session_data['session_id']
+        restaurant_id = session_data['restaurant_id']
+        platform = session_data['platform']
+        
+        PAYMENT_URL = f"{NGROK_DJANGO}/payments/{restaurant_id}/{platform}/{session_id}"
+        
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "💳 PAY NOW",
+                    web_app=WebAppInfo(url=PAYMENT_URL)
+                )
+            ]
+        ]
+        await query.edit_message_text(
+            text="💳 Click below to complete your payment:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
 
-    elif data == "pay_cash":
-        orders_batches = await api_get_user_order_batches(update)
-        pass
-    elif data == "pay_transfer":
-        orders_batches = await api_get_user_order_batches(update)
-        pass
-    elif data == "pay_cash":
-        orders_batches = await api_get_user_order_batches(update)
+    elif data in ["pay_cash", "pay_pos"]:
 
-        pass
+        payment_type = "cash" if data == "pay_cash" else "pos"
+        response = await handle_pos_cash_payment(update, payment_type)
+        
+        if not response:
+            await query.edit_message_text(
+                text="❌ Failed to process payment request. Please try again.",
+                parse_mode="HTML"
+            )
+            return
+        
+        table = response.get('table_number', 'N/A')
+        total = response.get('total', 0)
+        vat_amount = response.get('vat')
+        grand_total = response.get('grand_total')
+        kitchen_chat_id = response.get('kitchen_chat_id')
+        waiter_telegram_id = response.get('waiter_telegram_id')
+        
+        emoji = "💵" if payment_type == "cash" else "💳"
+        method = "collect cash" if payment_type == "cash" else "with a POS machine"
+        
+        # Customer message
+        message = (
+            f"✅ <b>Payment Request Sent!</b>\n\n"
+            f"📱 Please show this screen to your waiter.\n"
+            f"{emoji} Your waiter has been notified and will come to your table to {method}.\n\n"
+            f"Table: <code>{table}</code>\n"
+            f"Subtotal: <b>₦{total:,}</b>\n\n"
+            f"VAT(7.5%): <b>₦{vat_amount:,}</b>\n\n"
+            f"Grand Total: <b>₦{grand_total:,}</b>\n\n"
+            f"⏳ <i>Payment pending... Waiting for waiter confirmation.</i>\n\n"
+            f"Thank you for dining with us! 🍽️"
+        )
+        
+        await query.edit_message_text(
+            text=message,
+            parse_mode="HTML"
+        )
+
+        # Staff group notification
+        max_retries = 3
+        success = False
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                if waiter_telegram_id:
+                    await context.bot.send_message(
+                        chat_id=waiter_telegram_id,
+                        text=(
+                            f"💳 <b>PAYMENT REQUEST</b> 💳\n\n"
+                            f"Table: <code>{table}</code>\n"
+                            f"Subtotal: <b>₦{total:,}</b>\n"
+                            f"VAT(7.5%): <b>₦{vat_amount:,}</b>\n\n"
+                            f"Grand Total: <b>₦{grand_total:,}</b>\n\n"
+                            f"Method: {emoji} {payment_type.upper()}\n\n"
+                            f"👨‍💼 <i>Waiter, please proceed to Table {table}.</i>"
+                        ),
+                        parse_mode="HTML"
+                    )
+                    success = True
+                    break
+
+            except Exception as e:
+                logger.error(f"Attempt {attempt} failed to send payment notification: {e}")
+                if attempt < max_retries:
+                    wait_time = 2 ** attempt  # 2, 4, 8 seconds (exponential backoff)
+                    logger.info(f"Retrying in {wait_time} seconds...")
+                    await asyncio.sleep(wait_time)
+
+        # If all attempts failed
+        if not success:
+            logger.error(f"All {max_retries} attempts failed to send payment notification.")
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                text="⚠️ We're having trouble notifying staff. Please inform your waiter manually."
+            )
+    
+
+
+
 
 async def is_delivery_available(update):
     user_session = await get_user_session(update.effective_user.id)
@@ -284,29 +278,22 @@ async def is_delivery_available(update):
     return True, "Delivery available"
 
 
+
 async def menu_keyboard(update, query):
     user_session = await get_user_session(update.effective_user.id)
     
     restaurant_id = user_session['current_rid']
     user_service_mode = user_session['user_service_mode']
-    table_number = user_session.get('table_number')
-    business_type = (user_session.get('business_type') or "").lower()
 
-    platform = "telegram"  # or "whatsapp", depending on the platform
-    if user_service_mode == 'dine_in':
-        if business_type == 'hotel':
-            WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode=dine_in&platform={platform}"
-        else:
-            WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode=dine_in&table={table_number}&platform={platform}"
+    platform = "telegram"
 
-    elif user_service_mode == 'delivery':
-        WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode=delivery&platform={platform}"
-    else:
-        WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?platform={platform}"
+    # Build URL with mode and platform
+    WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode={user_service_mode}&platform={platform}"
+
     reply_keyboard = [
         [
             InlineKeyboardButton(
-                text="Open Mini Restaurant App (🍔🍟🌭🍕)",
+                text="🍔 Open Menu",
                 web_app=WebAppInfo(url=WEB_APP_URL),
             )
         ]
@@ -315,7 +302,6 @@ async def menu_keyboard(update, query):
     markup = InlineKeyboardMarkup(reply_keyboard)
 
     await query.edit_message_text(
-        text="Please click the menu button to see our meals :",
+        text="📋 Please click the button below to view our menu and place your order:",
         reply_markup=markup
     )
-

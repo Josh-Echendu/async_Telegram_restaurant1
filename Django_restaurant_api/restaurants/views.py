@@ -78,6 +78,8 @@ def get_restaurant_internal(request, platform, rid=None):
         "open_time": open_time,
         "close_time": close_time,
         "time_zone": restaurant.timezone,
+        "vendor_type": restaurant.vendor_type,
+        "hotel_service_type": restaurant.hotel_service_type,
         "is_closed": delivery_opening_hours.is_closed if delivery_opening_hours else None,
 
         # WhatsApp Specifics

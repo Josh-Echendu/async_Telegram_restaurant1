@@ -553,12 +553,15 @@ def dine_in_order_details(request, session_id, restaurant_id=None):
         restaurant=restaurant,
         service_mode='dine_in'
     )
+
+    print("total_batch_priceQWE: ", session.total_batch_price)
+    
+    subtotal = session.total_batch_price or 0
     
     batches = []
     for batch in session.session_batches.all():
         items = []
         for item in batch.items.all():
-
             items.append({
                 'product': item.product,
                 'price': item.price,
@@ -573,14 +576,24 @@ def dine_in_order_details(request, session_id, restaurant_id=None):
             'payment_status': batch.payment_status,
             'notified_kitchen': batch.notified_kitchen,
             'notified_user': batch.notified_user,
-            'bank_charges': session.bank_fee
+            'bank_charges': session.bank_fee,
+            'subtotal': subtotal
         })
     
     print("batches: ", batches)
+    
+    # Calculate grand total (subtotal + VAT + bank fee)
+    vat_amount = session.vat_amount or 0
+    bank_fee = session.bank_fee or 0
+    grand_total = subtotal + vat_amount + bank_fee
+    
     context = {
         'order': session,
         'batches': batches,
-        'vat_amount': session.vat_amount or 0,
+        'subtotal': subtotal,  # ✅ Add this
+        'vat_amount': vat_amount,  # ✅ Already there
+        'grand_total': grand_total,  # ✅ Add this
+        'bank_fee': bank_fee,  # ✅ Add this
     }
     return render(request, 'useradmin/dine_in_order_details.html', context)
 
@@ -812,6 +825,9 @@ def update_bot_settings(request, restaurant_id=None):
 
     if not bot_username:
         return JsonResponse({'error': 'bot_username is required.'}, status=400)
+
+    if not bot_username.startswith('@') or not bot_username.endswith(('_bot', 'Bot')):
+        return JsonResponse({'error': 'bot_username must start with @ or end with _bot or Bot'}, status=400)
     
     if not bot_token:
         return JsonResponse({'error': 'bot_token is required.'}, status=400)
@@ -939,6 +955,7 @@ metaoauthhandshake_api_view = MetaOauthHandshakeView.as_view()
 
 @admin_required
 @require_POST
+@transaction.atomic
 def change_order_status(request, bid, restaurant_id=None):
 
     restaurant = get_admin_restaurant(request, restaurant_id)

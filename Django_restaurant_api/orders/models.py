@@ -21,6 +21,8 @@ KITCHEN_STATUS_CHOICES = (
 PAYMENT_STATUS_CHOICES = (
     ('unpaid', 'Unpaid'),
     ('paid', 'Paid'),
+    ('pending_cash', '⏳ Pending Cash'),
+    ('pending_pos', '⏳ Pending POS'),
 )
 
 TRANSACTION_TYPE = (
@@ -223,17 +225,13 @@ BANK_CHOICES = (
 class CheckoutSession(models.Model):
     from restaurants.models import DineInOTPSession
 
-    session_id = ShortUUIDField(unique=True, length=20, alphabet=ALPHABET, prefix='ses')
+    session_id = ShortUUIDField(unique=True, length=35, alphabet=ALPHABET, prefix='ses')
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, null=True, related_name='restaurant_session', db_index=True)
     telegram_user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, null=True, related_name='telegram_session', db_index=True)
     dine_session = models.ForeignKey(DineInOTPSession, on_delete=models.CASCADE, null=True, blank=True, related_name='dine_session', db_index=True)
 
-
     transaction_reference = models.CharField(max_length=100, unique=True, null=True, blank=True)
     transaction_type = models.CharField(max_length=100, choices=TRANSACTION_TYPE, null=True)
-
-    # Food cost only
-    total_price = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal('0.00'), null=True, blank=True)
     
     # What customer pays dine_in (subtotal + vat + bank_fee) or if delivery(subtotal + vat + delivery_fee + bank_fee)
     expected_amount = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal('0.00'), null=True, blank=True)
@@ -243,7 +241,6 @@ class CheckoutSession(models.Model):
 
     # Delivery fee
     delivery_fee = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal('0.00'), null=True, blank=True)
-
 
     # What actually landed (from webhook)
     amount_received = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal('0.00'), null=True, blank=True)
@@ -370,6 +367,7 @@ class OrderBatchItem(models.Model):
             return mark_safe(f'<img src="{self.product.image.url}" width="50" height="50" />')
         return "No Image"
     
+    @property  # ← Add this decorator
     def multiply_price(self):
         return self.quantity * self.price
     

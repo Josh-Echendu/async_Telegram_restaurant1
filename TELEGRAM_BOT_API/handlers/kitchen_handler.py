@@ -140,13 +140,15 @@ async def update_batch_table(batch_id, status, restaurant_id, query=None, max_re
                 return None
             await asyncio.sleep(1)
             
+            
 async def api_get_user_order_batches(update, max_retries=3):
     user_id = update.effective_user.id
     user_session = await get_user_session(user_id)
-    restaurant_id = user_session['current_rid']
+    restaurant_id = user_session.get('current_rid')
+    platform = "telegram"
     print("restuarant 123: ", restaurant_id)
 
-    url = f"http://web:8000/api/user_batch_list/{user_id}/{restaurant_id}/"
+    url = f"http://web:8000/api/user_batch_list/{user_id}/{restaurant_id}/{platform}/"
 
     for attempt in range(1, max_retries + 1):
         try:
@@ -176,6 +178,50 @@ async def api_get_user_order_batches(update, max_retries=3):
                 except ValueError:
                     logging.error("Invalid JSON returned for 404 response")
                     return None
+            logging.warning(f"Attempt {attempt} failed: {e}")
+
+        except (httpx.RequestError, ValueError, Exception) as e:
+            logging.warning(f"Attempt {attempt} failed: {e}")
+
+        if attempt < max_retries:
+            await asyncio.sleep(1)
+
+    logging.error(f"All {max_retries} attempts failed to get order batches from DB.")
+    return None
+
+
+async def handle_pos_cash_payment(update, payment_type, max_retries=3):
+    user_id = update.effective_user.id
+    user_session = await get_user_session(user_id)
+    restaurant_id = user_session.get('current_rid')
+    print("restuarant 123: ", restaurant_id)
+
+    payload = {
+        "telegram_id": user_id,
+        "restaurant_id": restaurant_id,
+        "platform": "telegram",
+        "payment_type": payment_type
+    }  
+
+    url = f"http://web:8000/payments/api/handle-payment-selection/"
+    
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(url, headers={"Content-Type": "application/json"}, json=payload)
+                resp.raise_for_status()
+
+                data = resp.json()
+                print("data: ", data)
+
+                if resp.status_code in (200, 201):
+                    return data.get('data')
+
+                logging.warning(f"Unexpected response {resp.status_code} → {data}")
+                return None
+
+        except httpx.HTTPStatusError as e:
+            # Handle 404 separately
             logging.warning(f"Attempt {attempt} failed: {e}")
 
         except (httpx.RequestError, ValueError, Exception) as e:

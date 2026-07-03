@@ -44,13 +44,16 @@ async def handle_telegram_update(ctx, update_data: dict, restaurant: dict):
             "business_type": restaurant["business_type"],
             "service_mode": restaurant["service_mode"],
             "max_tables": restaurant["max_tables"],
+            "hotel_service_type": restaurant["hotel_service_type"],
+            "vendor_type": restaurant['vendor_type'],
+            "hotel_service_type": restaurant['hotel_service_type'],
             "time_zone": restaurant["time_zone"],
         })
 
 
-        if update.callback_query and update.callback_query.data.startswith("table_"):
-            table_number = update.callback_query.data.replace("table_", "")
-            user_session["table_number"] = table_number
+        # if update.callback_query and update.callback_query.data.startswith("table_"):
+        #     table_number = update.callback_query.data.replace("table_", "")
+        #     user_session["table_number"] = table_number
 
         await save_user_session(user_id, user_session)
 

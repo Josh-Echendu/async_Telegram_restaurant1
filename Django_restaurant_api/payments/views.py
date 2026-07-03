@@ -1,11 +1,14 @@
 import json
 import logging
+from sys import platform
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from decimal import Decimal
+
+from django.conf import settings
 
 from .service import pos_payment_amounts, verify_vpay_webhook
 from orders.models import CheckoutSession, OrderBatch
@@ -19,6 +22,8 @@ from .models import POSConfig
 from django.db.models import OuterRef, Subquery, Sum, Value, F
 from decimal import Decimal, ROUND_HALF_UP
 import math
+from .service import calculate_payment_amounts, generate_transaction_reference, get_vpay_public_key
+
 
 from .services.moniepoint import moniepoint_push_payment
 from .services.opay import opay_push_and_wait      # When ready
@@ -26,16 +31,13 @@ from .services.palmpay import palmpay_push_and_wait    # When ready
 
 
 logger = logging.getLogger(__name__)
-
-
-
 import time
 import json
 import logging
 from django.utils import timezone
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.views import APIView
 
@@ -44,6 +46,10 @@ from orders.models import CheckoutSession
 from .service import verify_vpay_webhook
 
 logger = logging.getLogger(__name__)
+
+
+import redis
+redis_client = redis.Redis.from_url(settings.REDIS_URL)
 
 
 class VPayWebhookAPIView(APIView):
@@ -120,6 +126,18 @@ class VPayWebhookAPIView(APIView):
                     updated_count = OrderBatch.objects.filter(
                         checkout_session=session
                     ).update(payment_status='paid')
+
+
+                # Remove the user's active session from Redis
+                if session.platform == 'telegram':
+                    redis_key = f"telegram_dine_user_session:{session.telegram_user.telegram_id}"
+                elif session.platform == 'whatsapp':
+                    redis_key = f"whatsapp_dine_user_session:{session.telegram_user.whatsapp_id}"
+                else:
+                    redis_key = None
+
+                if redis_key:
+                    redis_client.delete(redis_key)
 
                 logger.info(
                     f"Session {session.session_id} marked as paid. "
@@ -359,3 +377,260 @@ class HandlePOSAPIView(APIView):
                 else:
                     last_error = result["error"] or "Palmpay push failed"
                     continue
+
+
+from django.db import transaction, IntegrityError
+
+
+def save_session_with_unique_reference(session, max_retries=3):
+    """Save session with retry on transaction_reference collision."""
+    
+    for attempt in range(max_retries):
+        try:
+            session.transaction_reference = generate_transaction_reference(session.session_id)
+            session.save(update_fields=['transaction_reference'])
+            return session
+        except IntegrityError:
+            if attempt == max_retries - 1:
+                raise
+            # Generate a new reference and retry
+            continue
+    return session
+
+
+
+
+def dine_in_paymentview(request, restaurant_id, session_id, platform):
+    """
+    Handles dine-in payment. Uses session_id from URL to get user and order.
+    """
+    
+    print("Request received for dine-in payment view: ", restaurant_id, session_id, platform)
+
+    # 1. Get restaurant
+    restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
+    
+    # 2. Get session from database (not Redis)
+    session = CheckoutSession.objects.filter(
+        restaurant=restaurant,
+        session_id=session_id,
+        service_mode='dine_in',
+        is_active=True,
+        payment_status='unpaid',
+        platform=platform,
+    ).first()
+
+    print("session: ", session)
+    
+    if not session:
+        return HttpResponseBadRequest(
+            "No active dine-in checkout session found.",
+            status=400
+        )
+    
+    # 3. User is already linked to the session
+    user = session.telegram_user
+    
+    # 4. Verify membership (optional, but good practice)
+    membership_exists = RestaurantMembership.objects.filter(
+        user=user,
+        restaurant=restaurant,
+    ).exists()
+    
+    if not membership_exists:
+        return render(request, "restaurant/payment_error.html", {
+            "error": "User not linked to this restaurant."
+        }, status=400)
+    
+    # 5. Calculate payment amounts
+    total_price = session.session_batches.aggregate(total=Sum('total_price'))['total'] or 0
+    amounts = calculate_payment_amounts(total_price, 'dine_in', restaurant)
+    batches = session.session_batches.filter(payment_status='unpaid').order_by('-id')
+    
+    # 6. Generate transaction reference
+    session.payment_in_progress = True
+    session.save(update_fields=['payment_in_progress'])
+    
+    context = {
+        "session": session,
+        "transaction_reference": session.transaction_reference,
+        "public_key": get_vpay_public_key(),
+        "vpay_domain": settings.VPAY_DOMAIN,
+
+        # ✅ Use the calculated amounts directly
+        "vat_amount": amounts['vat'],
+        "grand_total": amounts['grand_total'],
+        "card_total": amounts['card_total'],
+        "transfer_total": amounts['transfer_total'],
+        "card_fee": amounts['card_fee'],
+        "transfer_fee": amounts['transfer_fee'],
+        
+        # ✅ Also pass total_price separately
+        "total_price": total_price,
+        "batches": batches,
+
+    }
+    
+    return render(request, "restaurant/dine_in_payment.html", context)
+        
+
+
+class CreatePaymentSessionAPIView(APIView):
+    """
+    API endpoint for mini-app to create payment session.
+    Expects: session_id, payment_method (card/transfer)
+    Returns: VPay data
+    """
+    
+    def post(self, request):
+        try:
+            session_id = request.data.get('session_id')
+            payment_method = request.data.get('payment_method')
+            
+            if not session_id or not payment_method:
+                return Response(
+                    {'error': 'Missing session_id or payment_method'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get session
+            session = get_object_or_404(CheckoutSession, session_id=session_id)
+            
+            # Calculate amounts
+            total_price = session.session_batches.aggregate(total=Sum('total_price'))['total'] or 0
+            amounts = calculate_payment_amounts(total_price, 'dine_in', session.restaurant)
+            
+            final_amount=None
+            bank_fee=None
+
+            # Set values based on payment method
+            if payment_method == 'card':
+                final_amount = amounts['card_total']
+                bank_fee = amounts['card_fee']
+            else:  # transfer
+                final_amount = amounts['transfer_total']
+                bank_fee = amounts['transfer_fee']
+            
+            # Save to session
+            session.vat_amount = amounts['vat']
+            session.expected_amount = final_amount
+            session.bank_fee = bank_fee
+            session.transaction_type = payment_method
+            
+            # Generate transaction reference
+            session = save_session_with_unique_reference(session)
+            session.payment_in_progress = True
+            session.save()
+            
+            # Return VPay data
+            return Response({
+                'success': True,
+                'transaction_reference': session.transaction_reference,
+                'public_key': get_vpay_public_key(),
+                'final_amount': final_amount,
+                'vpay_domain': settings.VPAY_DOMAIN,
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+create_payment_session = CreatePaymentSessionAPIView.as_view()
+
+
+import math
+from decimal import Decimal
+
+class HandlePaymentSelection(APIView):
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        
+        telegram_id = request.data.get('telegram_id')
+        whatsapp_id = request.data.get('whatsapp_id')
+        restaurant_id = request.data.get('restaurant_id')
+        platform = (request.data.get('platform') or "").lower()
+        payment_type = (request.data.get('payment_type') or "").lower()
+
+        if not (telegram_id or whatsapp_id) or restaurant_id is None or payment_type is None:
+            return Response({"error": "Missing telegram_id or whatsapp_id or restaurant_id or payment_type in path"}, status=400)
+
+        if platform not in ['telegram', 'whatsapp']:
+            return Response({"error": "Invalid platform. Must be 'telegram' or 'whatsapp'"}, status=400)
+        
+        if payment_type not in ['pos', 'cash']:
+            return Response({"error": "Invalid payment type. Must be 'pos' or 'cash'"}, status=400)
+
+        restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
+
+        if platform == 'telegram':
+            user = get_object_or_404(TelegramUser, telegram_id=telegram_id) # request.user is set by TelegramAuthentication to be the telegram_id
+            print("telegram user: ", user)
+
+        if platform == 'whatsapp':
+            user = get_object_or_404(TelegramUser, whatsapp_id=whatsapp_id) # request.user is set by TelegramAuthentication to be the whatsapp_id
+            print("whatsapp user: ", user)
+
+        membership_exists = RestaurantMembership.objects.filter(
+            user=user,
+            restaurant=restaurant
+        ).exists()
+        
+        if not membership_exists:
+            return Response(
+                {"error": "User not linked to this restaurant"},
+                status=404
+            )
+
+        session = (
+            CheckoutSession.objects
+            .select_related("restaurant", "dine_session")
+            .filter(telegram_user=user, restaurant=restaurant, is_active=True, service_mode='dine_in')
+            .order_by('-date_created')            
+            .first()
+        )
+
+        if not session: return Response({"error": "Session not found", "message": "You have no active session, please order some items."}, status=404)
+
+        if payment_type == 'cash':
+            session.payment_status = "pending_cash"
+
+        elif payment_type == 'pos':
+            session.payment_status = "pending_pos"
+
+        final_amount = session.session_batches.filter(payment_status='unpaid').aggregate(total=Sum('total_price'))['total'] or Decimal('0.00')
+        final_amount = final_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+        session.expected_amount=final_amount
+        session.vat_amount = math.ceil(final_amount * Decimal('0.075'))
+        session.payment_in_progress=True
+
+        # ✅ Get the last order in this session
+        last_order = OrderBatch.objects.filter(checkout_session=session).latest('date_created')
+
+        if not last_order:
+            return Response({"error": "No orders found in this session"}, status=400)
+
+
+        data = {
+            "table_number": last_order.dine_in_table_number,
+            "total": final_amount,
+            "vat": session.vat_amount,
+            "grand_total": math.ceil(final_amount + session.vat_amount),
+            "kitchen_chat_id": session.restaurant.kitchen_chat_id,
+            "waiter_telegram_id": session.dine_session.waiter_telegram_id,
+            "waiter_username": session.dine_session.waiter_username,
+        }
+
+        print("cash and pos data: ", data)
+
+        return Response({
+            "success": True,
+            "message": f"Payment type set to {payment_type} for session {session.session_id}",
+            "data": data},
+        status=201
+        )
+        
+handle_payment_selection = HandlePaymentSelection.as_view()

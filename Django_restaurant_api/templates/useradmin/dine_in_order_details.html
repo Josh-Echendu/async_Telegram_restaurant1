@@ -194,19 +194,19 @@
         <div class="max-w-xs ml-auto space-y-2">
             <div class="flex justify-between text-sm">
                 <span class="text-gray-500">Subtotal</span>
-                <span class="font-medium">₦{{ order.total_batch_price|intcomma }}</span>
+                <span class="font-medium">₦{{ subtotal|default:0|intcomma }}</span>
             </div>
             <div class="flex justify-between text-sm">
                 <span class="text-gray-500">VAT (7.5%)</span>
-                <span class="font-medium text-amber-600">₦{{ vat_amount|intcomma }}</span>
+                <span class="font-medium text-amber-600">₦{{ vat_amount|default:0|intcomma }}</span>
             </div>
             <div class="flex justify-between text-sm">
-                <span class="text-gray-500">bank fee</span>
-                <span class="font-medium text-amber-600">₦{{ order.bank_fee|intcomma }}</span>
+                <span class="text-gray-500">Bank Fee</span>
+                <span class="font-medium text-amber-600">₦{{ bank_fee|default:0|intcomma }}</span>
             </div>
             <div class="border-t border-gray-200 pt-2 flex justify-between text-base font-bold">
-                <span>Total</span>
-                <span>₦{{ order.expected_amount|default:0|intcomma }}</span>
+                <span>Grand Total</span>
+                <span>₦{{ grand_total|default:0|intcomma }}</span>
             </div>
             {% if order.amount_received %}
             <div class="flex justify-between text-sm">
@@ -217,6 +217,6 @@
         </div>
     </div>
 
-</div>
+    </div>
 
 {% endblock %}
