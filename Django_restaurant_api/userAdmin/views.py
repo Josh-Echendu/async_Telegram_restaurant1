@@ -699,7 +699,6 @@ def update_account_settings(request, restaurant_id=None):
 @admin_required
 @require_POST
 @transaction.atomic
-@admin_required
 @require_POST
 def update_business_settings(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
@@ -862,7 +861,9 @@ def update_bot_settings(request, restaurant_id=None):
             "service_mode": restaurant.service_mode
         }
         r = redis.Redis.from_url(settings.REDIS_URL)
-        r.lpush("telegram:setup", json.dumps(task_data))
+
+        # PUSH TO REDIS STREAMS AND Keep ONLY THE last 100 messages
+        r.xadd("telegram:setup", task_data, maxlen=100, approximate=True)
         logger.info(f"📦 Telegram setup queued for {restaurant.name}")
     
     return JsonResponse({'success': True})

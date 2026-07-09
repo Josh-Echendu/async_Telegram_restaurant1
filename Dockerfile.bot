@@ -35,3 +35,9 @@ COPY TELEGRAM_BOT_API/ /app/
 EXPOSE 8080
 
 CMD ["./entrypoint_bot.sh"]
+
+# # Give execution permission to the script inside its actual directory
+# RUN chmod +x /app/TELEGRAM_BOT_API/entrypoint_bot.sh
+
+# # Update CMD to point to the correct path
+# CMD ["/app/TELEGRAM_BOT_API/entrypoint_bot.sh"]

@@ -1,5 +1,5 @@
 from tasks import handle_whatsapp_update, handle_telegram_update, process_telegram_setup, notify_telegram_payment_request, notify_whatsapp_payment_confirmed
-from COMMON.redis import redis_settings
+from COMMON.redis import redis_settings, redis_client
 import asyncio
 import logging
 from COMMON.logger_config import *
@@ -24,6 +24,28 @@ async def startup(ctx):
 
     except Exception as e:
         logger.exception(f"❌ Redis error: {e}")
+
+    
+    try:
+        await redis_client.xgroup_create(
+            name="telegram:setup",
+            groupname="telegram_workers",
+            id="0",
+            mkstream=True,
+        )
+
+        logger.info(
+            "Created telegram consumer group."
+        )
+
+    except Exception as e:
+
+        if "BUSYGROUP" not in str(e):
+            raise
+
+        logger.info(
+            "Telegram consumer group already exists."
+        )
 
     # # Browser
     # try:

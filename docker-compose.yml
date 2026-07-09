@@ -429,6 +429,8 @@ services:
       - ./sessions:/app/sessions  # ← Mounts ./sessions on your PC to /app/sessions in container
       - ./ARQ_WORKER:/app/ARQ_WORKER
       - ./TELEGRAM_BOT_API:/app/TELEGRAM_BOT_API
+      - ./FACEBOOK_BOT_API:/app/FACEBOOK_BOT_API
+      - ./INSTAGRAM_BOT_API:/app/INSTAGRAM_BOT_API
     
     depends_on:
       redis:

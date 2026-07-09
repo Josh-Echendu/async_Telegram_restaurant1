@@ -12,6 +12,8 @@ from COMMON.redis import redis_client
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Bot, Update
 from COMMON.config import *
 from COMMON.logger_config import *
+import asyncio
+import socket
 
 
 
@@ -57,75 +59,259 @@ async def handle_telegram_update(ctx, update_data: dict, restaurant: dict):
 
 
 
+
+
+
+
 # ARQ_WORKER/tasks.py - Add this function
-async def process_telegram_setup(ctx):
-    """
-    ARQ task that continuously processes telegram setup requests
-    """    
-    while True:
-        _, data = await redis_client.brpop('telegram:setup')
-        task = json.loads(data)
-        
-        restaurant_id = task['restaurant_id']
-        restaurant_name = task['restaurant_name']
-        bot_username = task['bot_username']
-        owner_telegram_id = task['owner_telegram_id']
-        service_mode = (task['service_mode'] or "").lower()
-        owner_name = task.get('owner_name', 'Restaurant Owner')
-        
-        logger.info(f"📦 Processing Telegram setup for {restaurant_name}")
-        
-        # Check if already processed
-        lock_key = f"telegram:setup:lock:{restaurant_id}"
+STREAM_NAME = "telegram:setup"
+GROUP_NAME = "telegram_workers"
+MAX_ATTEMPTS = 2
 
-        # acquire lock if it does not exist: setnx = "set if not exists"
-        lock_acquired = await redis_client.setnx(lock_key, "processing")
+# ------------------------------------------------------------------
+# Process one stream message
+# ------------------------------------------------------------------
+
+async def process_stream_message(message_id: str, task: dict):
+
+    restaurant_id = task["restaurant_id"]
+    restaurant_name = task["restaurant_name"]
+    bot_username = task["bot_username"]
+    owner_telegram_id = task["owner_telegram_id"]
+    owner_name = task.get("owner_name", "Restaurant Owner")
+    service_mode = (task.get("service_mode") or "").lower()
+
+    # Track attempts for this specific message
+    attempt_key = f"telegram:setup:attempts:{message_id}"
+    attempt_count = await redis_client.get(attempt_key)
+    
+    if attempt_count is None:
+        attempt_count = 1
+    else:
+        attempt_count = int(attempt_count) + 1
+    
+    # Store attempt count with 1 hour expiry
+    await redis_client.setex(attempt_key, 3600, attempt_count)
+
+    # If exceeded max attempts, give up and cleanup
+    if attempt_count > MAX_ATTEMPTS:
+        logger.warning(
+            "Task exceeded max attempts (%s) for restaurant %s, giving up",
+            MAX_ATTEMPTS,
+            restaurant_name
+        )
         
-        if not lock_acquired:
-            logger.info(f"Setup for {restaurant_id} already in progress")
-            continue
+        # XACK to remove from pending list
+        # await redis_client.xack(STREAM_NAME, GROUP_NAME, message_id)
+        await redis_client.xdel(STREAM_NAME, message_id)  # Delete from Redis entirely
 
-        # Set expiry to prevent deadlock
-        await redis_client.expire(lock_key, 300)  # 5 minutes
+        
+        # Push failure result
+        await redis_client.lpush(
+            "telegram:setup:results",
+            json.dumps({
+                "restaurant_id": restaurant_id,
+                "status": "failed",
+                "error": f"Max retries exceeded ({MAX_ATTEMPTS} attempts)",
+                "attempts": attempt_count,
+                "restaurant_name": restaurant_name
+            })
+        )
+        
+        # Clean up attempt counter
+        await redis_client.delete(attempt_key)
+        
+        logger.info(
+            "Cleaned up task after %s failures for restaurant %s",
+            MAX_ATTEMPTS,
+            restaurant_name
+        )
+        return
 
-        for attempt in range(3):
+    logger.info(
+        "Processing Telegram setup | Restaurant=%s | Attempt=%s/%s",
+        restaurant_name,
+        attempt_count,
+        MAX_ATTEMPTS
+    )
+
+    lock_key = f"telegram:setup:lock:{restaurant_id}"
+
+    lock_acquired = await redis_client.setnx(lock_key, "processing")
+
+    if not lock_acquired:
+        logger.info(
+            "Setup already running for restaurant %s",
+            restaurant_id,
+        )
+        return
+
+    await redis_client.expire(lock_key, 300)
+
+    try:
+
+        # Internal retry loop (3 attempts per worker pickup)
+        for retry_attempt in range(3):
+
             try:
+
+                logger.info(
+                    "Processing Telegram setup | Restaurant=%s | Retry=%s/3",
+                    restaurant_name,
+                    retry_attempt + 1,
+                )
+
                 result = await setup_restaurant_telegram(
                     restaurant_name=restaurant_name,
                     bot_username=bot_username,
                     owner_telegram_id=owner_telegram_id,
                     owner_name=owner_name,
-                    service_mode=service_mode
+                    service_mode=service_mode,
                 )
-                
-                # ✅ Success
+
+                # --------------------------------------------------
+                # SUCCESS
+                # --------------------------------------------------
+
+                # XACK = "I finished this job."
+                await redis_client.xack(STREAM_NAME, GROUP_NAME, message_id)
+
+                # Push success result
                 await redis_client.lpush(
                     "telegram:setup:results",
-                    json.dumps({
-                        "restaurant_id": restaurant_id,
-                        "service_mode": service_mode,
-                        "result": result,
-                        "status": "success"
-                    })
-                )
-                
-                logger.info(f"✅ Setup complete for {restaurant_name}")
-                await redis_client.delete(lock_key)
-                break  # ← EXIT on success
-                
-            except Exception as e:
-                logger.exception(f"❌ Setup attempt {attempt + 1} failed for {restaurant_name}: {e}")
-                
-                if attempt == 2:
-                    # ❌ Failed after 3 attempts
-                    await redis_client.lpush(
-                        "telegram:setup:results",
-                        json.dumps({
+                    json.dumps(
+                        {
                             "restaurant_id": restaurant_id,
-                            "status": "failed",
-                            "error": str(e)
-                        })
+                            "status": "success",
+                            "service_mode": service_mode,
+                            "result": result,
+                            "attempts": attempt_count,
+                        }
+                    ),
+                )
+
+                # Clean up attempt counter on success
+                await redis_client.delete(attempt_key)
+
+                logger.info(
+                    "Telegram setup completed | Restaurant=%s",
+                    restaurant_name,
+                )
+
+                return
+
+            except Exception as exc:
+
+                logger.exception(
+                    "Retry %s/3 failed for %s",
+                    retry_attempt + 1,
+                    restaurant_name,
+                )
+
+                if retry_attempt == 2:
+                    # All 3 internal retries failed
+                    # Update attempt count for next worker pickup
+                    await redis_client.setex(attempt_key, 3600, attempt_count)
+                    
+                    logger.warning(
+                        "All 3 retries exhausted for restaurant %s, will be picked up by another worker",
+                        restaurant_name
                     )
+                    
+                    # DO NOT XACK.
+                    # Leave it pending so XAUTOCLAIM can recover it.
+
+    finally:
+
+        await redis_client.delete(lock_key)
+
+
+# ------------------------------------------------------------------
+# Main Worker
+# ------------------------------------------------------------------
+
+async def process_telegram_setup(ctx):
+
+    consumer_name = socket.gethostname()
+
+    logger.info("Starting Telegram Setup Worker: %s", consumer_name)
+
+    while True:
+
+        try:
+
+            # =====================================================
+            # STEP 1
+            # Recover abandoned jobs first
+            # =====================================================
+
+            recovered_data = await redis_client.xautoclaim(
+                STREAM_NAME,
+                GROUP_NAME,  # This is the team of workers
+                consumer_name,  # Which worker is taking ownership?
+                min_idle_time=60000,  # Redis will only recover jobs that have been idle for at least 60 seconds.
+                start_id="0-0",  # "Start scanning from the beginning of the pending list."
+                count=1,  # Recover at most 1 abandoned job at a time.
+            )
+            
+            next_start = recovered_data[0]
+            recovered_messages = recovered_data[1]  # List of (message_id, fields_dict) tuples
+            deleted = recovered_data[2]
+
+            if recovered_messages:
+
+                logger.info(
+                    "Recovered %s abandoned Telegram setup jobs",
+                    len(recovered_messages),
+                )
+
+                for message_id, task in recovered_messages:
+
+                    logger.info("Processing recovered message: %s", message_id)
+
+                    await process_stream_message(message_id, task)
+                    await asyncio.sleep(1)  # Small gap between recovered jobs
+
+                continue
+
+            # =====================================================
+            # STEP 2
+            # Wait for NEW jobs
+            # =====================================================
+
+            messages = await redis_client.xreadgroup(
+                groupname=GROUP_NAME,
+                consumername=consumer_name,
+                streams={STREAM_NAME: ">"},  # ">" means: Give me messages that have NEVER been delivered to ANY worker.
+                count=1,  # one task per worker
+                block=5000,  # wait for 5 seconds
+            )
+
+            if not messages:
+                continue
+
+            # Process each message
+            for stream_name, stream_messages in messages:
+
+                for message_id, task in stream_messages:
+
+                    logger.info("Processing new message: %s", message_id)
+                    await process_stream_message(message_id, task)
+
+        except Exception as e:
+
+            logger.exception(
+                "Telegram Stream Worker crashed: %s",
+                str(e)
+            )
+
+            await asyncio.sleep(5)
+
+
+
+# ✅ Success → XACK
+# ❌ Temporary failure (network timeout, Telegram API down, worker crash) → leave it pending so it can be retried or reclaimed.
+# ❌ Permanent failure (bad data that will never succeed) → either move it to a dead-letter stream and XACK, or record it as permanently failed, depending on your system's design.
 
 async def handle_whatsapp_update(ctx, update_data: dict, raw_payload: bytes, signature: str, restaurant: dict):
     """
