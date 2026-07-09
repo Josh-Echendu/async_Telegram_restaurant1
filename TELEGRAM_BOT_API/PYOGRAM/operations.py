@@ -1,4 +1,4 @@
-from .config_file import app, RATE_LIMIT_DELAY, logger
+from .config_file import *
 from pyrogram.enums import ChatType, ChatMemberStatus
 from pyrogram.errors import FloodWait, RPCError
 import asyncio
@@ -17,7 +17,7 @@ async def establish_bot_contact(bot_username: str):
             await asyncio.sleep(RATE_LIMIT_DELAY)
             logger.info(f"✅ Contact established with {bot_username}")
         except Exception as e:
-            logger.error(f"❌ Failed to establish contact: {e}")
+            logger.exception(f"❌ Failed to establish contact: {e}")
             raise
 
 
@@ -34,7 +34,7 @@ async def create_telegram_group(group_name: str, description: str = ""):
             logger.info(f"✅ Group created: {group.id}, GROUP_data:{group}")
             return {"groupid": group.id, "title": group.title}
         except Exception as e:
-            logger.error(f"❌ Failed to create group: {e}")
+            logger.exception(f"❌ Failed to create group: {e}")
             raise
 
 
@@ -50,14 +50,12 @@ async def add_member_to_group(group_id: int, member_id: str):
             await asyncio.sleep(RATE_LIMIT_DELAY)
             logger.info(f"✅ Added {member_id} to group")
         except Exception as e:
-            logger.error(f"❌ Failed to add member: {e}")
+            logger.exception(f"❌ Failed to add member: {e}")
             raise
 
 
 async def promote_to_admin(group_id: int, member_id: int | str, is_hidden: bool = False):
     logger.info(f"Promoting {member_id} to admin in group {group_id}")
-    logger.info(type(member_id))
-    logger.info(repr(member_id))
 
     async with app:
         try:
@@ -102,7 +100,7 @@ async def send_test_message(group_id: int, message: str):
             await app.send_message(group_id, message)
             logger.info(f"✅ Test message sent")
         except Exception as e:
-            logger.error(f"❌ Failed to send message: {e}")
+            logger.exception(f"❌ Failed to send message: {e}")
             raise
 
 
@@ -115,7 +113,7 @@ async def leave_group(group_id: int):
     async with app:
         try:
             await app.leave_chat(group_id)
-            logger.info(f"✅ Admin left group {group_id}")
+            logger.info(f"✅ Admin left group: {group_id}")
         except Exception as e:
-            logger.error(f"❌ Failed to leave group: {e}")
+            logger.exception(f"❌ Failed to leave group: {e}")
             raise

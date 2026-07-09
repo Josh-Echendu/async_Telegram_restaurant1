@@ -134,26 +134,6 @@ class AuthToken(models.Model):
             expires_at=timezone.now() + timedelta(minutes=5),
         )
 
-# class TelegramUser(models.Model):
-#     telegram_id = models.BigIntegerField(unique=True, db_index=True)
-#     first_name = models.CharField(max_length=100, blank=True)
-#     username = models.CharField(max_length=100, blank=True)
-#     is_active = models.BooleanField(default=True)
-    
-#     # Create timestamp, and Set once when the row is first inserted
-#     date_created = models.DateTimeField(auto_now_add=True)
-    
-#     # Updated every time .save() is called
-#     updated_at = models.DateTimeField(auto_now=True)
-
-#     def __str__(self):
-#         return str(self.telegram_id)
-    
-#     class Meta:
-#         indexes = [
-#             models.Index(fields=["telegram_id"]),
-#         ]
-
 
 
 # | Field          | True → Meaning            | False → Meaning                     |

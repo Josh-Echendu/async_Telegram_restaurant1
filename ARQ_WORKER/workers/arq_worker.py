@@ -1,30 +1,29 @@
-from tasks import handle_whatsapp_update, handle_telegram_update, process_whatsapp_messages, process_telegram_setup  
+from tasks import handle_whatsapp_update, handle_telegram_update, process_telegram_setup, notify_telegram_payment_request, notify_whatsapp_payment_confirmed
 from COMMON.redis import redis_settings
 import asyncio
 import logging
+from COMMON.logger_config import *
 
 import os
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 async def startup(ctx):
-    print("🚀 STARTUP CALLED")
+    logger.info("🚀 STARTUP CALLED")
     logger.info("🚀 STARTUP CALLED — launching WhatsApp processor")
-    print("🚀 STARTUP CALLED — launching WhatsApp processor")  # This should print to stdout
+    logger.info("🚀 STARTUP CALLED — launching WhatsApp processor")  # This should print to stdout
     
     try:
         # Test Redis connection
         await ctx['redis'].ping()
-        print("✅ Redis connected")
-        asyncio.create_task(process_whatsapp_messages(ctx))
+        logger.info("✅ Redis connected")
+        # asyncio.create_task(process_whatsapp_messages(ctx))
 
         asyncio.create_task(process_telegram_setup(ctx))
-        print("✅ Telegram Setup connected")
+        logger.info("✅ Telegram Setup connected")
 
     except Exception as e:
-        print(f"❌ Redis error: {e}")
+        logger.exception(f"❌ Redis error: {e}")
 
     # # Browser
     # try:
@@ -57,7 +56,10 @@ async def startup(ctx):
 
 
 class WorkerSettings:
-    functions = [handle_whatsapp_update, handle_telegram_update]
+    functions = [
+                handle_whatsapp_update, handle_telegram_update, 
+                notify_telegram_payment_request, notify_whatsapp_payment_confirmed
+            ]
 
     # ✅ This is the missing piece - register the startup function
     on_startup = startup  # <-- ADD THIS
@@ -80,5 +82,5 @@ class WorkerSettings:
 
     # ✅ Add this to debug
     def __init__(self):
-        print("🔧 WorkerSettings initialized")
-        print(f"   on_startup = {self.on_startup}")
+        logger.info("🔧 WorkerSettings initialized")
+        logger.info(f"   on_startup = {self.on_startup}")

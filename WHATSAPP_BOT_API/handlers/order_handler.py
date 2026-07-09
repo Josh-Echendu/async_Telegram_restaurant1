@@ -1,37 +1,49 @@
 # handlers/order_handler.py - CONVERTED TO PYWA
 from WHATSAPP_BOT_API.core.config import *
-from pywa import WhatsApp
-from .start_handler import logger_whatsapp
-from pywa.types import Button, Message
 
 
+async def order_meal(client: WhatsApp, btn):
+    user_session = await get_user_session(btn.from_user.wa_id)
 
-async def order_meal(client: WhatsApp, msg: Message):
-    await logger_whatsapp(client, msg)
-    
-    # 1. Use .wa_id for session and identification
-    user_id = msg.from_user.wa_id
-    user_session = await get_user_session(user_id)
-    
-    # Use .get() with defaults to prevent KeyErrors if session is empty
-    service_mode = user_session.get('service_mode').lower()
-    business_type = user_session.get('business_type').lower()
+    service_mode = (user_session.get("service_mode") or "").lower()
+    business_type = (user_session.get("business_type") or "").lower()
 
     buttons = []
-    
+
+    # 🟢 Vendor → always delivery only
     if business_type == "vendor":
-        buttons.append(Button(title="🚚 Delivery", callback_data="order_delivery"))
-    else:
-        # Check for Dine-in
-        if service_mode in ["dine_in", "both"]:
-            buttons.append(Button(title="🍽️ Dine-in", callback_data="order_dine_in"))
-        
-        # Check for Delivery
-        if service_mode in ["delivery", "both"]:
-            buttons.append(Button(title="🚚 Delivery", callback_data="order_delivery"))
-    
-    # 2. Use .reply() helper — it's faster and cleaner than client.send_message
-    await msg.reply(
-        body="How would you like to order today? 🍔",
+
+        buttons = [
+            Button(title="🚚 Delivery", callback_data="order_delivery")
+        ]
+
+    # 🟡 Restaurant → depends on service_mode
+    elif business_type == "restaurant":
+
+        if service_mode == "dine_in":
+            buttons = [
+                Button(title="🍽️ Dine-in", callback_data="order_dine_in")
+            ]
+
+        elif service_mode == "delivery":
+            buttons = [
+                Button(title="🚚 Delivery", callback_data="order_delivery")
+            ]
+
+        elif service_mode == "both":
+            buttons = [
+                Button(title="🍽️ Dine-in", callback_data="order_dine_in"),
+                Button(title="🚚 Delivery", callback_data="order_delivery")
+            ]
+
+    # ❌ No options available
+    if not buttons:
+        await btn.reply(
+            text="❌ Ordering is not available for your business type. Please contact support."
+        )
+        return
+
+    await btn.reply(
+        text="How would you like to order ? 🍔",
         buttons=buttons
     )

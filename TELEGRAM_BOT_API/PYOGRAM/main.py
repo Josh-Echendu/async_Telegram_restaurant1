@@ -2,10 +2,10 @@ from .operations import (
     establish_bot_contact, create_telegram_group, add_member_to_group,
     promote_to_admin, send_test_message, leave_group
 )
-from .config_file import logger, ADMIN_USER_ID
+from .config_file import ADMIN_USER_ID
 from datetime import datetime
 from typing import Dict, Any
-
+from TELEGRAM_BOT_API.core.config import *
 
 async def helpers_func(group_id, group, bot_username, owner_telegram_id, restaurant_name, owner_name, service_mode):
     try:
@@ -49,7 +49,7 @@ async def helpers_func(group_id, group, bot_username, owner_telegram_id, restaur
         return True
 
     except Exception as e:
-        logger.error(f"❌ helpers_func failed for group {group_id}: {e}")
+        logger.exception(f"❌ helpers_func failed for group {group_id}: {e}")
         return False
 
 async def setup_restaurant_telegram(
@@ -121,7 +121,7 @@ async def setup_restaurant_telegram(
         return result
         
     except Exception as e:
-        logger.error(f"❌ Setup failed for {restaurant_name}: {e}")
+        logger.exception(f"❌ Setup failed for {restaurant_name}: {e}")
         
         if service_mode in ['dine_in', 'both']:
             # Clean up if group was created
@@ -133,6 +133,7 @@ async def setup_restaurant_telegram(
                     pass
 
         if service_mode in ['delivery', 'both']:
+            
             # Clean up if group was created
             if 'delivery_group_id' in locals() and delivery_group_id: 
                 try:

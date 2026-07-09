@@ -147,7 +147,7 @@ def process_telegram_setup_results_worker(self):
     while True:
         try:
             # Block and wait for results (with timeout)
-            result_data = r.brpop("telegram:setup:results", timeout=5)
+            result_data = r.brpop("telegram:setup:results")
 
             if result_data:
                 _, data = result_data

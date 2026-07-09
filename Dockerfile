@@ -25,6 +25,9 @@ RUN uv pip install --system --no-cache -r requirements.txt
 # Copy project files
 COPY Django_restaurant_api/ .
 
+# Copy shared package
+COPY COMMON /app/COMMON
+
 EXPOSE 8000
 
 CMD ["./entrypoint.sh"]

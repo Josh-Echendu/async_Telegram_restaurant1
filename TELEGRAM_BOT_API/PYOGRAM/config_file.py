@@ -1,4 +1,3 @@
-import logging
 import asyncio
 from typing import Dict, Any, Optional
 from pyrogram import Client
@@ -8,6 +7,7 @@ import random
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 from COMMON.config import SESSION_STRING, API_HASH, API_ID, PHONE_NUMBER, ADMIN_USER_ID
+from TELEGRAM_BOT_API.core.config import *
 
 
 
@@ -16,21 +16,7 @@ RATE_LIMIT_DELAY = 2  # Seconds between API calls
 
 
 
-# Suppress Pyrogram logs
-logging.getLogger("pyrogram").setLevel(logging.WARNING)
-logging.getLogger("pyrogram.connection").setLevel(logging.WARNING)
-logging.getLogger("pyrogram.session").setLevel(logging.WARNING)
-logging.getLogger("pyrogram.dispatcher").setLevel(logging.WARNING)
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
 from COMMON.config import SESSION_STRING
-print("joshuaaaaa: ", repr(SESSION_STRING))
 
 # Create Pyrogram client (shared across all functions)
 app = Client(

@@ -8,21 +8,23 @@ from TELEGRAM_BOT_API.core.config import *
 from TELEGRAM_BOT_API.utils.cart_utils import *
 from TELEGRAM_BOT_API.utils.image_utils import *
 from TELEGRAM_BOT_API.utils.kitchen_utils import *
-from .kitchen_handler import api_get_user_order_batches, handle_pos_cash_payment, update_batch_table
+from .kitchen_handler import api_get_user_order_batches, handle_pos_cash_payment, update_batch_table, save_pos_and_cash_payment
 from .dynamic_virtual import generate_dynamic_virtual_account
 from .echo_handler import payment_keyboard
 import pytz
 import math
+import secrets
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-logger = logging.getLogger(__name__)
 
+def get_dine_session_key(platform: str, user_id: str) -> str:
+        return f"{platform}_dine_user_session:{user_id}"
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
     user_id = update.effective_user.id
-    print("Button clicked data:", data)
+    logger.info("Button clicked data: %s", data)
 
     if data == "back_to_payment_menu":
         # await query.message.delete()
@@ -33,14 +35,187 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
+
+    elif data.startswith("confirm-payment_"):
+        payment_key = data.split('_')[1]
+        customer_user_id = data.split('_')[-1]
+
+        query = update.callback_query
+        await query.answer()
+
+        # ✅ Fetch from Redis
+        payment_data = await redis_client.get(f"payment:{payment_key}")
+        logger.info("payment data: %s", payment_data)
+        
+        if not payment_data:
+            await query.edit_message_text("❌ This payment request has expired.")
+            return
+        
+        payment_data =  json.loads(payment_data)
+        
+        # Show confirmation question
+        await query.edit_message_text(
+            text="🤔 Are you sure the user has paid?\n\n"
+                f"Table: {payment_data['table']}\n"
+                f"Total: ₦{payment_data['grand_total']:,}\n"
+                "⚠️ This action cannot be undone.",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("✅ Yes, Confirm Payment", callback_data=f"confirm-yes_{payment_key}_{customer_user_id}"),
+                    InlineKeyboardButton("❌ No, Go Back", callback_data=f"confirm-no_{payment_key}_{customer_user_id}")
+                ]
+            ]),
+            parse_mode="HTML"
+        )
+
+
+    elif data.startswith("confirm-no_"):
+        # payment_key = data.replace("confirm_no_", "")
+
+        payment_key = data.split('_')[1]
+        customer_user_id = data.split('_')[-1]
+        
+        query = update.callback_query
+        await query.answer()
+
+        # ✅ Fetch from Redis
+        payment_data = await redis_client.get(f"payment:{payment_key}")
+        
+        if not payment_data:
+            await query.edit_message_text("❌ This payment request has expired.")
+            return
+        
+        payment_data = json.loads(payment_data)
+
+        # 🔙 Go back to original confirm button
+        waiter_message = (
+            f"💳 <b>PAYMENT REQUEST</b> 💳\n\n"
+            f"Table: <code>{payment_data.get('table')}</code>\n"
+            f"Subtotal: <b>₦{payment_data.get('total'):,}</b>\n"
+            f"VAT(7.5%): <b>₦{payment_data.get('vat_amount'):,}</b>\n\n"
+            f"Grand Total: <b>₦{payment_data.get('grand_total'):,}</b>\n\n"
+            f"Method: {payment_data.get('emoji')} {payment_data.get('payment_type').upper()}\n\n"
+            f"👨‍💼 <i>Waiter, please proceed to Table {payment_data.get('table')}.</i>"
+        )
+
+        await query.edit_message_text(
+            text=waiter_message,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Confirm Payment", callback_data=f"confirm-payment_{payment_key}_{customer_user_id}")]
+            ]),
+            parse_mode="HTML"
+        )
+
+    elif data.startswith("confirm-yes_"):
+        payment_key = data.split("_")[1]
+        customer_user_id = data.split('_')[-1]
+
+        query = update.callback_query
+        await query.answer()
+
+        # ✅ Fetch from Redis (WITH AWAIT)
+        payment_data = await redis_client.get(f"payment:{payment_key}")
+        
+        if not payment_data:
+            await query.edit_message_text("❌ This payment request has expired.")
+            return
+        
+        payment_data = json.loads(payment_data)
+        
+        # ✅ Get session_id from Redis (WITH AWAIT + JSON parse)
+        customer_platform = (payment_data.get('customer_platform') or "").lower()
+
+        if customer_platform == 'telegram':
+            redis_key = f"telegram_dine_user_session:{customer_user_id}"
+        
+        elif customer_platform == 'whatsapp': 
+            redis_key = f"whatsapp_dine_user_session:{customer_user_id}"
+        
+        else:
+            logger.error(
+                "Unknown customer platform '%s' for payment %s",
+                customer_platform,
+                payment_key,
+            )
+
+        session_data_raw = await redis_client.get(redis_key)
+        
+        if not session_data_raw:
+            await query.edit_message_text(
+                "❌ No active session found.\n"
+                "Please start a new order."
+            )
+            return
+        
+        session_data = json.loads(session_data_raw)
+        session_id = session_data.get('session_id')
+
+        if not session_id:
+            await query.edit_message_text(
+                "❌ Invalid session. Please try again."
+            )
+            return
+
+        # ✅ Call the API to mark as paid
+        result = await save_pos_and_cash_payment(update, payment_data.get('payment_type'), session_id)
+
+        # ✅ Waiter that clicked the confirm payment Button
+        waiter_in_charge = update.effective_user.username or update.effective_user.first_name
+        
+        if result:
+            await query.edit_message_text(
+                text="✅ <b>Payment Confirmed!</b>\n\n"
+                    f"Table: {payment_data['table']}\n"
+                    f"Subtotal: ₦{payment_data['total']:,}\n"
+                    f"VAT: ₦{payment_data['vat_amount']:,}\n"
+                    f"Grand Total: <b>₦{payment_data['grand_total']:,}</b>\n\n"
+                    f"👨‍💼 Waiter: @{waiter_in_charge}\n"
+                    f"✅ Status: Paid",
+                reply_markup=None,
+                parse_mode="HTML"
+            )
+
+            if customer_platform == 'telegram':
+                    
+                # ✅ Send receipt to customer
+                await context.bot.send_message(
+                    chat_id=customer_user_id,
+                    text=(
+                        f"✅ <b>Payment Confirmed!</b>\n\n"
+                        f"Table: {payment_data['table']}\n"
+                        f"Total: <b>₦{payment_data['grand_total']:,}</b>\n\n"
+                        f"Thank you for dining with us! 🍽️"
+                    ),
+                    parse_mode="HTML"
+                )
+
+            elif customer_platform == 'whatsapp':
+
+                restaurant_id = payment_data.get('restaurant_id')
+
+                arq = await get_arq_redis()
+
+                await arq.enqueue_job(
+                    "notify_whatsapp_payment_confirmed",
+                    customer_user_id=customer_user_id,
+                    restaurant_id=restaurant_id,
+                    table=payment_data["table"],
+                    grand_total=payment_data["grand_total"],
+                    _queue_name="restaurant_jobs",
+                )
+
+            
+            # ✅ Delete from Redis
+            await redis_client.delete(f"payment:{payment_key}")
+            await redis_client.delete(redis_key)
+            
+
     elif data.startswith("processing_"):
         status = 'processing'
         batch_id = data.split("_")[1]
         restuarant_id = data.split("_")[2]
         user_session = await get_user_session(update.effective_user.id)
         current_restaurant_id = user_session.get('current_rid')
-        print("processing restuarant_id: ", restuarant_id)
-        print("current_rid restuarant_id ptb: ", current_restaurant_id)
 
         updated = await update_batch_table(batch_id, status, restuarant_id, query)
         if updated:
@@ -76,7 +251,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         service_mode = (user_session.get('service_mode') or "").lower()
         
         # 🔥 Check delivery hours ONLY for restaurants that offer delivery/both and for vendors
-        if service_mode in ['delivery', 'both'] and business_type != 'hotel':
+        if service_mode in ['delivery', 'both']:
             is_available, message = await is_delivery_available(update)
             
             if not is_available:
@@ -133,6 +308,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         payment_type = "cash" if data == "pay_cash" else "pos"
         response = await handle_pos_cash_payment(update, payment_type)
+        customer_user_id = update.effective_chat.id
         
         if not response:
             await query.edit_message_text(
@@ -176,9 +352,33 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         for attempt in range(1, max_retries + 1):
             try:
-                if waiter_telegram_id:
-                    keyboard = [[InlineKeyboardButton("✅ Confirm Payment", callback_data=f"confirm_payment:{session_id}")]]
-    
+                if kitchen_chat_id:
+
+                    # Generate a short unique ID for this payment
+                    payment_key = secrets.token_hex(8)  # 16 characters
+
+                    # Store all data in Redis
+                    await redis_client.setex(
+                        f"payment:{payment_key}", 
+                        86400,  # 24 hours expiry
+                        json.dumps({
+                            'table': table,
+                            'total': total,
+                            'vat_amount': vat_amount,
+                            'grand_total': grand_total,
+                            'payment_type': payment_type,
+                            'emoji': emoji,
+                            'waiter_telegram_id': waiter_telegram_id,
+                            'waiter_username': waiter_username,
+                            'kitchen_chat_id': kitchen_chat_id,
+                            "customer_platform": "telegram",
+                            "customer_user_id": customer_user_id,
+                        })
+                    )
+
+                    # Send message with ONLY the short key in callback
+                    keyboard = [[InlineKeyboardButton("✅ Confirm Payment", callback_data=f"confirm-payment_{payment_key}_{customer_user_id}")]]
+                    
                     waiter_message = (
                         f"💳 <b>PAYMENT REQUEST</b> 💳\n\n"
                         f"Table: <code>{table}</code>\n"
@@ -188,9 +388,9 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"Method: {emoji} {payment_type.upper()}\n\n"
                         f"👨‍💼 <i>Waiter, please proceed to Table {table}.</i>"
                     )
-                    
+
                     await context.bot.send_message(
-                        chat_id=waiter_telegram_id,
+                        chat_id=kitchen_chat_id,
                         text=waiter_message,
                         parse_mode="HTML",
                         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -212,23 +412,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=update.effective_user.id,
                 text="⚠️ We're having trouble notifying staff. Please inform your waiter manually."
             )
-        
-        # 6. Start 5-minute escalation timer
-        asyncio.create_task(
-            escalate_payment_after_timeout(
-                context,
-                session_id,
-                waiter_id,
-                table,
-                grand_total_formatted,
-                payment_type,
-                kitchen_chat_id
-            )
-        )
-    
-
-
-
+            
 
 async def is_delivery_available(update):
     user_session = await get_user_session(update.effective_user.id)
@@ -236,8 +420,7 @@ async def is_delivery_available(update):
     
     # ✅ ALWAYS fetch fresh restaurant data (cache TTL is 5 minutes)
     restaurant_data = await get_restaurant(restaurant_id)
-    print("restaurant_data: ", restaurant_data)
-    print(f"Fetching fresh restaurant data for {restaurant_id}")
+    logger.info("restaurant_data: %s", restaurant_data)
     
     if not restaurant_data:
         return False, "Restaurant data unavailable. Please try again."
@@ -247,7 +430,7 @@ async def is_delivery_available(update):
     close_time_str = restaurant_data['close_time']
     is_closed = restaurant_data['is_closed']
 
-    print(f"Fresh restaurant data for {restaurant_id}: open={open_time_str}, close={close_time_str}, closed={is_closed}")
+    logger.info(f"Fresh restaurant data for {restaurant_id}: open={open_time_str}, close={close_time_str}, closed={is_closed}")
 
     try:
         # convert string("Africa/Lagos") to timezone object using pytz class: <class 'pytz.tzfile.Africa/Lagos'>

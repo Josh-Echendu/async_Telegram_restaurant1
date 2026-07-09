@@ -1,7 +1,6 @@
 import os
 from dotenv import load_dotenv
 from pathlib import Path
-import logging
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -21,11 +20,7 @@ ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")
 
 
 
-# whatsapp verify token
+# whatsapp verify token and app secret
 VERIFY_TOKEN = os.getenv('META_VERIFY_TOKEN')
-
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+APP_SECRET = os.getenv('META_APP_SECRET')
 

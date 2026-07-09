@@ -493,10 +493,10 @@ class CreatePaymentSessionAPIView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Get session
-            session = get_object_or_404(CheckoutSession, session_id=session_id)
+            # ✅ Get session directly
+            session = get_object_or_404(CheckoutSession, session_id=session_id, is_active=True, service_mode='dine_in')
             
-            # Calculate amounts
+            # ✅ Calculate amounts
             total_price = session.session_batches.aggregate(total=Sum('total_price'))['total'] or 0
             amounts = calculate_payment_amounts(total_price, 'dine_in', session.restaurant)
             
@@ -511,13 +511,13 @@ class CreatePaymentSessionAPIView(APIView):
                 final_amount = amounts['transfer_total']
                 bank_fee = amounts['transfer_fee']
             
-            # Save to session
+            #✅ Save to session
             session.vat_amount = amounts['vat']
             session.expected_amount = final_amount
             session.bank_fee = bank_fee
             session.transaction_type = payment_method
             
-            # Generate transaction reference
+            # ✅ Generate transaction reference
             session = save_session_with_unique_reference(session)
             session.payment_in_progress = True
             session.save()
@@ -540,81 +540,44 @@ class CreatePaymentSessionAPIView(APIView):
 create_payment_session = CreatePaymentSessionAPIView.as_view()
 
 
-import math
-from decimal import Decimal
-
 class HandlePaymentSelection(APIView):
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         
-        telegram_id = request.data.get('telegram_id')
-        whatsapp_id = request.data.get('whatsapp_id')
-        restaurant_id = request.data.get('restaurant_id')
-        platform = (request.data.get('platform') or "").lower()
+        session_id = request.data.get('session_id')
         payment_type = (request.data.get('payment_type') or "").lower()
 
-        if not (telegram_id or whatsapp_id) or restaurant_id is None or payment_type is None:
-            return Response({"error": "Missing telegram_id or whatsapp_id or restaurant_id or payment_type in path"}, status=400)
-
-        if platform not in ['telegram', 'whatsapp']:
-            return Response({"error": "Invalid platform. Must be 'telegram' or 'whatsapp'"}, status=400)
+        if not session_id:
+            return Response({"error": "Missing session_id"}, status=400)
         
         if payment_type not in ['pos', 'cash']:
             return Response({"error": "Invalid payment type. Must be 'pos' or 'cash'"}, status=400)
 
-        restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
+        # ✅ Get session directly
+        session = get_object_or_404(CheckoutSession, session_id=session_id, is_active=True, service_mode="dine_in")
 
-        if platform == 'telegram':
-            user = get_object_or_404(TelegramUser, telegram_id=telegram_id) # request.user is set by TelegramAuthentication to be the telegram_id
-            print("telegram user: ", user)
-
-        if platform == 'whatsapp':
-            user = get_object_or_404(TelegramUser, whatsapp_id=whatsapp_id) # request.user is set by TelegramAuthentication to be the whatsapp_id
-            print("whatsapp user: ", user)
-
-        membership_exists = RestaurantMembership.objects.filter(
-            user=user,
-            restaurant=restaurant
-        ).exists()
-        
-        if not membership_exists:
-            return Response(
-                {"error": "User not linked to this restaurant"},
-                status=404
-            )
-
-        session = (
-            CheckoutSession.objects
-            .select_related("restaurant", "dine_session")
-            .filter(telegram_user=user, restaurant=restaurant, is_active=True, service_mode='dine_in')
-            .order_by('-date_created')            
-            .first()
-        )
-
-        if not session: return Response({"error": "Session not found", "message": "You have no active session, please order some items."}, status=404)
-
+        # ✅ Session already has user, restaurant, everything
         if payment_type == 'cash':
-            session.payment_status = "pending_cash"
-
+            session.transaction_type = "cash"
         elif payment_type == 'pos':
-            session.payment_status = "pending_pos"
+            session.transaction_type = "pos"
 
-        final_amount = session.session_batches.filter(payment_status='unpaid').aggregate(total=Sum('total_price'))['total'] or Decimal('0.00')
+        final_amount = session.session_batches.filter(payment_status='unpaid').aggregate(
+            total=Sum('total_price')
+        )['total'] or Decimal('0.00')
         final_amount = final_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-        session.expected_amount=final_amount
+        session.expected_amount = final_amount
         session.vat_amount = math.ceil(final_amount * Decimal('0.075'))
-        session.payment_in_progress=True
+        session.payment_in_progress = True
+        session.save()
 
-        # ✅ Get the last order in this session
-        last_order = OrderBatch.objects.filter(checkout_session=session).latest('date_created')
-
-        if not last_order:
-            return Response({"error": "No orders found in this session"}, status=400)
-
+        # ✅ Get table number from latest order
+        last_order = session.session_batches.latest('date_created')
 
         data = {
+            "session_id": session.session_id,
             "table_number": last_order.dine_in_table_number,
             "total": final_amount,
             "vat": session.vat_amount,
@@ -624,13 +587,83 @@ class HandlePaymentSelection(APIView):
             "waiter_username": session.dine_session.waiter_username,
         }
 
-        print("cash and pos data: ", data)
-
         return Response({
             "success": True,
             "message": f"Payment type set to {payment_type} for session {session.session_id}",
-            "data": data},
-        status=201
-        )
+            "data": data
+        }, status=201)
+
+handle_payment_selection_api_view = HandlePaymentSelection.as_view()
+
+
+class SavePosCashAPIView(APIView):
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        try:
+            session_id = request.data.get('session_id')
+            waiter_id = request.data.get('waiter_in_charge')
+            payment_method = request.data.get('payment_method')
+
+            if not session_id:
+                return Response({"error": "Missing session_id"}, status=400)
+            
+            # ✅ Get session directly
+            session = get_object_or_404(
+                CheckoutSession.objects.select_related('dine_session'),
+                session_id=session_id, 
+                is_active=True, 
+                service_mode='dine_in', 
+                payment_in_progress=True
+            )
+
+            if payment_method == 'cash':
+                session.transaction_type = 'cash'
+
+            elif payment_method == 'pos':
+                session.transaction_type = 'pos'
+
+            # ✅ Mark as paid
+            session.payment_status = 'paid'
+            session.amount_received = session.expected_amount
+            session.payment_in_progress = False  # ✅ FIXED: Should be False
+            session.is_active = False
+            session.waiter_for_payment = waiter_id
+            session.paid_at = timezone.now()
+
+            session.save(update_fields=[
+                'payment_status', 
+                'amount_received', 
+                'payment_in_progress',
+                'waiter_for_payment',
+                'is_active',
+                'paid_at',
+                "transaction_type"
+            ])
+
+            # ✅ Update related dine_session separately
+            if session.dine_session:
+                session.dine_session.status = 'expired'
+                session.dine_session.save(update_fields=['status'])
+
+            data = {
+                "payment_status": 'paid',
+                "amount_received": session.amount_received,
+                "payment_in_progress": False,
+            }
+
+            # ✅ Send payment notification message here using a cron job
+            
+            return Response({
+                "success": True,
+                "message": f"Payment status set to Paid for session {session.session_id}",
+                "data": data
+            }, status=201)
         
-handle_payment_selection = HandlePaymentSelection.as_view()
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+save_pos_cash_api_view = SavePosCashAPIView.as_view()

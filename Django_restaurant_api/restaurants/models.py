@@ -388,11 +388,15 @@ class Restaurant(models.Model):
     def get_telegram_deep_url(self):
         return f"https://t.me/{self.bot_username}" if self.bot_username else None
 
-    def get_whatsapp_deep_url_or_clean_phone(self, terminal=None):
+    def get_whatsapp_deep_url_or_clean_phone(self, deep_url=None):
         if not self.whatsapp_business_phone:
             return None
         
-        if self.whatsapp_business_phone.startswith("+234"):
+        if self.whatsapp_business_phone.startswith("+234") and deep_url:
+            phone_number = self.whatsapp_business_phone.strip()
+            return f"https://wa.me/{phone_number}?text=start"
+
+        elif self.whatsapp_business_phone.startswith("+234"):
             return self.whatsapp_business_phone.strip()
         
         clean_phone = ''.join(filter(str.isdigit, self.whatsapp_business_phone))
@@ -402,7 +406,10 @@ class Restaurant(models.Model):
         elif not clean_phone.startswith('234') and len(clean_phone) == 10:
             clean_phone = '234' + clean_phone
 
-        if clean_phone:
+        if deep_url and clean_phone:
+            return f"https://wa.me/{clean_phone}?text=start"
+
+        elif clean_phone:
             return clean_phone
 
     def restaurant_image(self):
@@ -431,8 +438,10 @@ def manage_restaurant_webhook(sender, instance, created, **kwargs):
 
     vendor_type = (instance.vendor_type or "").lower()
     service_mode = (instance.service_mode or "").lower()
+    business_type = (instance.business_type or "").lower()
 
-    if vendor_type == 'cooked_food' or service_mode == 'both':       
+    if vendor_type == 'cooked_food' or (business_type == 'restaurant' and service_mode in ['delivery', 'both']):
+        print("Hungry belly is both")       
         
         # 2. Detect location change using cached old values
         location_changed = False

@@ -28,5 +28,5 @@ urlpatterns = [
     path("payments/squad/webhook/", squad_webhook_api_view),
     path("check-session/", checkout_session_api_view),
 
-    path('user_batch_list/<int:telegram_id>/<str:restaurant_id>/<str:platform>/', batch_list_api_view),
+    path('user_batch_list/<str:session_id>/<str:restaurant_id>/<str:platform>/', batch_list_api_view),
 ] 

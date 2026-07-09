@@ -6,15 +6,9 @@ from TELEGRAM_BOT_API.utils.image_utils import *
 from .start_handler import start
 from .order_handler import order_meal
 from decimal import Decimal
+import math
 
 
-async def debug_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pass
-    # always turn off privacy with /setprivacy so bot can receive all messages sent to group
-    print("CHAT ID:", update.effective_chat.id)
-    print("CHAT data structure:", type(update.effective_chat.id))
-    print("CHAT TYPE:", update.effective_chat.type)
-    print("CHAT:", update)    
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -38,13 +32,11 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         business_type = user_session.get('business_type')
         
         service_mode = (user_session.get('service_mode') or "").lower()
-        hotel_service_type = (user_session.get('hotel_service_type') or "").lower()  # ← FIXED: added .get()
 
         # ✅ Check if user is allowed to checkout (postpay only)
         if service_mode in ['dine_in', 'both']:
             lines = []
             grand_total = 0  # ← FIXED: removed int()
-            vat = 100
 
             order_batches = await api_get_user_order_batches(update)
             
@@ -61,11 +53,16 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     qty = item["quantity"]
                     price = item["price"]
                     title = item["product_title"]
+
                     subtotal = qty * price
+
                     lines.append(f"<i>{qty}x {title} - ₦{subtotal:,}</i>")
 
                 grand_total += int(order["total_price"])
                 lines.append("")  # blank line between batches
+
+            vat = math.ceil(grand_total * 0.075)   # Integer
+            final_total = math.ceil(grand_total + vat)    # Integer
 
             summary = (
                 "🧾 <b>Your Order Summary</b>\n\n"
@@ -74,7 +71,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 + "\n".join(lines)
                 + f"\n\nTotal Price: ₦{grand_total:,}"
                 + f"\nVAT Charges(7.5%): ₦{vat:,}"
-                + f"\n——————————\n<b>Grand Total: ₦{grand_total + vat:,}</b>"
+                + f"\n——————————\n<b>Grand Total: ₦{final_total:,}</b>"
             )
 
             await context.bot.send_message(
@@ -99,6 +96,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "• Both services",
                 parse_mode="HTML"
             )
+            logger.error("You are not allowed to use the chekout/pay Button")
 
             
 async def payment_keyboard():

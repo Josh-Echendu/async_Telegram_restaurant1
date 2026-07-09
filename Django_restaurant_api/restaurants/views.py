@@ -81,6 +81,7 @@ def get_restaurant_internal(request, platform, rid=None):
         "vendor_type": restaurant.vendor_type,
         "hotel_service_type": restaurant.hotel_service_type,
         "is_closed": delivery_opening_hours.is_closed if delivery_opening_hours else None,
+        'kitchen_chat_id': restaurant.kitchen_chat_id,
 
         # WhatsApp Specifics
         "wa_token": restaurant.whatsapp_access_token, # Your EncryptedField
@@ -160,7 +161,7 @@ class VerifyOTPAPIView(APIView):
 
     def post(self, request):
 
-        print("request otp: ", request)
+        print("request otp: ", request.data)
         telegram_id = request.data.get('telegram_id')
         whatsapp_id = request.data.get('whatsapp_id')
         restaurant_id = request.data.get('restaurant_id')

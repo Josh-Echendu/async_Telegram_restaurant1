@@ -341,11 +341,7 @@ def send_user_message_for_celery(order, telegram_id, TOKEN):
             )
 
             # ✅ SIMPLE TEXT BUTTONS (THIS WORKS WITH PYWA)
-            buttons = [
-                Button(title="🍽 Order Food", callback_data="order_food"),
-                Button(title="📦 Track Order", callback_data="track_order"),
-                Button(title="🛍️ Checkout/Pay", callback_data="checkout"),
-            ]
+            buttons = keyboard_button(order.restaurant)
 
             wa.send_message(
                 to=whatsapp_id,
@@ -366,6 +362,63 @@ def send_user_message_for_celery(order, telegram_id, TOKEN):
     else:
         logger.warning(f"Unsupported platform: {platform}")
 
+
+
+def keyboard_button(restaurant):
+    
+    business_type = restaurant.business_type
+    service_mode = restaurant.service_mode
+    buttons=None
+
+    # --- BUSINESS-SPECIFIC KEYBOARD ---
+    if business_type == "restaurant":
+
+        if service_mode == "delivery":
+            buttons = [
+                Button(title="🍽 Order Food", callback_data="order_food"),
+                Button(title="📦 Track Order", callback_data="track_order"),
+                Button(title="📞 Contact Staff", callback_data="contact_staff"),
+            ]
+
+        elif service_mode in ["dine_in", "both"]:
+            buttons = [
+                Button(title="🍽 Order Food", callback_data="order_food"),
+                Button(title="📞 Contact Staff", callback_data="contact_staff"),
+                Button(title="🛍️✅💳 Checkout/Pay", callback_data="checkout"),
+            ]
+
+    elif business_type == "vendor":
+
+        vendor_type = restaurant.vendor_type
+
+        if vendor_type == "goods":
+            buttons = [
+                Button(title="🛍️ Browse Products", callback_data="browse_products"),
+                Button(title="📦 Track Order", callback_data="track_order"),
+                Button(title="📞 Contact Staff", callback_data="contact_staff"),
+            ]
+
+        elif vendor_type == "cooked_food":
+            buttons = [
+                Button(title="🍽 Order Food", callback_data="order_food"),
+                Button(title="📦 Track Order", callback_data="track_order"),
+                Button(title="📞 Contact Staff", callback_data="contact_staff"),
+            ]
+
+        else:
+            buttons = [
+                Button(title="🛍️ Browse Products", callback_data="browse_products"),
+                Button(title="📦 Track Order", callback_data="track_order"),
+                Button(title="📞 Contact Staff", callback_data="contact_staff"),
+            ]
+
+    else:
+        buttons = [
+            Button(title="🍽 Order Food", callback_data="order_food"),
+            Button(title="📦 Track Order", callback_data="track_order"),
+            Button(title="📞 Contact Staff", callback_data="contact_staff"),
+        ]
+    return buttons
 
 
 @shared_task(bind=True, soft_time_limit=200, max_retries=3)

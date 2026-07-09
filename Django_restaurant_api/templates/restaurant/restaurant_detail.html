@@ -324,7 +324,6 @@
   platform: new URLSearchParams(window.location.search).get('platform') || '{{ platform }}',
   userId: '{{ user_id }}',
   businessType: '{{ business_type }}',  // ← ADD after userId
-  hotelServiceType: '{{ hotel_service_type|default:'' }}',  // ← ADD THIS
 
   mode: new URLSearchParams(window.location.search).get('mode') || '{{ mode }}',
   table_number: new URLSearchParams(window.location.search).get('table') || '{{ table_number|default:'' }}', // ← FIX: Added comma
@@ -353,6 +352,8 @@
   lgas: [],
   allLgas: {},
   isSubmittingDelivery: false,
+  isSubmittingOrder: false,  // ← ADD THIS
+
 
   // ========== TABLE SELECTION FOR WHATSAPP DINE-IN ==========
   showTableModal: false,
@@ -1263,6 +1264,13 @@
 
   async confirmOrder(maxRetries = 5, baseDelay = 800) {
 
+
+      // ✅ PREVENT DUPLICATE SUBMISSIONS
+      if (this.isSubmittingOrder) {
+          console.log('⏳ Order already being submitted. Please wait.');
+          return;
+      }
+
       if (this.paymentSessionActive) {
         this.toast = {
           visible: true,
@@ -1271,6 +1279,9 @@
         setTimeout(() => this.toast.visible = false, 10000);
         return;
       }
+
+      // ✅ SET LOADING STATE
+      this.isSubmittingOrder = true;
 
       const pathParts = window.location.pathname.split('/').filter(p => p);
       const restaurantId = pathParts[2];
@@ -1330,6 +1341,10 @@
                   this.showCart = false;
                   this.clearCart();
 
+                  // ✅ RESET LOADING STATE ON SUCCESS
+                  this.isSubmittingOrder = false;
+
+
                   const successMessage = this.platform === 'telegram' 
                     ? '🍽️ Your order was placed successfully 🎉🎉🎉! Check Telegram for details.' 
                     : '🍽️ Your order was placed successfully 🎉🎉🎉! Check WhatsApp for details.';
@@ -1369,6 +1384,9 @@
               console.log('Error message:', error.message);
               console.log('Response data:', error.response?.data);
               console.log('Status code:', error.response?.status);
+              
+              // ✅ RESET LOADING STATE ON ERROR
+              this.isSubmittingOrder = false;
               
               // Handle 409 Conflict (lock conflict) - just show message and let user retry manually
               if (error.response?.status === 409) {
@@ -1702,7 +1720,7 @@ x-init="
 "
 class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
 >
-
+I
 <!-- ===== HEADER (sticky, bright) ===== -->
 <header class="sticky top-0 z-40 sticky-bright py-3 sm:py-4 flex items-center justify-between rounded-2xl px-3">
   <div class="flex items-center gap-2">
@@ -2121,9 +2139,13 @@ class="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 pb-24 relative"
     </div>
     
     <div class="flex gap-3 mt-6">
-      <button @click="showCheckoutModal = false" class="flex-1 py-3 border border-[#cfdbe9] rounded-xl text-[#1f2a3f] font-medium">back</button>
-      <button @click="confirmOrder()" class="flex-1 bg-[#1f2a3f] text-white py-3 rounded-xl font-semibold shadow flex items-center justify-center gap-2">
-        <i class="fab fa-whatsapp"></i> confirm
+      <button @click="showCheckoutModal = false; isSubmittingOrder = false;" class="flex-1 py-3 border border-[#cfdbe9] rounded-xl text-[#1f2a3f] font-medium">back</button>
+      <button @click="confirmOrder()" 
+              :disabled="isSubmittingOrder"
+              class="flex-1 py-3 rounded-xl font-semibold shadow flex items-center justify-center gap-2 transition-all"
+              :class="isSubmittingOrder ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#1f2a3f] text-white hover:bg-[#2b384f]'">
+          <i class="fas" :class="isSubmittingOrder ? 'fa-spinner fa-pulse' : 'fa-whatsapp'"></i>
+          <span x-text="isSubmittingOrder ? 'Processing...' : 'Confirm'"></span>
       </button>
     </div>
   </div>

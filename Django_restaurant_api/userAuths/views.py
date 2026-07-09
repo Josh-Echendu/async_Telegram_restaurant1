@@ -414,10 +414,10 @@ def whatsapp_error_view(request, restaurant_id):
     # Get restaurant details
     try:
         restaurant = Restaurant.objects.get(rid=restaurant_id)
-        whatsapp_link = restaurant.get_whatsapp_deep_url()  # Assuming you have this method to generate the WhatsApp link
+        whatsapp_link = restaurant.get_whatsapp_deep_url_or_clean_phone(deep_url=True)  # Assuming you have this method to generate the WhatsApp link
     except Restaurant.DoesNotExist:
         whatsapp_link = "#"
-    
+
     messages = {
         "missing_token": {
             "title": "🔐 Authentication Required",

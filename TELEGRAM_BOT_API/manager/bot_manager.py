@@ -1,7 +1,6 @@
 # bot_manager.py
-
 from TELEGRAM_BOT_API.handlers.start_handler import start
-from TELEGRAM_BOT_API.handlers.echo_handler import echo, debug_chat
+from TELEGRAM_BOT_API.handlers.echo_handler import echo
 from TELEGRAM_BOT_API.handlers.button_handler import button_click
 from TELEGRAM_BOT_API.core.config import *
 from TELEGRAM_BOT_API.handlers.kitchen_handler import waiter_generate_code
@@ -39,7 +38,7 @@ from TELEGRAM_BOT_API.handlers.kitchen_handler import waiter_generate_code
 
 
 async def catch_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print(f"🔥 CATCH ALL: {update.message.text if update.message else 'No text'}")
+    logger.info(f"🔥 CATCH ALL: {update.message.text if update.message else 'No text'}")
 
 
 # bots = {
@@ -72,19 +71,11 @@ async def get_bot(token: str):
             # 🚦 Handlers
             app.add_handler(CommandHandler("start", start), group=1)
             app.add_handler(CommandHandler("gencode", waiter_generate_code), group=1)
-            print("✅ /gencode handler added to bot")
+            logger.info("✅ /gencode handler added to bot")
 
             app.add_handler(MessageHandler(filters.TEXT, echo), group=1)
             app.add_handler(CallbackQueryHandler(button_click), group=1)
-            
-            
-            # DEBUG: List all handlers
-            print(f"📋 Handlers for bot {token[:10]}:")
-            for handler_group in app.handlers:
-                print(f"   Group {handler_group}")
-
-            # DEBUG - catch everything else and print to console
-            app.add_handler(MessageHandler(filters.ALL, debug_chat), group=99)
+                    
             app.add_handler(MessageHandler(filters.ALL, catch_all), group=99)
 
             # Prepares bot internally, loads configs, Prpare connections
@@ -95,9 +86,9 @@ async def get_bot(token: str):
 
             # save bots i.e store bot in memory
             bots[token] = app
-            print(f"✅ Bot instance created and stored")
+            logger.info(f"✅ Bot instance created and stored:")
         else:
-            print(f"♻️ Reusing existing bot instance for token: {token[:10]}...")
+            logger.info(f"♻️ Reusing existing bot instance for token: {token[:10]}...")
         
 
         return bots[token]

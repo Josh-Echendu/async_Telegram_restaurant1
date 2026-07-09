@@ -1,9 +1,8 @@
-import httpx
-import asyncio
 import pytz
 from datetime import datetime, timezone
 from cachetools import TTLCache
-from TELEGRAM_BOT_API.core.config import INTERNAL_API_KEY
+from TELEGRAM_BOT_API.core.config import *
+
 
 # TTL: Time to Live, “How long something stays in memory before it disappears” i.e it last for 300 seconds (5 minutes)
 cache = TTLCache(maxsize=2000, ttl=300)  # cache 2000 restaurants
@@ -39,7 +38,7 @@ async def get_restaurant(rid: str):
                 
                 # If day changed, delete cache and fetch fresh
                 if now_day != cached_day:
-                    print(f"Day changed for restaurant {rid}. Refreshing cache...")
+                    logger.info(f"Day changed for restaurant {rid}. Refreshing cache...")
                     del cache[rid]
                     del cache[f"{rid}_timestamp"]
                     
@@ -47,7 +46,7 @@ async def get_restaurant(rid: str):
                     return await get_restaurant(rid)
                 
             except Exception as e:
-                print(f"Error checking day change: {e}")
+                logger.exception(f"Error checking day change: {e}")
                 # If error, assume cache is stale and delete it
                 del cache[rid]
                 if f"{rid}_timestamp" in cache:
@@ -67,7 +66,7 @@ async def get_restaurant(rid: str):
                 )
 
                 if res.status_code != 200:
-                    print(f"DRF returned {res.status_code} for restaurant {rid}")
+                    logger.info(f"DRF returned {res.status_code} for restaurant {rid}")
                     return None
 
                 data = res.json()
@@ -79,68 +78,11 @@ async def get_restaurant(rid: str):
                 now_utc = datetime.now(timezone.utc)
                 cache[f"{rid}_timestamp"] = now_utc
                 
-                print(f"Fetched fresh data for restaurant {rid}: open_time={data.get('open_time')}, close_time={data.get('close_time')}, is_closed={data.get('is_closed')}")
+                logger.info(f"Fetched fresh data for restaurant {rid}: open_time={data.get('open_time')}, close_time={data.get('close_time')}, is_closed={data.get('is_closed')}")
                 
                 return data
 
             except httpx.RequestError as e:
-                print(f"DRF request failed for {rid}: {e}")
+                logger.exception(f"DRF request failed for {rid}: {e}")
                 return None
                 
-
-
-# import httpx
-# import asyncio
-# from cachetools import TTLCache
-# from core.config import INTERNAL_API_KEY
-
-# # TTL: Time to Live, “How long something stays in memory before it disappears” i.e it last for 60 seconds
-# cache = TTLCache(maxsize=2000, ttl=300)  # cache 1000+ bots, it can store up to 2000 items, e.g 2000 restaurant (or bot tokens)
-# # if exceeds 2000, the oldest data gets removed automatically: LRU eviction(Least Recently Used)
-
-# lock = asyncio.Lock()
-# DRF_URL = "http://web:8000"
-
-
-# async def get_restaurant(rid: str):
-#     if rid in cache:
-#         return cache[rid]
-
-#     async with lock:
-#         async with httpx.AsyncClient(timeout=10.0) as client:
-#             try:
-#                 res = await client.get(
-#                     f"{DRF_URL}/restaurants/internal/{rid}/",
-#                     headers={
-#                         "X-INTERNAL-API-KEY": INTERNAL_API_KEY
-#                     }
-#                 )
-
-#                 if res.status_code != 200:
-#                     return None
-
-#                 data = res.json()
-#                 cache[rid] = data
-#                 return data
-
-#             except httpx.RequestError as e:
-#                 print(f"DRF request failed: {e}")
-#                 return None
-
-# 🧠 Meaning:
-
-# Each cached item lives for 60 seconds
-
-# After 60 seconds:
-
-# it is automatically deleted
-# next request will re-fetch from DRF
-# 💡 Why this matters:
-
-# Because restaurant data can change:
-
-# bot enabled/disabled
-# accepting orders ON/OFF
-# secret token changes
-
-# So we don’t want stale data forever.

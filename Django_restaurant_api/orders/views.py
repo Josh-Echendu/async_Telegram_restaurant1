@@ -518,7 +518,7 @@ class OrderPreviewAPIView(APIView):
                 "empty_cart": True,
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        city =delivery_info.get("lga")
+        city = delivery_info.get("lga")
         state = delivery_info.get("state")
         phone = delivery_info.get("phone")
         first_name = delivery_info.get("firstName")
@@ -621,43 +621,45 @@ class OrderPreviewAPIView(APIView):
                     prep_times.append(product.category.prep_time_minutes)
                     continue
                 
-                if product.category.prep_day:
+                elif product.category.prep_day:
                     prep_days.append(product.category.prep_day)
 
-            success, msg, coords = get_coords(lga=city, state=state)  # Test the geocoding function with the provided delivery info
-            if not success:
-                return Response({
-                    "success": False,
-                    "message": f"Geocoding failed pick a proper address",
-                    "geocoding_failed": True
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            customer_lat = coords.get("lat")
-            customer_lng = coords.get("lng")
+            if restaurant.business_type == 'restaurant' or restaurant.vendor_type == 'cooked_food':
+                print("cooked food logged!!!!!")
+                success, msg, coords = get_coords(lga=city, state=state)  # Test the geocoding function with the provided delivery info
+                if not success:
+                    return Response({
+                        "success": False,
+                        "message": f"Geocoding failed pick a proper address",
+                        "geocoding_failed": True
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                customer_lat = coords.get("lat")
+                customer_lng = coords.get("lng")
 
-            restaurant_lat = restaurant.latitude
-            restaurant_lng = restaurant.longitude
+                restaurant_lat = restaurant.latitude
+                restaurant_lng = restaurant.longitude
 
-            distance = haversine(restaurant_lat, restaurant_lng, customer_lat, customer_lng)
-            print(f"Calculated distance: {distance} km")
-            business_type = (restaurant.business_type or "").lower()
-            
-            if business_type == 'restaurant' and distance > restaurant.max_delivery_radius_km:
-                return Response({
-                    "success": False,
-                    "message": f"Sorry, we only deliver within {restaurant.max_delivery_radius_km}km. Your location is {distance:.1f}km away."
-                }, status=status.HTTP_400_BAD_REQUEST)
+                distance = haversine(restaurant_lat, restaurant_lng, customer_lat, customer_lng)
+                print(f"Calculated distance: {distance} km")
+                business_type = (restaurant.business_type or "").lower()
+                
+                if business_type == 'restaurant' and distance > restaurant.max_delivery_radius_km:
+                    return Response({
+                        "success": False,
+                        "message": f"Sorry, we only deliver within {restaurant.max_delivery_radius_km}km. Your location is {distance:.1f}km away."
+                    }, status=status.HTTP_400_BAD_REQUEST)
             
             # 7️⃣ Calculate VAT (7.5%) and round to 2 decimals
-            vat = total_price * Decimal('0.075')  # 7.5% VAT
-            vat_rounded = math.ceil(vat.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))  # Round to 2 decimal places Up
-            
+            vat = total_price * Decimal('0.075')
+            vat_rounded = vat.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
             # 8️⃣ Ensure delivery_fee is Decimal
             delivery_fee = Decimal(str(restaurant.delivery_fee)) if restaurant.delivery_fee else Decimal('0.00')
-            
-            # 9️⃣ Calculate grand total
-            grand_price = math.ceil(total_price + vat_rounded + delivery_fee).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            
+
+            # 9️⃣ Calculate grand total (round UP to whole number)
+            grand_price = math.ceil(total_price + vat_rounded + delivery_fee)  # ✅ Returns int
+
             # 🔟 Calculate max prep time
             max_prep_time = max(prep_times) if prep_times else restaurant.average_preparation_time
             
@@ -959,12 +961,12 @@ class OrderBatchListCreateAPIView(APIView):
                     "session_id": session.session_id,
                     "restaurant_id": restaurant.rid,
                     "platform": platform,
+
                 })
 
                 # ✅ Store with expiry (24 hours)
                 redis_client.setex(redis_key, 86400, data)  # 86400 seconds = 24 hours
                 print(f"✅ Stored session {session.session_id} in Redis for user {user.telegram_id or user.whatsapp_id}")
-            
             
                 data = {
                     "success": True,
@@ -1115,7 +1117,7 @@ class OrderBatchListCreateAPIView(APIView):
                     is_active=True,
                     payment_status='unpaid',
                 ).order_by('-date_created').first()
-
+ 
                 if session and session.payment_in_progress:
                     return session, final_amount, "Payment in progress. Complete payment first."
 
@@ -1149,6 +1151,7 @@ def save_session_with_unique_reference(session, max_retries=3):
             # Generate a new reference and retry
             continue
     return session
+
 orderbatch_list_create_view =  OrderBatchListCreateAPIView.as_view()
 
 class CheckSessionAPIView(APIView):
@@ -1649,128 +1652,36 @@ class UpdateBatchStatusAPIView(APIView):
 update_batch_status_api_view = UpdateBatchStatusAPIView.as_view()
 
 
-class OrderBatchesListView(APIView):
-
-    def get(self, request, *args, **kwargs):
-        telegram_id = kwargs.get('telegram_id')
-        whatsapp_id = kwargs.get('whatsapp_id')
-        restaurant_id = kwargs.get('restaurant_id')
-        platform = (kwargs.get('platform') or "").lower()
-
-        if not (telegram_id or whatsapp_id) or restaurant_id is None:
-            return Response({"error": "Missing telegram_id or whatsapp_id or restaurant_id in path"}, status=400)
-
-        if platform not in ['telegram', 'whatsapp']:
-            return Response({"error": "Invalid platform. Must be 'telegram' or 'whatsapp'"}, status=400)
-
-        restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
-
-        if platform == 'telegram':
-            user = get_object_or_404(TelegramUser, telegram_id=telegram_id) # request.user is set by TelegramAuthentication to be the telegram_id
-            print("telegram user: ", user)
-
-        if platform == 'whatsapp':
-            user = get_object_or_404(TelegramUser, whatsapp_id=whatsapp_id) # request.user is set by TelegramAuthentication to be the whatsapp_id
-            print("whatsapp user: ", user)
-
-        membership_exists = RestaurantMembership.objects.filter(
-            user=user,
-            restaurant=restaurant
-        ).exists()
-        
-        if not membership_exists:
-            return Response(
-                {"error": "User not linked to this restaurant"},
-                status=404
-            )
-
-        # session_batches → all OrderBatch
-        # items → all OrderItem
-        # product → all Product
-        session = (
-            CheckoutSession.objects
-            .select_related("restaurant")
-            .filter(telegram_user=user, restaurant=restaurant, is_active=True, service_mode='dine_in')
-            # 1️⃣ session_batches: Load all OrderBatch objects connected to the session. 2️⃣ items: Inside each batch, load its OrderItems.
-            # 3️⃣ product For each item, load the Product details.
-            .prefetch_related(
-                "session_batches__items__product" # “Load the session, its batches, the items in those batches, and the products for those items in advance so the database isn’t queried repeatedly.”
-            )
-            .order_by('-date_created')            
-            .first()
-        )
-
-        if not session:
-            return Response({
-                "error": "Session not found",
-                "message": "You have no active session, please order some items."
-            }, status=404)
-
-        data = []
-        for order in session.session_batches.all():
-            items = [
-                {
-                    "quantity": item.quantity,
-                    "price": int(item.price),
-                    "product_title": item.product.title
-                }
-                for item in order.items.all()
-            ]
-            data.append({
-                "bid": order.bid,
-                "total_price": order.total_price,
-                "vat": session.vat_amount,
-                "items": items,
-                "restaurant": session.restaurant.name
-            })
-
-        return Response(data)
-    
-batch_list_api_view = OrderBatchesListView.as_view()
-
 
 class OrderBatchesListView(APIView):
 
     def get(self, request, *args, **kwargs):
-        telegram_id = kwargs.get('telegram_id', None)
-        whatsapp_id = kwargs.get('whatsapp_id', None)
+
+        session_id = kwargs.get('session_id', None)
         restaurant_id = kwargs.get('restaurant_id', None)
-        platform = (kwargs.get('platform') or "").lower()
+        platform = kwargs.get('platform', None)
 
-        if not (telegram_id or whatsapp_id) or restaurant_id is None or platform is None:
-            return Response({"error": "Missing telegram_id or whatsapp_id or restaurant_id or platform in path"}, status=400)
-
-        if platform not in ['telegram', 'whatsapp']:
-            return Response({"error": "Invalid platform. Must be 'telegram' or 'whatsapp'"}, status=400)
-
+        # 🔐 INTERNAL SECURITY
+        api_key = request.headers.get("X-INTERNAL-API-KEY")
+        if api_key != settings.INTERNAL_API_KEY:
+            return Response({"error": "unauthorized"}, status=403)
+            
+        # 1. Get restaurant
         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
 
-        if platform == 'telegram':
-            user = get_object_or_404(TelegramUser, telegram_id=telegram_id) # request.user is set by TelegramAuthentication to be the telegram_id
-            print("telegram user: ", user)
-
-        if platform == 'whatsapp':
-            user = get_object_or_404(TelegramUser, whatsapp_id=whatsapp_id) # request.user is set by TelegramAuthentication to be the whatsapp_id
-            print("whatsapp user: ", user)
-
-        membership_exists = RestaurantMembership.objects.filter(
-            user=user,
-            restaurant=restaurant
-        ).exists()
-        
-        if not membership_exists:
-            return Response(
-                {"error": "User not linked to this restaurant"},
-                status=404
-            )
-
-        # session_batches → all OrderBatch
-        # items → all OrderItem
-        # product → all Product
+        # 2. Get session from database (not Redis)
         session = (
             CheckoutSession.objects
             .select_related("restaurant")
-            .filter(telegram_user=user, restaurant=restaurant, is_active=True, service_mode='dine_in')
+            .filter(
+                session_id=session_id, 
+                payment_status='unpaid', 
+                restaurant=restaurant, 
+                is_active=True, 
+                platform=platform,
+                service_mode='dine_in'
+            )
+
             # 1️⃣ session_batches: Load all OrderBatch objects connected to the session. 2️⃣ items: Inside each batch, load its OrderItems.
             # 3️⃣ product For each item, load the Product details.
             .prefetch_related(
@@ -1783,6 +1694,7 @@ class OrderBatchesListView(APIView):
 
         if not session:
             return Response({
+                "found": False,
                 "error": "Session not found",
                 "message": "You have no active session, please order some items."
             }, status=404)
@@ -1808,6 +1720,87 @@ class OrderBatchesListView(APIView):
         return Response(data)
     
 batch_list_api_view = OrderBatchesListView.as_view()
+
+
+# class OrderBatchesListView(APIView):
+
+#     def get(self, request, *args, **kwargs):
+#         user_id = kwargs.get('user_id', None)
+#         restaurant_id = kwargs.get('restaurant_id', None)
+#         platform = (kwargs.get('platform') or "").lower()
+
+#         if not user_id or restaurant_id is None or platform is None:
+#             return Response({"error": "Missing telegram_id or whatsapp_id or restaurant_id or platform in path"}, status=400)
+
+#         if platform not in ['telegram', 'whatsapp']:
+#             return Response({"error": "Invalid platform. Must be 'telegram' or 'whatsapp'"}, status=400)
+
+#         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
+
+#         if platform == 'telegram':
+#             user = get_object_or_404(TelegramUser, telegram_id=user_id) # request.user is set by TelegramAuthentication to be the telegram_id
+#             print("telegram user: ", user)
+
+#         if platform == 'whatsapp':
+#             user = get_object_or_404(TelegramUser, whatsapp_id=user_id) # request.user is set by TelegramAuthentication to be the whatsapp_id
+#             print("whatsapp user: ", user)
+
+#         membership_exists = RestaurantMembership.objects.filter(
+#             user=user,
+#             restaurant=restaurant
+#         ).exists()
+        
+#         if not membership_exists:
+#             return Response(
+#                 {"error": "User not linked to this restaurant"},
+#                 status=404
+#             )
+
+#         # session_batches → all OrderBatch
+#         # items → all OrderItem
+#         # product → all Product
+#         session = (
+#             CheckoutSession.objects
+#             .select_related("restaurant")
+#             .filter(telegram_user=user, restaurant=restaurant, is_active=True, service_mode='dine_in')
+#             # 1️⃣ session_batches: Load all OrderBatch objects connected to the session. 2️⃣ items: Inside each batch, load its OrderItems.
+#             # 3️⃣ product For each item, load the Product details.
+#             .prefetch_related(
+#                 "session_batches__items__product" # “Load the session, its batches, the items in those batches, and the products for those items in advance so the database isn’t queried repeatedly.”
+#             )
+#             .order_by('-date_created')            
+#             .first()
+#         )
+#         print("session batch: ", session)
+
+#         if not session:
+#             return Response({
+#                 "found": False,
+#                 "error": "Session not found",
+#                 "message": "You have no active session, please order some items."
+#             }, status=404)
+
+#         data = []
+#         for order in session.session_batches.all():
+#             items = [
+#                 {
+#                     "quantity": item.quantity,
+#                     "price": int(item.price),
+#                     "product_title": item.product.title
+#                 }
+#                 for item in order.items.all()
+#             ]
+#             data.append({
+#                 "bid": order.bid,
+#                 "total_price": order.total_price,
+#                 "vat": session.vat_amount,
+#                 "items": items,
+#                 "restaurant": session.restaurant.name
+#             })
+
+#         return Response(data)
+    
+# batch_list_api_view = OrderBatchesListView.as_view()
 
 
 

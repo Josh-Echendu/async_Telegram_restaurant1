@@ -21,8 +21,6 @@ KITCHEN_STATUS_CHOICES = (
 PAYMENT_STATUS_CHOICES = (
     ('unpaid', 'Unpaid'),
     ('paid', 'Paid'),
-    ('pending_cash', '⏳ Pending Cash'),
-    ('pending_pos', '⏳ Pending POS'),
 )
 
 TRANSACTION_TYPE = (
@@ -229,6 +227,8 @@ class CheckoutSession(models.Model):
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, null=True, related_name='restaurant_session', db_index=True)
     telegram_user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, null=True, related_name='telegram_session', db_index=True)
     dine_session = models.ForeignKey(DineInOTPSession, on_delete=models.CASCADE, null=True, blank=True, related_name='dine_session', db_index=True)
+    waiter_for_payment = models.BigIntegerField(null=True, blank=True, db_index=True)
+
 
     transaction_reference = models.CharField(max_length=100, unique=True, null=True, blank=True)
     transaction_type = models.CharField(max_length=100, choices=TRANSACTION_TYPE, null=True)

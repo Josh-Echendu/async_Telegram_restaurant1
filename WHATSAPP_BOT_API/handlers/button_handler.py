@@ -1,15 +1,9 @@
-from pywa import WhatsApp
-
 from WHATSAPP_BOT_API.services.restaurant_cache import get_restaurant
-from WHATSAPP_BOT_API.core.config import get_user_session, save_user_session
-
-from pywa import filters # Standard way to access filters in pywa
-
-from pywa.types import Button, CallbackButton, Message
 from WHATSAPP_BOT_API.core.config import *
-
 import pytz
 from datetime import datetime, timezone, time
+from .order_handler import order_meal
+from .checkout_handler import checkout, handle_pos_cash_payment, bank_transfer
 
 
 
@@ -56,34 +50,100 @@ async def handle_order_buttons(client: WhatsApp, btn: CallbackButton):
         await menu_keyboard_whatsapp(client, btn)
 
     elif data == "order_food":
-        
-        # 1. Use .wa_id for session and identification
-        user_id = btn.from_user.wa_id
-        user_session = await get_user_session(user_id)
-        print("User session in order_food:", user_session)  # Debugging line
-        
-        # Use .get() with defaults to prevent KeyErrors if session is empty
-        service_mode = user_session.get('service_mode').lower()
-        business_type = user_session.get('business_type').lower()
+        await order_meal(client, btn)
 
-        buttons = []
-        
-        if business_type == "vendor":
-            buttons.append(Button(title="🚚 Delivery", callback_data="order_delivery"))
-        else:
-            # Check for Dine-in
-            if service_mode in ["dine_in", "both"]:
-                buttons.append(Button(title="🍽️ Dine-in", callback_data="order_dine_in"))
-            
-            # Check for Delivery
-            if service_mode in ["delivery", "both"]:
-                buttons.append(Button(title="🚚 Delivery", callback_data="order_delivery"))
-        
-        # 2. Use .reply() helper — it's faster and cleaner than client.send_message
-        await btn.reply(
-            text="How would you like to order today? 🍔",
-            buttons=buttons
+    elif data == "browse_products":
+        await order_meal(client, btn)
+
+    elif data == 'checkout':
+        await checkout(client, btn)
+
+    elif data == "bank_transfer":
+        await bank_transfer(client, btn)
+    
+    elif data in ["pay_cash", "pay_pos"]:
+
+        payment_type = "cash" if data == "pay_cash" else "pos"
+        response = await handle_pos_cash_payment(btn, payment_type)
+        customer_user_id = btn.from_user.wa_id
+
+        if not response:
+            await btn.reply(
+                "❌ Failed to process payment request. Please try again."
+            )
+            return
+
+        table = response.get("table_number", "N/A")
+        total = response.get("total", 0)
+        vat_amount = response.get("vat")
+        grand_total = response.get("grand_total")
+        kitchen_chat_id = response.get("kitchen_chat_id")
+        waiter_telegram_id = response.get("waiter_telegram_id")
+        waiter_username = response.get("waiter_username")
+
+        emoji = "💵" if payment_type == "cash" else "💳"
+        method = (
+            "collect cash"
+            if payment_type == "cash"
+            else "with a POS machine"
         )
+
+        # Customer confirmation
+        message = (
+            "✅ *Payment Request Sent!*\n\n"
+            "📱 Please show this screen to your waiter.\n"
+            f"{emoji} Your waiter has been notified and will come to your table to {method}.\n\n"
+            f"Table: `{table}`\n"
+            f"Subtotal: *₦{total:,}*\n\n"
+            f"VAT(7.5%): *₦{vat_amount:,}*\n\n"
+            f"Grand Total: *₦{grand_total:,}*\n\n"
+            "_⏳ Payment pending... Waiting for waiter confirmation._\n\n"
+            "Thank you for dining with us! 🍽️"
+        )
+
+        await btn.reply(message)
+        
+        # Publish event for Telegram worker
+        import secrets
+        payment_key = secrets.token_hex(8)
+
+        restaurant_data = await get_user_session(btn.from_user.wa_id)
+        restaurant_id = restaurant_data['current_rid']
+
+        await redis_client.setex(
+            f"payment:{payment_key}",
+            86400,
+            json.dumps(
+                {
+                    "table": table,
+                    "total": total,
+                    "vat_amount": vat_amount,
+                    "grand_total": grand_total,
+                    "payment_type": payment_type,
+                    "emoji": emoji,
+                    "waiter_telegram_id": waiter_telegram_id,
+                    "waiter_username": waiter_username,
+                    "kitchen_chat_id": kitchen_chat_id,
+                    "customer_user_id": customer_user_id,
+                    "customer_platform": "whatsapp",
+                    "restaurant_id": restaurant_id,
+                }
+            ),
+        )
+        logger.info(f"package to redis for restaurant: {restaurant_id}")
+
+        # Push job to Redis / ARQ
+        arq = await get_arq_redis()
+
+        await arq.enqueue_job(
+            "notify_telegram_payment_request",
+            payment_key=payment_key, customer_user_id=customer_user_id, table=table,
+            total=total, vat_amount=vat_amount, grand_total=grand_total, payment_type=payment_type,
+            emoji=emoji, waiter_telegram_id=waiter_telegram_id, waiter_username=waiter_username,
+            kitchen_chat_id=kitchen_chat_id, restaurant_id=restaurant_id,
+            _queue_name="restaurant_jobs"
+        )
+        logger.info("enqueued to arq worker ")
 
 
 # Helper functions you need to adapt:
@@ -95,16 +155,16 @@ async def is_delivery_available_whatsapp(update: CallbackButton | Message):
     # Use .wa_id for consistency with your registration/session flow
     user_id = update.from_user.wa_id
     user_session = await get_user_session(user_id)
-    print(f"Checking delivery availability for user_id: {user_id}, session: {user_session}")
+    logger.info(f"Checking delivery availability for user_id: {user_id}, session: {user_session}")
     
     phone_id = user_session.get('phone_id')
-    print(f"Checking delivery availability for phone_id: {phone_id}")
+    logger.info(f"Checking delivery availability for phone_id: {phone_id}")
     if not phone_id:
         return False, "Session expired. Please restart the order."
 
     # Fetch fresh data
     restaurant_data = await get_restaurant(phone_id)
-    print(f"Restaurant data for {phone_id}: {restaurant_data}")
+    logger.info(f"Restaurant data for {phone_id}: {restaurant_data}")
 
     if not restaurant_data:
         return False, "Restaurant data unavailable. Please try again."
@@ -165,7 +225,6 @@ async def menu_keyboard_whatsapp(client: WhatsApp, clb: CallbackButton | Message
     
     restaurant_id = user_session.get('current_rid')
     user_service_mode = user_session.get('user_service_mode')
-    table_number = user_session.get('table_number')
     platform = "whatsapp"  # or "telegram", depending on the platform
 
     WEB_APP_URL = await whatsapp_init_session(
@@ -208,7 +267,6 @@ async def whatsapp_init_session(restaurant_id: str, user_id: str, platform: str,
         )
 
         data = response.json()
-        print("data: ", data)
         return data.get('url')
 
 
