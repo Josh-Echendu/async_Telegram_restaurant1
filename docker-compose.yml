@@ -347,6 +347,52 @@ services:
     networks:
       - backend
 
+  facebook_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.facebook
+    container_name: facebook_bot
+    restart: unless-stopped
+    ports:
+      - 5000:5000
+
+    env_file: .env
+    volumes:
+      - ./FACEBOOK_BOT_API:/app/FACEBOOK_BOT_API   # ← facebook code (overrides)
+      - ./COMMON:/app/COMMON
+
+    depends_on:
+      redis:
+        condition: service_started
+      web:
+        condition: service_started
+    
+    networks:
+      - backend
+
+  instagram_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.instagram
+    container_name: instagram_bot
+    restart: unless-stopped
+    ports:
+      - 4000:4000
+
+    env_file: .env
+    volumes:
+      - ./INSTAGRAM_BOT_API:/app/INSTAGRAM_BOT_API   # ← instagram code (overrides)
+      - ./COMMON:/app/COMMON
+
+    depends_on:
+      redis:
+        condition: service_started
+      web:
+        condition: service_started
+    
+    networks:
+      - backend
+
 
   # whatsapp_baileys:
   #     build:
