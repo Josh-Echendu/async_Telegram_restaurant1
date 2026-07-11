@@ -81,6 +81,19 @@ async def process_stream_message(message_id: str, task: dict):
     owner_name = task.get("owner_name", "Restaurant Owner")
     service_mode = (task.get("service_mode") or "").lower()
 
+    lock_key = f"telegram:setup:lock:{restaurant_id}"
+    
+    # FIRST: Check if lock exists
+    lock_exists = await redis_client.exists(lock_key)
+
+    if lock_exists:
+        logger.warning("Lock exists for %s, checking if it's stale", restaurant_id)
+        
+        # Delete stale lock
+        await redis_client.delete(lock_key)
+        logger.info("Deleted stale lock for %s", restaurant_id)
+        # Continue processing - DON'T increment attempt count yet!
+
     # Track attempts for this specific message
     attempt_key = f"telegram:setup:attempts:{message_id}"
     attempt_count = await redis_client.get(attempt_key)
@@ -146,7 +159,7 @@ async def process_stream_message(message_id: str, task: dict):
         )
         return
 
-    await redis_client.expire(lock_key, 300)
+    await redis_client.expire(lock_key, 20)
 
     try:
 
@@ -286,6 +299,7 @@ async def process_telegram_setup(ctx):
                 count=1,  # one task per worker
                 block=5000,  # wait for 5 seconds
             )
+            print("messages from xreadgroup: ", messages)
 
             if not messages:
                 continue
@@ -391,7 +405,7 @@ async def notify_telegram_payment_request(ctx,
 
         if not restaurant:
             logger.error("Restaurant %s not found.", restaurant_id)
-            return
+            raise
 
         bot_token = restaurant.get("bot_token")
 
@@ -474,7 +488,7 @@ async def notify_whatsapp_payment_confirmed(
                 "Restaurant not found. restaurant_id=%s",
                 restaurant_id,
             )
-            return
+            raise
 
         wa_token = restaurant.get("wa_token")
         wa_phone_id = restaurant.get("wa_phone_id")

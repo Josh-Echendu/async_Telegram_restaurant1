@@ -34,4 +34,4 @@ COPY INSTAGRAM_BOT_API/ /app/
 
 EXPOSE 4000
 
-CMD ["./entrypoint_bot.sh"]
+CMD ["./entrypoint_instagram.sh"]

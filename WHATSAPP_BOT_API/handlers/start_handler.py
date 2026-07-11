@@ -52,8 +52,11 @@ async def start_handler(client: WhatsApp, msg: Message):
     # =========================
     username = first_name or f"user_{user_id[-4:]}"
 
-    await whatsapp_registration(whatsapp_id=user_id, first_name=first_name,
+    registration = await whatsapp_registration(whatsapp_id=user_id, first_name=first_name,
         username=username, phone_number=user_phone, restaurant_id=restaurant_id)
+
+    if not registration:
+        return 
 
     # --- BUSINESS-SPECIFIC BUTTONS ---
 

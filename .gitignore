@@ -1,6 +1,11 @@
 .env
 __pycache__/
 venv/
+
 .env.*
 .venv.PYDOLL_TELEGRAM_WEB_AUTOMATION/
+FACEBOOK_BOT_API/.venv/
 web_automation/telegram_persistent_profile
+
+
+

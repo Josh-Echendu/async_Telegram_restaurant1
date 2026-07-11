@@ -307,6 +307,8 @@ services:
       dockerfile: Dockerfile.bot
     container_name: telegram_bot
     restart: unless-stopped
+    command: ["./entrypoint_bot.sh"]
+
     ports:
       - 8080:8080  # Map the bot's listening port to the host
 

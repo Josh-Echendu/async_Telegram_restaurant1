@@ -27,8 +27,10 @@ def get_restaurant_internal(request, platform, rid=None):
     if api_key != settings.INTERNAL_API_KEY:
         return Response({"error": "unauthorized"}, status=403)
     
-    phone_id = request.headers.get("X-PHONE-ID")     
-    
+    phone_id = request.headers.get("X-PHONE-ID") 
+    page_id = request.headers.get("X-PAGE-ID")
+    ig_business_id = request.headers.get("X-IG-BUSINESS-ID")
+
     if not platform:
         return Response({"error": "Wrong data"}, status=404)
     
@@ -38,6 +40,13 @@ def get_restaurant_internal(request, platform, rid=None):
         restaurant = Restaurant.objects.filter(rid=rid).first()
     elif platform == 'whatsapp':
         restaurant = Restaurant.objects.filter(whatsapp_phone_number_id=phone_id).first()
+    elif platform == "facebook":
+        restaurant = Restaurant.objects.filter(facebook_page_id=page_id).first()
+    else:
+        return Response({"error": "platform not found"}, status=404)
+    
+    # elif platform == "instagram":
+    #     restaurant = Restaurant.objects.filter(instagram_business_account_id=ig_business_id).first()
 
     # ✅ CHECK FIRST BEFORE ACCESSING
     if not restaurant:
@@ -45,8 +54,6 @@ def get_restaurant_internal(request, platform, rid=None):
     
     print('restaurant data: ', restaurant.rid)
     print('restaurant name: ', restaurant.name)
-    print('restaurant username: ', restaurant.bot_username)
-    print('restaurant data access token for whatsapp: ', restaurant.whatsapp_access_token)
 
     if not restaurant:
         return Response({}, status=404)
@@ -88,9 +95,22 @@ def get_restaurant_internal(request, platform, rid=None):
         "wa_phone_id": restaurant.whatsapp_phone_number_id,
         "wa_waba_id": restaurant.whatsapp_business_account_id,
         "is_wa_active": restaurant.is_whatsapp_active,
+
+        # Facebook
+        "fb_token": restaurant.facebook_page_access_token,
+        "fb_page_id": restaurant.facebook_page_id,
+        "is_fb_active": restaurant.is_facebook_active,
+
+        # # Instagram
+        # "ig_token": restaurant.instagram_access_token,
+        # "ig_business_id": restaurant.instagram_business_account_id,
+        # "ig_username": restaurant.instagram_username,
+        # "is_ig_active": restaurant.is_instagram_active,
     }
-    print('full data: ', data)
-    return Response(data)
+
+    return Response({
+        "data": data
+    })
 
 
 # 📅 Mapping (VERY IMPORTANT)

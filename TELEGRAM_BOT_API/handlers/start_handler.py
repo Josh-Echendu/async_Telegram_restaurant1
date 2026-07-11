@@ -2,6 +2,7 @@
 from TELEGRAM_BOT_API.core.config import *
 from TELEGRAM_BOT_API.utils.cart_utils import *
 from TELEGRAM_BOT_API.utils.kitchen_utils import *
+from core.config import _request_with_retry
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -17,9 +18,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_name = update.effective_chat.first_name
     username = update.effective_user.username
 
-    # --- REGISTER USER ---
-    await telegram_registration(telegram_id=user_id, first_name=first_name, username=username, restaurant_id=restaurant_id)
+    
 
+    
+    # --- REGISTER USER ---
+    registration = await telegram_registration(telegram_id=user_id, first_name=first_name, username=username, restaurant_id=restaurant_id)
+
+    if not registration:
+        return 
+    
     # --- BUSINESS-SPECIFIC KEYBOARD ---
     if business_type == "restaurant":
 
@@ -77,12 +84,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "role": "Your personal food vendor assistant",
             "features": "🍽 Browse meals\n🛒 Place orders\n📦 Track deliveries\n⚡ Fresh and fast service"
         },
-        "hotel": {
-            "icon": "🏨",
-            # "role": "Your personal hotel concierge",
-            "role": "Your personal restaurant assistant",
-            "features": "🍽 Order room service\n📦 Track orders\n🛎️ Request assistance\n🛒 View your bill"
-        }
+
     }
 
     # Select the right message template
@@ -92,8 +94,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = messages["vendor_goods"]
     elif business_type == "vendor" and vendor_type == "cooked_food":
         msg = messages["vendor_cooked_food"]
-    elif business_type == "hotel":
-        msg = messages["hotel"]
     else:
         msg = messages["restaurant"]  # fallback
 
@@ -114,33 +114,58 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
     
+
 async def telegram_registration(telegram_id, first_name, username, restaurant_id, max_retries=5):
+    """
+    Register a user from Telegram in the system.
+    
+    Args:
+        telegram_id: User's Telegram ID
+        first_name: User's first name
+        username: User's username
+        restaurant_id: Restaurant ID
+        max_retries: Maximum number of retry attempts (used by _request_with_retry)
+    
+    Returns:
+        dict: Response data from the API, or None if all attempts fail
+    """
+    
+    # Prepare the payload
     payload = {
         "telegram_id": int(telegram_id),
         "first_name": str(first_name),
         "username": str(username),
         "restaurant_id": str(restaurant_id)
     }
-
-    for attempt in range(1, int(max_retries + 1)):
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"http://web:8000/userauths/register_user/restaurant/telegram/",
-                    headers={"Accept": "application/json"},  # ask for JSON explicitly
-                    json=payload
-                )
-                response.raise_for_status()
-                logger.info("user data: %s", response.json())
-                return response.json()
-
-        except (httpx.RequestError, httpx.HTTPStatusError) as e:
-            data = e.response.json()
-            logger.exception(f"Attempt {attempt} failed to submit user data: {e}")
-            
-            if attempt == max_retries:
-                logger.error(f"All {max_retries} attempts failed to submit user data: {e}")
-                return None
-            
-            # optional: wait before retrying
-            await asyncio.sleep(1)
+    
+    # Override the default retry settings for this specific call
+    # You can either modify the global config or pass custom settings
+    # Here we'll use the global config but you can also set it per call
+    
+    url = "http://web:8000/userauths/register_user/restaurant/telegram/"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        # Use _request_with_retry with POST method
+        response, success = await _request_with_retry(
+            method="POST",
+            url=url,
+            json=payload,
+            headers=headers,
+            timeout=30.0  # You can pass additional kwargs
+        )
+        
+        if not success:
+            return None
+        
+        # _request_with_retry already raises_for_status, so we can parse JSON
+        response_data = response.json()
+        logger.info("User registration successful: %s", response_data)
+        return response_data
+        
+    except Exception as e:
+        logger.exception("Failed to register user after all retry attempts: %s", e)
+        return None

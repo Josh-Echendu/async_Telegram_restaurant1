@@ -110,14 +110,6 @@ VENDOR_TYPE_CHOICES = (
     ('goods', 'Goods Vendor'),
 )
 
-
-# models.py
-HOTEL_SERVICE_CHOICES = [
-    ('dine_in', 'Restaurant (Dine-in)'),
-    ('room_service', 'Room Service Only'),
-    ('both', 'Both Restaurant & Room Service'),
-]
-
 SERVICE_MODE_CHOICES = (
     ('dine_in', 'In-Restaurant Only'),
     ('delivery', 'Delivery Only'),
@@ -159,9 +151,6 @@ class Restaurant(models.Model):
         help_text="Only applies to vendors. Cooked food vendors have a 15km delivery limit."
     )
 
-    hotel_service_type = models.CharField(max_length=20, choices=HOTEL_SERVICE_CHOICES, blank=True, null=True,
-        help_text="Only applies to hotels. Determines if the hotel has a restaurant, room service, or both."
-    )
 
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
@@ -209,6 +198,40 @@ class Restaurant(models.Model):
         help_text="Whether WhatsApp bot is active"
     )
     
+    # ========== FACEBOOK MESSENGER ==========
+    facebook_page_id = models.CharField(max_length=255, null=True, blank=True,
+        help_text="Facebook Page ID"
+    )
+
+    facebook_page_access_token = EncryptedCharField(max_length=500, null=True, blank=True,
+        help_text="Facebook Page Access Token"
+    )
+
+    facebook_app_scoped_id = models.CharField(max_length=255, null=True, blank=True,
+        help_text="Optional App Scoped ID"
+    )
+
+    is_facebook_active = models.BooleanField(default=False, db_index=True,
+        help_text="Whether Facebook bot is active"
+    )
+
+    # # ========== INSTAGRAM MESSAGING ==========
+    # instagram_business_account_id = models.CharField(max_length=255, null=True, blank=True,
+    #     help_text="Instagram Business Account ID (IGSID)"
+    # )
+
+    # instagram_access_token = EncryptedCharField(max_length=500, null=True, blank=True,
+    #     help_text="Instagram Graph API Access Token"
+    # )
+
+    # instagram_username = models.CharField(max_length=255, null=True, blank=True,
+    #     help_text="Instagram username (e.g. restaurant_name)"
+    # )
+
+    # is_instagram_active = models.BooleanField(default=False, db_index=True,
+    #     help_text="Whether Instagram Messaging is active"
+    # )
+
     # ========== SHARED FIELDS ==========
     is_accepting_orders = models.BooleanField(default=True)
     

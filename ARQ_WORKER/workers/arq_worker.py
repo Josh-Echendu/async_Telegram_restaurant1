@@ -1,7 +1,6 @@
 from tasks import handle_whatsapp_update, handle_telegram_update, process_telegram_setup, notify_telegram_payment_request, notify_whatsapp_payment_confirmed
 from COMMON.redis import redis_settings, redis_client
 import asyncio
-import logging
 from COMMON.logger_config import *
 
 import os
