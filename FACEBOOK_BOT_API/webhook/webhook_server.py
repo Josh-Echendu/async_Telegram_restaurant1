@@ -95,10 +95,13 @@ async def facebook_webhook(request: Request):
 
         # Queue worker
         arq = await get_arq_redis()
+        
+        entry = data["entry"][0]
+        event = entry["messaging"][0]
 
         await arq.enqueue_job(
             "handle_facebook_update",
-            update_data=data,
+            event=event,
             restaurant=restaurant,
             _queue_name="restaurant_jobs"
         )
