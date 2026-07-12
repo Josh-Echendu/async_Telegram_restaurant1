@@ -1,6 +1,6 @@
-from handlers.start_handler import start_handler
-from handlers.order_handler import order_meal
-from core.config import logger
+from FACEBOOK_BOT_API.handlers.start_handler import start
+from FACEBOOK_BOT_API.handlers.order_handler import order_meal
+from FACEBOOK_BOT_API.core.config import logger
 
 
 async def echo(event, restaurant_data):
@@ -12,9 +12,6 @@ async def echo(event, restaurant_data):
 
     logger.info(f"Echoing back to {user_id}: {text}")
 
-    if text == "🍽 Order Food":
-        await order_meal(event, restaurant_data)
+    await start(event, restaurant_data)
 
-    else:
-        await start_handler(event, restaurant_data)
-        return
+    return 

@@ -4,8 +4,8 @@ import asyncio
 import pytz
 from datetime import datetime, timezone
 from cachetools import TTLCache
-from core.config import *
-from core.config import _request_with_retry
+from FACEBOOK_BOT_API.core.config import *
+from FACEBOOK_BOT_API.core.config import _request_with_retry
 
 
 

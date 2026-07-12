@@ -1,6 +1,6 @@
 # handlers/order_handler.py
-from core.config import *
-from utils_handler import send_button_message
+from FACEBOOK_BOT_API.core.config import *
+from .utils_handler import send_button_message
 
 
 async def order_meal(event, restaurant):
@@ -26,17 +26,7 @@ async def order_meal(event, restaurant):
     # 🟡 Restaurant
     elif business_type == "restaurant":
 
-        if service_mode == "dine_in":
-
-            buttons = [
-                {
-                    "type": "postback",
-                    "title": "🍽️ Dine-in",
-                    "payload": "order_dine_in",
-                }
-            ]
-
-        elif service_mode == "delivery":
+        if service_mode == "delivery":
 
             buttons = [
                 {
@@ -49,11 +39,6 @@ async def order_meal(event, restaurant):
         elif service_mode == "both":
 
             buttons = [
-                {
-                    "type": "postback",
-                    "title": "🍽️ Dine-in",
-                    "payload": "order_dine_in",
-                },
                 {
                     "type": "postback",
                     "title": "🚚 Delivery",

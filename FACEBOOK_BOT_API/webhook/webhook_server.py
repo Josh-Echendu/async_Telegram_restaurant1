@@ -63,6 +63,7 @@ async def facebook_webhook(request: Request):
 
         # Parse JSON
         data = json.loads(body)
+        print("facebook data: ", data)
 
         # Ignore anything that's not a page webhook
         if data.get("object") != "page":
@@ -98,8 +99,6 @@ async def facebook_webhook(request: Request):
         await arq.enqueue_job(
             "handle_facebook_update",
             update_data=data,
-            raw_payload=body,
-            signature=signature,
             restaurant=restaurant,
             _queue_name="restaurant_jobs"
         )

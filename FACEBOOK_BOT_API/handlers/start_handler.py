@@ -1,4 +1,5 @@
-from core.config import _request_with_retry
+from FACEBOOK_BOT_API.core.config import _request_with_retry
+from .utils_handler import send_button_message
 
 fb_user_data = {}
 
@@ -86,7 +87,7 @@ async def start(event, restaurant_data):
                 },
             ]
 
-        elif service_mode in ["dine_in", "both"]:
+        elif service_mode in ["both"]:
             buttons = [
                 {
                     "type": "postback",
@@ -182,6 +183,7 @@ async def start(event, restaurant_data):
                 "payload": "contact_staff",
             },
         ]
+
 
     # --------------------------------------------------
     # WELCOME MESSAGE

@@ -1,4 +1,4 @@
-from core.config import _request_with_retry
+from FACEBOOK_BOT_API.core.config import _request_with_retry
 
 
 async def send_button_message(recipient_id, text, access_token, buttons=None):
@@ -29,4 +29,4 @@ async def send_button_message(recipient_id, text, access_token, buttons=None):
         json=payload,
     )
 
-    return success
+    return response, success
