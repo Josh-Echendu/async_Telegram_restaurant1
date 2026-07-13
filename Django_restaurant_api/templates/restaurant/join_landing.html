@@ -1,0 +1,259 @@
+<!-- join_landing.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Join Table - {{ restaurant_name }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .bg-pattern {
+            background-image: radial-gradient(circle at 10% 20%, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .btn-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-gradient:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 40px -12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-whatsapp {
+            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-whatsapp:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 40px -12px rgba(37, 211, 102, 0.4);
+        }
+        
+        .btn-telegram {
+            background: linear-gradient(135deg, #0088cc 0%, #005f8a 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-telegram:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 40px -12px rgba(0, 136, 204, 0.4);
+        }
+        
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        
+        .float-animation {
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        .shimmer {
+            background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
+            background-size: 200% 100%;
+            animation: shimmer 3s ease-in-out infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        .hero-gradient {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
+    
+    <!-- Main Container -->
+    <div class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+        
+        <!-- Decorative Background Elements -->
+        <div class="absolute inset-0 overflow-hidden pointer-events-none">
+            <div class="absolute -top-40 -right-40 w-96 h-96 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 float-animation"></div>
+            <div class="absolute -bottom-40 -left-40 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 float-animation" style="animation-delay: 2s;"></div>
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
+        </div>
+        
+        <!-- Main Card -->
+        <div class="relative w-full max-w-2xl glass-card rounded-3xl shadow-2xl p-8 md:p-12 transform transition-all duration-500 hover:scale-[1.02]">
+            
+            <!-- Restaurant Logo / Icon -->
+            <div class="flex justify-center mb-6">
+                <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
+                    <i class="fas fa-utensils text-white text-3xl"></i>
+                </div>
+            </div>
+            
+            <!-- Badge -->
+            <div class="flex justify-center mb-6">
+                <span class="inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
+                    <span class="relative flex h-3 w-3">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                    </span>
+                    Live Table Session
+                </span>
+            </div>
+            
+            <!-- Header -->
+            <div class="text-center mb-8">
+                <h1 class="text-4xl md:text-5xl font-extrabold text-gray-800 mb-3">
+                    Join Table
+                    <span class="hero-gradient">#{{ table_number }}</span>
+                </h1>
+                <p class="text-gray-600 text-lg">
+                    at <span class="font-semibold text-gray-800">{{ restaurant_name }}</span>
+                </p>
+            </div>
+            
+            <!-- Divider -->
+            <div class="relative mb-8">
+                <div class="absolute inset-0 flex items-center">
+                    <div class="w-full border-t border-gray-200"></div>
+                </div>
+                <div class="relative flex justify-center text-sm">
+                    <span class="px-4 bg-white/80 text-gray-500 font-medium">Choose your platform</span>
+                </div>
+            </div>
+            
+            <!-- Platform Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                <!-- WhatsApp Option -->
+                <a href="{{ whatsapp_link }}" 
+                   class="group relative overflow-hidden rounded-2xl bg-white shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 border-2 border-transparent hover:border-green-400">
+                    <div class="p-6 text-center">
+                        <div class="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+                            <i class="fab fa-whatsapp text-4xl text-green-600"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-800 mb-2">WhatsApp</h3>
+                        <p class="text-gray-600 text-sm mb-4">Continue on WhatsApp for a seamless ordering experience</p>
+                        <span class="inline-flex items-center gap-2 px-6 py-3 rounded-full btn-whatsapp text-white font-semibold text-sm w-full justify-center">
+                            <i class="fab fa-whatsapp"></i>
+                            Open WhatsApp
+                            <i class="fas fa-arrow-right ml-1 group-hover:translate-x-1 transition-transform"></i>
+                        </span>
+                    </div>
+                    <div class="absolute top-0 right-0 -mt-1 -mr-1">
+                        <span class="inline-flex items-center px-3 py-1 rounded-bl-xl bg-green-500 text-white text-xs font-bold">
+                            <i class="fas fa-bolt mr-1"></i> Fast
+                        </span>
+                    </div>
+                </a>
+                
+                <!-- Telegram Option -->
+                <a href="{{ telegram_link }}" 
+                   class="group relative overflow-hidden rounded-2xl bg-white shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 border-2 border-transparent hover:border-blue-400">
+                    <div class="p-6 text-center">
+                        <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+                            <i class="fab fa-telegram-plane text-4xl text-blue-600"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-800 mb-2">Telegram</h3>
+                        <p class="text-gray-600 text-sm mb-4">Enjoy a rich bot experience with instant updates and features</p>
+                        <span class="inline-flex items-center gap-2 px-6 py-3 rounded-full btn-telegram text-white font-semibold text-sm w-full justify-center">
+                            <i class="fab fa-telegram-plane"></i>
+                            Open Telegram
+                            <i class="fas fa-arrow-right ml-1 group-hover:translate-x-1 transition-transform"></i>
+                        </span>
+                    </div>
+                    <div class="absolute bottom-0 right-0">
+                        <span class="inline-flex items-center px-3 py-1 rounded-tr-xl bg-blue-500 text-white text-xs font-bold">
+                            <i class="fas fa-robot mr-1"></i> Bot
+                        </span>
+                    </div>
+                </a>
+                
+            </div>
+            
+            <!-- Additional Info -->
+            <div class="mt-8 p-4 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                <div class="flex items-start gap-3">
+                    <i class="fas fa-info-circle text-indigo-500 text-lg mt-0.5"></i>
+                    <div>
+                        <p class="text-sm text-gray-700">
+                            <span class="font-semibold">How it works:</span> 
+                            Join your table session to view the menu, place orders, and track your bill in real-time.
+                            No app download needed!
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Features Grid -->
+            <div class="mt-6 grid grid-cols-3 gap-3">
+                <div class="text-center p-3 rounded-lg bg-white/50">
+                    <i class="fas fa-utensil-spoon text-indigo-500 text-xl mb-1"></i>
+                    <p class="text-xs text-gray-600 font-medium">View Menu</p>
+                </div>
+                <div class="text-center p-3 rounded-lg bg-white/50">
+                    <i class="fas fa-cart-plus text-purple-500 text-xl mb-1"></i>
+                    <p class="text-xs text-gray-600 font-medium">Place Orders</p>
+                </div>
+                <div class="text-center p-3 rounded-lg bg-white/50">
+                    <i class="fas fa-receipt text-green-500 text-xl mb-1"></i>
+                    <p class="text-xs text-gray-600 font-medium">Track Bill</p>
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            <div class="mt-8 text-center">
+                <p class="text-xs text-gray-400">
+                    <i class="fas fa-shield-alt mr-1"></i>
+                    Secure • Encrypted • Instant
+                </p>
+                <p class="text-xs text-gray-400 mt-1">
+                    Session token: <span class="font-mono bg-gray-100 px-2 py-0.5 rounded">{{ session_token|slice:":8" }}...</span>
+                </p>
+            </div>
+            
+        </div>
+        
+    </div>
+    
+    <!-- Optional: Add a subtle animation on load -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const card = document.querySelector('.glass-card');
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            
+            setTimeout(() => {
+                card.style.transition = 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1)';
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+            }, 100);
+        });
+    </script>
+    
+</body>
+</html>

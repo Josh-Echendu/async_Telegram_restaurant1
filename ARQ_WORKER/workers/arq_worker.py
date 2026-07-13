@@ -1,4 +1,4 @@
-from tasks import handle_whatsapp_update, handle_telegram_update, process_telegram_setup, notify_telegram_payment_request, notify_whatsapp_payment_confirmed
+from tasks import handle_whatsapp_update, handle_facebook_update, handle_telegram_update, process_telegram_setup, notify_telegram_payment_request, notify_whatsapp_payment_confirmed
 from COMMON.redis import redis_settings, redis_client
 import asyncio
 from COMMON.logger_config import *
@@ -79,7 +79,8 @@ async def startup(ctx):
 class WorkerSettings:
     functions = [
                 handle_whatsapp_update, handle_telegram_update, 
-                notify_telegram_payment_request, notify_whatsapp_payment_confirmed
+                notify_telegram_payment_request, notify_whatsapp_payment_confirmed,
+                handle_facebook_update
             ]
 
     # ✅ This is the missing piece - register the startup function

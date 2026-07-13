@@ -625,6 +625,7 @@ class RestaurantMembership(models.Model):
 
 # 👉 ❌ No dine-in
 
+
 class DineInOTPSession(models.Model):
     """
     Production-grade OTP session for restaurant dine-in verification
@@ -637,7 +638,8 @@ class DineInOTPSession(models.Model):
     )
     
     # Core fields
-    session_id = ShortUUIDField(max_length=100, unique=True, db_index=True)
+    session_id = ShortUUIDField(length=10, unique=True, db_index=True)
+    session_token = ShortUUIDField(length=35, unique=True, db_index=True, help_text='session token for link sharing')
     restaurant = models.ForeignKey('restaurants.Restaurant', on_delete=models.CASCADE, db_index=True)
     user = models.ForeignKey('userAuths.TelegramUser', on_delete=models.CASCADE, db_index=True, null=True)    
 
@@ -741,6 +743,55 @@ class DineInOTPSession(models.Model):
     
     def __str__(self):
         return f"Table {self.table_number} - {self.status} - {self.restaurant.name}"
+
+
+class DineInSessionParticipant(models.Model):
+    """
+    Everyone who joins a table session after the host.
+    The host is DineInOTPSession.user — this table is for everyone else.
+    """
+    STATUS_CHOICES = (
+        ('pending', 'Awaiting host approval'),
+        ('accepted', 'Accepted by host'),
+        ('declined', 'Declined by host'),
+        ('removed', 'Removed after being accepted'),
+    )
+
+    session = models.ForeignKey(DineInOTPSession, on_delete=models.CASCADE, related_name='participants', db_index=True)
+    user = models.ForeignKey('userAuths.TelegramUser', on_delete=models.CASCADE, db_index=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    removed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['session', 'user'],
+                condition=Q(status='pending'),
+                name='unique_pending_request_per_user_per_session'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['session', 'status']),
+        ]
+
+    def accept(self):
+        self.status = 'accepted'
+        self.resolved_at = timezone.now()
+        self.save(update_fields=['status', 'resolved_at'])
+
+    def decline(self):
+        self.status = 'declined'
+        self.resolved_at = timezone.now()
+        self.save(update_fields=['status', 'resolved_at'])
+
+    def remove(self):
+        self.status = 'removed'
+        self.removed_at = timezone.now()
+        self.save(update_fields=['status', 'removed_at'])
+
+
 
 # 💬 IF YOU WANT NEXT
 

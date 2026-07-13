@@ -1,3 +1,4 @@
+from FACEBOOK_BOT_API.manager.fb_manager import dispatch_event
 from TELEGRAM_BOT_API.manager.bot_manager import get_bot
 from TELEGRAM_BOT_API.core.config import get_user_session, save_user_session
 from TELEGRAM_BOT_API.services.restaurant_cache import get_restaurant
@@ -17,46 +18,68 @@ import socket
 
 
 
+
+
+
+
 async def handle_telegram_update(ctx, update_data: dict, restaurant: dict):
-    logger.info(f"ctx:  {ctx}")
-    
-    # 🤖 1. Get the Bot Instance (Ideally from worker context 'ctx')
-    bot_app = await get_bot(restaurant['bot_token'])
-    logger.info(f"group bot app: {bot_app}")
-    
-    # 🔁 2. Reconstruct the Update Object
-    # We pass the bot instance so the update knows how to 'reply'
-    update = Update.de_json(update_data, bot_app.bot)
-
-    # 🔥 ADD THIS DEBUG
-    if update.message and update.message.text:
-        logger.info(f"📨 Processing message: {update.message.text}")
-        if update.message.text.startswith('/gencode'):
-            logger.info("🔥 /gencode command detected!")
-
-    # 🧠 3. Session Logic (Moved from FastAPI to Worker)
-    if update.effective_user:
-        user_id = update.effective_user.id
-        logger.info(f"user_id group: {user_id}")
-        user_session = await get_user_session(user_id)
-
-        user_session.update({
-            "current_rid": restaurant["rid"],
-            "restaurant_name": restaurant["bot_name"],
-            "business_type": restaurant["business_type"],
-            "service_mode": restaurant["service_mode"],
-            "max_tables": restaurant["max_tables"],
-            "vendor_type": restaurant['vendor_type'],
-            "time_zone": restaurant["time_zone"],
-            "kitchen_chat_id": restaurant.get("kitchen_chat_id"),
-        })
-
-
-        await save_user_session(user_id, user_session)
-
-    # ⚡ 4. Process the Handlers (start, echo, payment, etc.)
-    await bot_app.process_update(update)
-
+    try:
+        logger.info(f"ctx:  {ctx}")
+        
+        # 🤖 1. Get the Bot Instance (Ideally from worker context 'ctx')
+        try:
+            bot_app = await get_bot(restaurant['bot_token'])
+            logger.info(f"group bot app: {bot_app}")
+        except Exception as e:
+            logger.error(f"Failed to get bot instance: {e}")
+            raise
+        
+        # 🔁 2. Reconstruct the Update Object
+        try:
+            update = Update.de_json(update_data, bot_app.bot)
+        except Exception as e:
+            logger.error(f"Failed to reconstruct update: {e}")
+            raise 
+        
+        # 🔥 ADD THIS DEBUG
+        if update.message and update.message.text:
+            logger.info(f"📨 Processing message: {update.message.text}")
+            if update.message.text.startswith('/gencode'):
+                logger.info("🔥 /gencode command detected!")
+        
+        # 🧠 3. Session Logic (Moved from FastAPI to Worker)
+        if update.effective_user:
+            try:
+                user_id = update.effective_user.id
+                logger.info(f"user_id group: {user_id}")
+                user_session = await get_user_session(user_id)
+                
+                user_session.update({
+                    "current_rid": restaurant["rid"],
+                    "restaurant_name": restaurant["bot_name"],
+                    "business_type": restaurant["business_type"],
+                    "service_mode": restaurant["service_mode"],
+                    "max_tables": restaurant["max_tables"],
+                    "vendor_type": restaurant['vendor_type'],
+                    "time_zone": restaurant["time_zone"],
+                    "kitchen_chat_id": restaurant.get("kitchen_chat_id"),
+                })
+                
+                await save_user_session(user_id, user_session)
+            except Exception as e:
+                logger.error(f"Failed to save user session: {e}")
+                raise
+        
+        # ⚡ 4. Process the Handlers (start, echo, payment, etc.)
+        try:
+            await bot_app.process_update(update)
+        except Exception as e:
+            logger.error(f"Failed to process update: {e}")
+            raise
+            
+    except Exception as e:
+        logger.exception(f"Unexpected error in handle_telegram_update: {e}")
+        raise
 
 
 
@@ -381,8 +404,30 @@ async def handle_whatsapp_update(ctx, update_data: dict, raw_payload: bytes, sig
         logger.info("✅ WhatsApp handlers executed successfully")
     except Exception:
         logger.exception("❌ Error in Pywa handler")
+        raise
 
 
+
+
+async def handle_facebook_update(ctx, event, restaurant):
+
+    # Log all context keys
+    logger.info(f"ctx keys: {ctx.keys()}")
+    logger.info(f"ctx items: {ctx.items()}")
+
+    try:
+        logger.info("✅ Facebook event received")
+
+        await dispatch_event(event, restaurant)
+
+        logger.info("✅ Facebook handlers executed successfully")
+
+    except Exception:
+        logger.exception("❌ Error in Facebook handler")
+        raise
+
+    
+    
 
 
 async def notify_telegram_payment_request(ctx,

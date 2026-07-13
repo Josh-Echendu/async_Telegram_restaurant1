@@ -2,7 +2,7 @@
 from TELEGRAM_BOT_API.core.config import *
 from TELEGRAM_BOT_API.utils.cart_utils import *
 from TELEGRAM_BOT_API.utils.kitchen_utils import *
-from core.config import _request_with_retry
+from FACEBOOK_BOT_API.core.config import _request_with_retry
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):

@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import admin_login_view, admin_logout_view, whatsapp_callback_view, whatsapp_error_view, whatsapp_login, whatsapp_callback_view, whatsapp_init_session_api_view, whatsapp_user_create_api_view, telegram_user_create_api_view, telegram_list_api_view
+from .views import admin_login_view, admin_logout_view, whatsapp_callback_view, whatsapp_error_view, facebook_callback_view, whatsapp_login, whatsapp_callback_view, whatsapp_init_session_api_view, whatsapp_user_create_api_view, telegram_user_create_api_view, telegram_list_api_view
 
 app_name = "userauths"
 
@@ -11,9 +11,16 @@ urlpatterns = [
     
 
     path("whatsapp/init_session/", whatsapp_init_session_api_view),
+
+    # callback url
     path("whatsapp/callback/<str:restaurant_id>/", whatsapp_callback_view, name='whatsapp_callback'),
+    path('facebook/callback/<str:restaurant_id>/', facebook_callback_view, name='facebook_callback'),
+
     path("whatsapp/login/<str:restaurant_id>/", whatsapp_login, name='whatsapp_login'),
-    path("whatsapp/error/<str:restaurant_id>/", whatsapp_error_view, name='whatsapp_error'),
+
+    # Error pages
+    # path('facebook/error/<str:restaurant_id>/', facebook_error_view, name='facebook_error'),
+    path('whatsapp/error/<str:restaurant_id>/', whatsapp_error_view, name='whatsapp_error'),
 
 
     path('users/', telegram_list_api_view),

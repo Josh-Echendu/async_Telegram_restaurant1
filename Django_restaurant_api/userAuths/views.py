@@ -217,7 +217,7 @@ class CreateAuthTokenAPIView(APIView):
         
         platform = (platform or "").lower()
 
-        if platform not in ['whatsapp', 'whatsapp2']:
+        if platform not in ['whatsapp', 'whatsapp2', 'facebook']:
             return Response(
                 {"error": "Invalid platform. Must be 'whatsapp' or 'telegram'"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -225,6 +225,8 @@ class CreateAuthTokenAPIView(APIView):
 
         if platform == 'whatsapp':
             active_user = get_object_or_404(TelegramUser, whatsapp_id=user_id)
+        elif platform == 'facebook':
+            active_user = get_object_or_404(TelegramUser, page_id=user_id)
         else:
             active_user = get_object_or_404(TelegramUser, phone_number=user_id)
         
@@ -249,13 +251,16 @@ class CreateAuthTokenAPIView(APIView):
         )
 
         # 🔥 ADD THIS DEBUG
-        print(f"🔐 NEW TOKEN CREATED: {token.token}")
         print(f"   is_used: {token.is_used}")
-        print(f"   expires_at: {token.expires_at}")
         
         # ✅ Secure URL construction with NGROK_DJANGO
         base_url = settings.NGROK_DJANGO.rstrip('/')
-        url = f"{base_url}/userauths/whatsapp/callback/{restaurant_id}/?token={token.token}"
+
+        if platform == 'whatsapp':
+            url = f"{base_url}/userauths/whatsapp/callback/{restaurant_id}/?token={token.token}"
+        
+        elif platform == 'facebook':
+            url = f"{base_url}/userauths/facebook/callback/{restaurant_id}/?token={token.token}"
         
         return Response({
             "token": token.token,
@@ -275,11 +280,7 @@ def whatsapp_callback_view(request, restaurant_id):
         return HttpResponse("VibeFlow - Restaurant Ordering System", status=200)
     
     token = request.GET.get("token")
-    print(f"🔥 CALLBACK CALLED at {timezone.now()}")
-    print(f"   Token: {request.GET.get('token')}")
-    print(f"   Request path: {request.path}")
     print(f"   User agent: {request.META.get('HTTP_USER_AGENT')}")
-
     
     if not token:
 
@@ -312,11 +313,7 @@ def whatsapp_callback_view(request, restaurant_id):
         return redirect(f"{menu_url}")
 
     print("no existing session, validating token..........")
-    if not auth.is_valid():
-        # if request.session.get("user_id") == auth.user_id:
-        #     reverse_url = reverse('whatsapp_login', args=[restaurant_id])
-        #     return redirect(f"{reverse_url}?token={token}")  # ← FIXED
-        
+    if not auth.is_valid():        
         reverse_url = reverse('userauths:whatsapp_error', args=[restaurant_id])
         print('Expired or used token provided for restaurant_id', restaurant_id)
         return redirect(f"{reverse_url}?code=invalid_token")  # ← FIXED
@@ -340,6 +337,72 @@ def whatsapp_callback_view(request, restaurant_id):
     auth.use()
 
     logger.info('Token used successfully for restaurant_id %s', restaurant_id)
+    restaurant_menu_url = reverse('orders:restaurant-detail', args=[restaurant_id])
+    return redirect(f"{restaurant_menu_url}")
+
+
+# views.py - Add Facebook callback
+def facebook_callback_view(request, restaurant_id):
+    """
+    Handle Facebook menu URL callback
+    """
+    
+    # 🔥 Block Facebook crawler immediately
+    user_agent = request.META.get('HTTP_USER_AGENT', '')
+    if 'facebookexternalhit' in user_agent:
+        print("🚫 Blocked Facebook crawler access")
+        return HttpResponse("VibeFlow - Restaurant Ordering System", status=200)
+    
+    token = request.GET.get("token")
+    
+    if not token:
+        error_url = reverse('userauths:facebook_error', args=[restaurant_id])
+        return redirect(f"{error_url}?code=missing_token")
+    
+    # ✅ Validate token from DATABASE
+    try:
+        auth = AuthToken.objects.select_related('restaurant').get(
+            token=token,
+            restaurant__rid=restaurant_id
+        )
+    except AuthToken.DoesNotExist:
+        error_url = reverse('userauths:facebook_error', args=[restaurant_id])
+        logger.info('Invalid token provided for restaurant_id %s', restaurant_id)
+        return redirect(f"{error_url}?code=invalid_token")
+    
+    # ✅ Check existing session
+    if (
+        request.session.get("user_id") == auth.user_id and
+        request.session.get("restaurant_id") == restaurant_id and
+        request.session.get("mode") == auth.mode
+    ):
+        print("reusing existing session...")
+        menu_url = reverse('orders:restaurant-detail', args=[restaurant_id])
+        logger.info("Existing session found for restaurant_id %s", restaurant_id)
+        return redirect(f"{menu_url}")
+    
+    # ✅ Validate token
+    if not auth.is_valid():
+        error_url = reverse('userauths:facebook_error', args=[restaurant_id])
+        print('Expired or used token provided for restaurant_id', restaurant_id)
+        return redirect(f"{error_url}?code=invalid_token")
+    
+    # ✅ Reset session if different user
+    if (request.session.get("user_id") != auth.user_id or
+        request.session.get("restaurant_id") != restaurant_id):
+        logger.info('Session reset for restaurant_id %s', restaurant_id)
+        request.session.flush()
+    
+    # ✅ Create session
+    request.session["user_id"] = auth.user_id
+    request.session["platform"] = auth.platform
+    request.session["restaurant_id"] = restaurant_id
+    request.session["mode"] = auth.mode
+    
+    # ✅ Mark token as used (one-time use)
+    auth.use()
+    
+    logger.info('Token used successfully for Facebook user %s', auth.user_id)
     restaurant_menu_url = reverse('orders:restaurant-detail', args=[restaurant_id])
     return redirect(f"{restaurant_menu_url}")
 
