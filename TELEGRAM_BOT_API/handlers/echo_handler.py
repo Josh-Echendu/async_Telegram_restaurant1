@@ -28,7 +28,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Good day {first_name} 😊, to contact us you call us on \n\n CONTACT: +234 906 393 8743.")
 
     elif text == "🛍️✅💳 Checkout/Pay":
-        user_session = await get_user_session(update.effective_chat.id)
+        user_session = await get_user_session(update.effective_user.id)
         business_type = user_session.get('business_type')
         
         service_mode = (user_session.get('service_mode') or "").lower()
@@ -75,7 +75,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
             await context.bot.send_message(
-                chat_id=update.effective_chat.id,
+                chat_id=update.effective_user.id,
                 text=summary,
                 parse_mode="HTML"
             )
@@ -98,7 +98,11 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             logger.error("You are not allowed to use the chekout/pay Button")
 
-            
+
+    else:
+        await start(update, context)      
+        
+          
 async def payment_keyboard():
     keyboard = [
         [

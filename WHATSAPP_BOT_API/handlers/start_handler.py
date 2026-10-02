@@ -1,7 +1,28 @@
 from typing import Optional, Dict, Any
 from WHATSAPP_BOT_API.core.config import *
+from WHATSAPP_BOT_API.core.config import _request_with_retry
 
 
+async def handle_join_session(msg, session_token):
+    
+    user_id = msg.from_user.wa_id
+
+    user_session = await get_user_session(msg.from_user.wa_id)
+    restaurant_id = user_session.get('current_rid')
+
+    payload = {
+        "platform": "whatsapp",
+        "user_id": user_id,
+        "session_token": session_token,
+        "restaurant_id": restaurant_id
+    }
+
+    return await _request_with_retry(
+        method="POST",
+        url=f"http://web:8000/restaurants/dine-in/request-join/",  # ✅ Full URL
+        json=payload, 
+        headers={"X-INTERNAL-API-KEY": INTERNAL_API_KEY}
+    )
 
 
 # =========================
@@ -56,8 +77,19 @@ async def start_handler(client: WhatsApp, msg: Message):
         username=username, phone_number=user_phone, restaurant_id=restaurant_id)
 
     if not registration:
-        return 
-
+        raise Exception("Failed to register User")  # Direct raise - ARQ retries automatically!
+ 
+    
+    if msg.text and msg.text.startswith("join_"):
+        session_token = msg.text[5:]  # Remove "join_"
+        response, success = await handle_join_session(msg, session_token)
+        
+        if not success:
+            raise Exception("Failed to join session")  # Direct raise - ARQ retries automatically!
+        
+        await redis_client.set(f"user_session_token:{restaurant_id}:{user_id}",  session_token, ex=86400)
+    
+    
     # --- BUSINESS-SPECIFIC BUTTONS ---
 
         # =========================

@@ -1,5 +1,6 @@
 from WHATSAPP_BOT_API.services.restaurant_cache import get_restaurant
 from WHATSAPP_BOT_API.core.config import *
+from WHATSAPP_BOT_API.core.config import _request_with_retry
 import pytz
 from datetime import datetime, timezone, time
 from .order_handler import order_meal
@@ -60,6 +61,27 @@ async def handle_order_buttons(client: WhatsApp, btn: CallbackButton):
 
     elif data == "bank_transfer":
         await bank_transfer(client, btn)
+ 
+    elif data.startswith('join_'):
+
+        data_list = data.split('_') # spilt into ["join", "accept/decline", "participant_id"]    
+        action = data_list[1] # extracts the action either accept or decline
+        participant_id = data_list[-1] # extract the last item of the list i.e the participant_id
+
+        platform = 'whatsapp'
+        host_user_id = btn.from_user.wa_id
+
+        response, success = await respond_to_join_request(action=action, participant_id=participant_id,
+            platform=platform, host_user_id=host_user_id
+        )
+
+        if not success:
+            raise Exception(f"Failed to respond to join request: {response}")
+        
+        logger.info(f"successfully {action}ed the request from participant= {participant_id}")
+
+    
+    
     
     elif data in ["pay_cash", "pay_pos"]:
 
@@ -144,6 +166,23 @@ async def handle_order_buttons(client: WhatsApp, btn: CallbackButton):
             _queue_name="restaurant_jobs"
         )
         logger.info("enqueued to arq worker ")
+
+
+
+async def respond_to_join_request(action, participant_id, platform, host_user_id):
+
+    payload = {
+        "action": action,
+        "participant_id": participant_id,
+        "platform": platform,
+        "host_user_id": host_user_id
+    }
+
+    return await _request_with_retry(
+        method="POST",
+        url=f"http://web:8000/restaurants/dine-in/respond-join/",  # ✅ Full URL
+        json=payload 
+    )
 
 
 # Helper functions you need to adapt:

@@ -27,7 +27,13 @@ urlpatterns = [
     path('useradmin/', include('userAdmin.urls')),  # your other API routes
     path('restaurants/', include('restaurants.urls')),  # your other API routes
     path('payments/', include('payments.urls')),  # your other API routes
+
+    # all auth urls config
+    path('accounts/', include('allauth.urls')),
+
 ]
+# psycopg2-binary==2.9.11
+
 
 
 if settings.DEBUG:

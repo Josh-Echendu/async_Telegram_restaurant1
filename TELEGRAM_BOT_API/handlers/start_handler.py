@@ -1,35 +1,82 @@
 # handlers/start_handler.py - EXACT COPY FROM ORIGINAL FILE
+import uuid
+
 from TELEGRAM_BOT_API.core.config import *
 from TELEGRAM_BOT_API.utils.cart_utils import *
 from TELEGRAM_BOT_API.utils.kitchen_utils import *
 from FACEBOOK_BOT_API.core.config import _request_with_retry
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+tg_user_data = {}
 
+async def handle_join_session(update, context, session_token):
+    
+    user_session = await get_user_session(update.effective_chat.id)
+    restaurant_id = user_session.get('current_rid')
+    idempotency_key = str(uuid.uuid4())
+
+
+    payload = {
+        "platform": "telegram",
+        "user_id": update.effective_user.id,
+        "session_token": session_token,
+        "restaurant_id": restaurant_id,
+        "idempotency_key": idempotency_key
+    }
+
+    response, success = await _request_with_retry(
+        method="POST",
+        url=f"http://web:8000/restaurants/dine-in/request-join/",  # ✅ Full URL
+        json=payload, 
+        headers={"X-INTERNAL-API-KEY": INTERNAL_API_KEY}
+    )
+    
+    if not success:
+        raise Exception(f"Failed to join session: {response}") from None
+    
+    return response, success
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
     restaurant_data = await get_user_session(update.effective_chat.id)
     restaurant_id = restaurant_data.get('current_rid')
     restaurant_name = restaurant_data.get('restaurant_name')
     business_type = (restaurant_data.get('business_type') or "").lower()
     vendor_type = (restaurant_data.get('vendor_type') or "").lower()
     service_mode = (restaurant_data.get('service_mode') or "").lower()
+    
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     first_name = update.effective_chat.first_name
     username = update.effective_user.username
-
     
 
-    
     # --- REGISTER USER ---
     registration = await telegram_registration(telegram_id=user_id, first_name=first_name, username=username, restaurant_id=restaurant_id)
 
     if not registration:
-        return 
+        raise Exception("Failed to register User")  # Direct raise - ARQ retries automatically!
+ 
+    # Get the payload after "start="
+    payload = context.args[0] if context.args else None
+    print("start payload: ", payload)
+    
+    if payload and payload.startswith("join_"):
+        session_token = payload.replace("join_", "")
+        
+        # Just call and check - raise if fails
+        response, success = await handle_join_session(update, context, session_token)
+        
+        if not success:
+            raise Exception("Failed to join session")  # Direct raise - ARQ retries automatically!
+        
+        await redis_client.set(f"user_session_token:{restaurant_id}:{user_id}",  session_token, ex=86400)
+
+
     
     # --- BUSINESS-SPECIFIC KEYBOARD ---
     if business_type == "restaurant":
-
         service_mode = (restaurant_data.get('service_mode') or "").lower()
         
         if service_mode == "delivery":
@@ -37,11 +84,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ["🍽 Order Food", "📦 Track Order"],
                 ["📞 Contact Staff"]
             ]
-
         elif service_mode in ["dine_in", 'both']:
             keyboard = [
                 ["🍽 Order Food", "📦 Track Order"],
                 ["📞 Contact Staff", "🛍️✅💳 Checkout/Pay"]
+            ]
+        else:
+            keyboard = [
+                ["🍽 Order Food", "📦 Track Order"],
+                ["📞 Contact Staff"]
             ]
 
     elif business_type == "vendor":
@@ -50,7 +101,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ["🛍️ Browse Products", "📦 Track Order"],
                 ["📞 Contact Staff"]
             ]
-            
         elif vendor_type == "cooked_food":
             keyboard = [
                 ["🍽 Order Food", "📦 Track Order"],
@@ -84,7 +134,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "role": "Your personal food vendor assistant",
             "features": "🍽 Browse meals\n🛒 Place orders\n📦 Track deliveries\n⚡ Fresh and fast service"
         },
-
     }
 
     # Select the right message template
@@ -113,7 +162,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
         parse_mode="HTML"
     )
-    
 
 async def telegram_registration(telegram_id, first_name, username, restaurant_id, max_retries=5):
     """

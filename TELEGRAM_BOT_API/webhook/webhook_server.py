@@ -23,7 +23,8 @@ async def webhook(rid: str, request: Request):
             logger.error(f"Restaurant {rid} not found in database/cache.")
             return {"ok": False, "error": "Restaurant not found"}
 
-        logger.info("...............restaurant_josh: ", restaurant)
+        print("printed: ", data)
+        logger.info("...............restaurant_josh: %s", restaurant)
 
         # 🔐 VALIDATE SECRET HEADER
         secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")

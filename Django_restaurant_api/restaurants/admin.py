@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Restaurant, RestaurantDeliveryOpeningHours, RestaurantMembership, DineInOTPSession
+from .models import Restaurant, RestaurantDeliveryOpeningHours, RestaurantMembership, DineInOTPSession, DineInSessionParticipant
 
 
 class RestaurantAdmin(admin.ModelAdmin):
@@ -14,8 +14,12 @@ class RestaurantMembershipAdmin(admin.ModelAdmin):
 class DineInOTPSessionAdmin(admin.ModelAdmin):
     list_display = ['restaurant', 'user__username', 'table_number', 'waiter_username']
 
+class DineInSessionParticipantAdmin(admin.ModelAdmin):
+    list_display = ['session__restaurant', 'user__username', 'status', 'session__table_number']
+
 
 admin.site.register(Restaurant, RestaurantAdmin)
 admin.site.register(RestaurantDeliveryOpeningHours, RestaurantDeliveryOpeningHoursAdmin)
 admin.site.register(RestaurantMembership, RestaurantMembershipAdmin)
 admin.site.register(DineInOTPSession, DineInOTPSessionAdmin)
+admin.site.register(DineInSessionParticipant, DineInSessionParticipantAdmin)

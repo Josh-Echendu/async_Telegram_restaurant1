@@ -26,7 +26,7 @@ async def start(event, restaurant_data):
 
     else:
 
-        response = await _request_with_retry(
+        response, success = await _request_with_retry(
             method="GET",
             url=f"https://graph.facebook.com/v23.0/{user_id}",
             params={

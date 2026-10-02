@@ -3,6 +3,7 @@ from datetime import timezone, datetime
 from datetime import time
 import json
 import math
+from COMMON import redis
 from TELEGRAM_BOT_API.services.restaurant_cache import get_restaurant
 from TELEGRAM_BOT_API.core.config import *
 from TELEGRAM_BOT_API.utils.cart_utils import *
@@ -12,6 +13,7 @@ from .kitchen_handler import api_get_user_order_batches, handle_pos_cash_payment
 from .dynamic_virtual import generate_dynamic_virtual_account
 from .echo_handler import payment_keyboard
 import pytz
+from TELEGRAM_BOT_API.core.config import _request_with_retry
 import math
 import secrets
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -308,7 +310,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         payment_type = "cash" if data == "pay_cash" else "pos"
         response = await handle_pos_cash_payment(update, payment_type)
-        customer_user_id = update.effective_chat.id
+        customer_user_id = update.effective_user.id
         
         if not response:
             await query.edit_message_text(
@@ -412,7 +414,43 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=update.effective_user.id,
                 text="⚠️ We're having trouble notifying staff. Please inform your waiter manually."
             )
-            
+
+    elif data.startswith('join_'):
+
+        data_list = data.split('_') # spilt into ["join", "accept/decline", "participant_id"]    
+        action = data_list[1] # extracts the action either accept or decline
+        participant_id = data_list[-1] # extract the last item of the list i.e the participant_id
+        logger.info("join_ data: %s %s %s", data, action, participant_id)
+
+        platform = 'telegram'
+        host_user_id = update.effective_user.id
+
+        response, success = await respond_to_join_request(action=action, participant_id=participant_id,
+            platform=platform, host_user_id=host_user_id
+        )
+
+        if not success:
+            raise Exception(f"Failed to respond to join request: {response}")
+        
+        logger.info(f"successfully {action}ed the request from participant= {participant_id}")
+
+
+
+async def respond_to_join_request(action, participant_id, platform, host_user_id):
+
+    payload = {
+        "action": action,
+        "participant_id": participant_id,
+        "platform": platform,
+        "host_user_id": host_user_id
+    }
+
+    return await _request_with_retry(
+        method="POST",
+        url=f"http://web:8000/restaurants/dine-in/respond-join/",  # ✅ Full URL
+        json=payload 
+    )
+    
 
 async def is_delivery_available(update):
     user_session = await get_user_session(update.effective_user.id)
@@ -482,15 +520,24 @@ async def is_delivery_available(update):
 
 
 async def menu_keyboard(update, query):
+
+    # ✅ Use chat_id (matches how session was saved)
     user_session = await get_user_session(update.effective_user.id)
     
-    restaurant_id = user_session['current_rid']
-    user_service_mode = user_session['user_service_mode']
-
+    restaurant_id = user_session.get('current_rid')
+    user_service_mode = user_session.get('user_service_mode')  # ✅ Correct key
     platform = "telegram"
+    user_id = update.effective_user.id
 
-    # Build URL with mode and platform
-    WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode={user_service_mode}&platform={platform}"
+    # ✅ Check if user came via join link
+    has_join_session = await redis_client.get(f"user_session_token:{restaurant_id}:{user_id}")
+    print("has_join_session:", has_join_session)
+
+    # ✅ Build URL - add join=true if they came via link
+    if has_join_session:
+        WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode={user_service_mode}&platform={platform}&join=true"
+    else:
+        WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode={user_service_mode}&platform={platform}"
 
     reply_keyboard = [
         [

@@ -61,17 +61,24 @@ async def _request_with_retry(method: str, url: str, **kwargs):
             )
             return response, True
             
+
         except Exception as e:
             last_exception = e
             
             if attempt < max_retries:
                 wait = backoff * (2 ** attempt)
+                
+                # ✅ Fix: Don't try to access e.response.data if it doesn't exist
+                error_msg = str(e)
+                if hasattr(e, 'response') and hasattr(e.response, 'text'):
+                    error_msg = f"{e} - Response: {e.response.text[:1000]}"
+                
                 logger.warning(
                     "Request to %s failed (attempt %d/%d): %s. Retrying in %.1fs",
                     url,
                     attempt + 1,
                     max_retries + 1,
-                    str(e),
+                    error_msg,
                     wait
                 )
                 await asyncio.sleep(wait)

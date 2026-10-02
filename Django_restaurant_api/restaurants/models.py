@@ -636,12 +636,31 @@ class DineInOTPSession(models.Model):
         ('expired', 'OTP expired'),
         ('cancelled', 'Cancelled by waiter'),
     )
+
+    PLATFORM_CHOICES = (
+        ('whatsapp', 'Whatsapp App'),
+        ('telegram', 'Telegram App'),
+
+    )
+
     
     # Core fields
-    session_id = ShortUUIDField(length=10, unique=True, db_index=True)
-    session_token = ShortUUIDField(length=35, unique=True, db_index=True, help_text='session token for link sharing')
+    session_id = ShortUUIDField(max_length=255, unique=True, db_index=True)
+
+    session_token = ShortUUIDField(
+        length=35, 
+        unique=True,
+        db_index=True, 
+        null=True,  # Allow null temporarily
+        blank=True,
+        help_text='session token for link sharing'
+    )
     restaurant = models.ForeignKey('restaurants.Restaurant', on_delete=models.CASCADE, db_index=True)
     user = models.ForeignKey('userAuths.TelegramUser', on_delete=models.CASCADE, db_index=True, null=True)    
+    
+    platform = models.CharField(max_length=20, choices=PLATFORM_CHOICES, null=True, blank=True, 
+        help_text='The Host platform app'
+    )
 
     # Verification fields
     table_number = models.PositiveSmallIntegerField()
@@ -687,7 +706,8 @@ class DineInOTPSession(models.Model):
                     exists = DineInOTPSession.objects.select_for_update().filter(
                         restaurant=self.restaurant,
                         otp_code=code,
-                        status='pending'
+                        status='pending',
+                        otp_expires_at__gt=timezone.now()
                     ).exists()
 
                     if not exists:
@@ -709,10 +729,11 @@ class DineInOTPSession(models.Model):
             return False
         return True
     
-    def verify(self, active_user):
+    def verify(self, active_user, platform):
         """Mark session as verified"""
         self.user=active_user
         self.status='verified'
+        self.platform=platform
         self.verified_at=timezone.now()
         self.save(update_fields=['status', 'verified_at', 'user'])
     
@@ -743,6 +764,13 @@ class DineInOTPSession(models.Model):
     
     def __str__(self):
         return f"Table {self.table_number} - {self.status} - {self.restaurant.name}"
+
+    def save(self, *args, **kwargs):
+        if self.status == 'pending' and self.otp_expires_at and self.otp_expires_at < timezone.now():
+            self.status = 'expired'
+
+        super().save(*args, **kwargs)
+
 
 
 class DineInSessionParticipant(models.Model):
