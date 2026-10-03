@@ -16,6 +16,10 @@ from rest_framework.views import APIView
 from django.db.models import Q
 import redis
 from .tasks import retry_join_notification, notify_host_whatsapp, notify_host_telegram
+# views.py
+from django.http import StreamingHttpResponse
+import json
+import time
 
 logger = logging.getLogger(__name__)
 redis_client = redis.Redis.from_url(settings.REDIS_URL)
@@ -473,7 +477,10 @@ class RequestJoinTableAPIView(APIView):
 
         # 🔥 SMART FALLBACK: If no token in request, get from Redis
         if session_token is None:
-            session_token = redis_client.get(f"user_session_token:{restaurant_id}:{user_id}")
+            session_token_bytes = redis_client.get(f"user_session_token:{restaurant_id}:{user_id}")
+            if session_token_bytes:
+                session_token = session_token_bytes.decode()
+                print("session token: ", session_token)
 
         else:
             # 🔐 INTERNAL SECURITY
@@ -482,6 +489,7 @@ class RequestJoinTableAPIView(APIView):
                 return Response({"error": "unauthorized"}, status=403)
 
         if not all([user_id, session_token, platform, restaurant_id]):
+            print("Missing required fields")
             return Response({"error": "Missing required fields"}, status=400)
 
         if platform == "telegram":
@@ -489,6 +497,7 @@ class RequestJoinTableAPIView(APIView):
         elif platform == "whatsapp":
             active_user = TelegramUser.objects.filter(whatsapp_id=user_id).first()
         else:
+            print("Invalid platform")
             return Response({"error": "Invalid platform"}, status=400)
 
         if not active_user:
@@ -548,9 +557,24 @@ class RequestJoinTableAPIView(APIView):
                 participant = DineInSessionParticipant.objects.create(
                     session=session, user=active_user, status='pending'
                 )
-                redis_client.set(f"join_status:{participant.id}", "pending", ex=86400)
-                redis_client.set(f"join_id:{session.restaurant.rid}:{platform}:{user_id}", participant.id, ex=86400)
 
+                # ✅ Single key with full payload — status + session_id + table_number
+                redis_client.set(
+                    f"join:{participant.id}",
+                    json.dumps({
+                        "status": "pending",
+                        "session_id": None,
+                        "table_number": session.table_number,
+                    }),
+                    ex=86400
+                )
+
+                # Reverse lookup key
+                redis_client.set(
+                    f"join_id:{session.restaurant.rid}:{platform}:{user_id}",
+                    participant.id,
+                    ex=86400
+                )
                 print(f"Participant {participant.id} created for session {session.session_id} by user {active_user.id}")
 
                 # ✅ SEND NOTIFICATION WITH RETRY
@@ -627,6 +651,11 @@ class RequestJoinTableAPIView(APIView):
 request_to_join_table_api_view = RequestJoinTableAPIView.as_view()
 
 
+
+# Table	Host	Participants	Items	Total	Status	Action
+# Table 5	Alex	4 joined	12 items	₦38,700	🟢 Paid	View
+# Table 3	Sandra	2 joined	5 items	₦15,000	🟡 Awaiting Payment	View
+# Table 7	Tunde	0 joined	3 items	₦8,000	🟢 Paid	View
 
 class RespondToJoinRequestAPIView(APIView):
     """
@@ -710,11 +739,6 @@ respond_to_join_api_view = RespondToJoinRequestAPIView.as_view()
 
 
 
-# views.py
-from django.http import StreamingHttpResponse
-import json
-import time
-
 
 def sse_join_status(request, restaurant_id, platform, user_id):
     def event_stream():
@@ -726,7 +750,8 @@ def sse_join_status(request, restaurant_id, platform, user_id):
                 participant_id_bytes = redis_client.get(f"join_id:{restaurant_id}:{platform}:{user_id}")
                 
                 if participant_id_bytes is None:
-                    yield f"data: {json.dumps({'participant': None, 'error': 'No join request found'})}\n\n"
+                    event_data = {'participant': None, 'error': 'No join request found'}
+                    yield f"data: {json.dumps(event_data)}\n\n"
                     break
                 
                 participant_id = participant_id_bytes.decode()
@@ -735,7 +760,8 @@ def sse_join_status(request, restaurant_id, platform, user_id):
                 join_data_bytes = redis_client.get(f"join:{participant_id}")
                 
                 if join_data_bytes is None:
-                    yield f"data: {json.dumps({'status': None, 'error': 'Status not found or expired'})}\n\n"
+                    event_data = {'status': None, 'error': 'Status not found or expired'}
+                    yield f"data: {json.dumps(event_data)}\n\n"
                     break
                 
                 join_data = json.loads(join_data_bytes.decode())
@@ -746,12 +772,13 @@ def sse_join_status(request, restaurant_id, platform, user_id):
                     last_status = status
                     
                     # Send full payload — status + session_id + table_number
-                    yield f"data: {json.dumps({
+                    event_data = {
                         'status': status,
                         'participant_id': participant_id,
                         'session_id': join_data.get('session_id'),
                         'table_number': join_data.get('table_number'),
-                    })}\n\n"
+                    }
+                    yield f"data: {json.dumps(event_data)}\n\n"
                     
                     if status in ['accepted', 'declined']:
                         break
@@ -760,7 +787,8 @@ def sse_join_status(request, restaurant_id, platform, user_id):
                 
             except Exception as e:
                 logger.error(f"SSE error: {e}")
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                event_data = {'error': str(e)}
+                yield f"data: {json.dumps(event_data)}\n\n"
                 break
     
     response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')

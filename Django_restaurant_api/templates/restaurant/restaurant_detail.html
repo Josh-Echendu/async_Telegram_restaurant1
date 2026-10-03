@@ -995,12 +995,16 @@
   reapplyRequest() {
       const idempotencyKey = `join_${this.userId}_${this.restaurantId}_${Date.now()}`;
 
+      // ✅ Use correct ID per platform
+      const effectiveUserId = this.platform === 'telegram' ? this.telegramId : this.userId;
+
       const payload = {
           platform: this.platform,
-          user_id: this.userId,
+          user_id: effectiveUserId,      // ✅ 5680934456 for Telegram
           restaurant_id: this.restaurantId,
           idempotency_key: idempotencyKey,
       };
+      console.log('Reapplying with payload:', payload);
       
       this.isReapplying = true;
 

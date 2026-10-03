@@ -1025,7 +1025,7 @@ class OrderBatchListCreateAPIView(APIView):
         if payment_method == "transfer":
             final_amount = amounts['transfer_total']
             charges = amounts['transfer_fee']
-        elif payment_method == "card":  # ← Use elif, not if
+        elif payment_method == "card": 
             final_amount = amounts["card_total"]
             charges = amounts['card_fee']
                 
