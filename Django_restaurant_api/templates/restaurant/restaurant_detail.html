@@ -376,6 +376,7 @@
   isReapplying: false,  // ← ADD THIS
   eventSource: null,
   isJoiner: false,  // ← ADD THIS
+  sseClosingIntentionally: false,
 
 
 
@@ -862,6 +863,9 @@
           this.eventSource = null;
       }
       
+      // ✅ Reset flag when starting fresh
+      this.sseClosingIntentionally = false;
+
       const userId = this.platform === 'telegram' ? this.telegramId : this.userId;
       const sseUrl = `/restaurants/sse/join-status/${this.restaurantId}/${this.platform}/${userId}/`;
 
@@ -879,11 +883,18 @@
               // ========================================
               // CASE 1: NO REQUEST FOUND → SHOW OTP
               // ========================================
-              if (data.error === 'No join request found' || data.error === 'Status not found or expired') {
+              if (data.error) {
                   console.log('🔑 No request found, showing OTP modal');
+                  console.log('🔑 Error from server, showing OTP:', data.error);
+
                   this.showOtpModal = true;
                   this.showWaitingModal = false;
                   this.showDeclinedModal = false;
+          
+                  // ✅ MARK AS INTENTIONAL
+                  this.sseClosingIntentionally = true;
+                  this.eventSource.close();
+                  this.eventSource = null;
                   return;
               }
               
@@ -938,6 +949,9 @@
                   this.loadCategories();
                   this.loadProducts('all');
                   
+                  // ✅ MARK AS INTENTIONAL
+                  this.sseClosingIntentionally = true;
+
                   // Close SSE (no longer needed)
                   this.eventSource.close();
                   this.eventSource = null;
@@ -949,9 +963,15 @@
               // ========================================
               if (data.status === 'declined') {
                   console.log('❌ Host declined the request.');
+                  
                   this.showOtpModal = false;
                   this.showWaitingModal = false;
                   this.showDeclinedModal = true;
+
+                  // ✅ MARK AS INTENTIONAL
+                  this.sseClosingIntentionally = true;
+                  this.eventSource.close();
+                  this.eventSource = null;
                   return;
               }
               
@@ -961,15 +981,36 @@
               }
               
           } catch (e) {
-              console.error('❌ SSE parse error:', e);
+
+            // ═══════════════════════════════════════
+            // PARSE ERROR → SHOW OTP (SAFE FALLBACK)
+            // ═══════════════════════════════════════
+            console.error('❌ SSE parse error:', e);
+            
+            this.showOtpModal = true;
+            this.showWaitingModal = false;
+            this.showDeclinedModal = false;
+            
+            this.sseClosingIntentionally = true;
+            if (this.eventSource) {
+                this.eventSource.close();
+                this.eventSource = null;
+            }
           }
       };
 
       
       // ===== HANDLE CONNECTION ERRORS =====
       this.eventSource.onerror = (error) => {
-          console.log('⚠️ SSE connection error. Reconnecting in 3s...');
 
+          // ✅ Skip retry if we closed intentionally
+          if (this.sseClosingIntentionally) {
+              console.log('✅ SSE closed intentionally. No retry.');
+              this.sseClosingIntentionally = false;
+              return;
+          }
+
+          console.log('⚠️ SSE connection error. Reconnecting in 3s...');
 
           // ❌ Close broken connection
           if (this.eventSource) {
@@ -1013,6 +1054,9 @@
               this.isReapplying = false;
               this.showDeclinedModal = false;
               this.showWaitingModal = true;
+
+              // ✅ RESTART SSE — new connection
+              this.startSSEConnection();
               
               this.toast = { visible: true, message: '✅ Request sent again! Waiting for host...' };
               setTimeout(() => this.toast.visible = false, 7000);

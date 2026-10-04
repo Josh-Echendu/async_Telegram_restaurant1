@@ -335,131 +335,6 @@ def join_landing_redirect(request, session_token):
     return render(request, 'restaurant/join_landing.html', context)
 
 
-# class RequestJoinTableAPIView(APIView):
-#     """
-#     POST /restaurant/dine-in/request-join/
-#     Called when Sandra/Tunde/Emma taps the host's shared link
-#     """
-#     # throttle_classes = [TelegramWhatsappScopedThrottle]
-#     # throttle_scope = "join_request"  # rate-limit here: e.g. 2/hour per user
-
-#     def post(self, request):
-
-#         user_id = request.data.get('user_id')
-#         restaurant_id = request.data.get('restaurant_id')
-#         session_token = request.data.get('session_token')
-#         platform = (request.data.get('platform') or "").lower()
-
-#         # 🔥 SMART FALLBACK: If no token in request, get from Redis
-#         if session_token is None:
-#             session_token = redis_client.get(f"user_session_token:{restaurant_id}:{user_id}")
-
-#         else:
-#             # 🔐 INTERNAL SECURITY
-#             api_key = request.headers.get("X-INTERNAL-API-KEY")
-#             if api_key != settings.INTERNAL_API_KEY:
-#                 return Response({"error": "unauthorized"}, status=403)
-
-#         if not all([user_id, session_token, platform, restaurant_id]):
-#             return Response({"error": "Missing required fields"}, status=400)
-
-#         if platform == "telegram":
-#             active_user = TelegramUser.objects.filter(telegram_id=user_id).first()
-#         elif platform == "whatsapp":
-#             active_user = TelegramUser.objects.filter(whatsapp_id=user_id).first()
-#         else:
-#             return Response({"error": "Invalid platform"}, status=400)
-
-#         if not active_user:
-#             return Response({"error": "User not registered"}, status=404)
-
-#         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
-        
-#         try:
-#             with transaction.atomic():
-#                 session = get_object_or_404(
-#                     DineInOTPSession.objects.select_related('restaurant').select_for_update(),
-#                     session_token=session_token,
-#                     restaurant=restaurant,
-#                     status='verified'  # table must already be open, host already verified
-#                 )
-#                 print("session already verified by host: ")
-
-#                 if session.user_id == active_user.id:
-#                     logger.info("You are already the host of this table")
-#                     print("You are already the host of this table")
-#                     return Response({
-#                         "success": True,
-#                         "status": "accepted",
-#                         "message": "You are already the host of this table"
-#                     }, status=200)
-
-#                 if DineInSessionParticipant.objects.filter(
-#                     session=session, user=active_user, status='pending'
-#                 ).exists():
-#                     logger.info("Request already pending")
-#                     print("Request already pending")
-#                     return Response({
-#                         "success": True,
-#                         "status": "pending",
-#                         "message": "Request already pending"
-#                     }, status=200)
-
-#                 if DineInSessionParticipant.objects.filter(
-#                     session=session, user=active_user, status='accepted'
-#                 ).exists():
-#                     logger.info("You are already part of this table")
-#                     print("You are already part of this table")
-#                     return Response({
-#                         "success": True,
-#                         "status": "accepted",
-#                         "message": "You are already part of this table"
-#                     }, status=200)
-                
-#                 participant = DineInSessionParticipant.objects.create(
-#                     session=session, user=active_user, status='pending'
-#                 )
-#                 redis_client.set(f"join_status:{participant.id}", "pending", ex=86400)
-#                 redis_client.set(f"join_id:{session.restaurant.rid}:{platform}:{user_id}", participant.id, ex=86400)
-
-#         except Exception:
-#             return Response({"error": "Server error"}, status=500)
-
-#         # trigger notification to host — send via PTB/pywa: "Sandra wants to join. Accept/Decline"
-#         # (call your existing bot-messaging util here, e.g. notify_host_of_join_request.delay(...))
-
-
-#         try:
-#             if session.platform == "telegram":
-#                 notify_host_telegram(
-#                     chat_id=session.user.telegram_id,  # or whoever the "host" contact is
-#                     text=f"{active_user.username} wants to be verified at Table {session.table_number} \n\n platform: {platform}",
-#                     participant_id=participant.id,
-#                     session=session, 
-#                 )
-
-#             elif session.platform == "whatsapp":
-#                 notify_host_whatsapp(
-#                     recipient_id=session.user.whatsapp_id,
-#                     text=f"{active_user.username} wants to be verified at Table {session.table_number} \n\n platform: {platform}",
-#                     participant_id=participant.id,
-#                     session=session,
-#                 )
-
-#         except Exception:
-#             logger.warning(f"Failed to send join link for session {session.session_id}", exc_info=True)
-#             # don't fail the request — customer is still verified, just missed the link message
-
-#         return Response({
-#             "success": True,
-#             "participant_id": participant.id,
-#             "message": "Request sent. Waiting for host to accept.",
-#             "table_number": session.table_number,
-#         }, status=201)
-    
-# request_to_join_table_api_view = RequestJoinTableAPIView.as_view()
-
-
 
 class RequestJoinTableAPIView(APIView):
     """
@@ -602,7 +477,7 @@ class RequestJoinTableAPIView(APIView):
 
         response_data = {
             "success": True,
-            "participant_id": participant.id,
+            # "participant_id": participant.id,
             "message": "Request sent. Waiting for host to accept.",
             "table_number": session.table_number,
         }

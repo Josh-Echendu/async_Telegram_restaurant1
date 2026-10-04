@@ -1112,7 +1112,7 @@ class OrderBatchListCreateAPIView(APIView):
                 # Restaurant dine-in: Reuse active session (postpay, multiple orders)
                 session = CheckoutSession.objects.filter(
                     restaurant=restaurant,
-                    telegram_user=user,
+                    dine_session=dine_session,              # ✅ CHANGE: Use table session
                     service_mode='dine_in',
                     is_active=True,
                     payment_status='unpaid',
@@ -1130,7 +1130,7 @@ class OrderBatchListCreateAPIView(APIView):
                         payment_status='unpaid',
                         platform=platform,
                         transaction_type=payment_method,
-                        dine_session=dine_session if business_type == 'restaurant' else None
+                        dine_session=dine_session
                     )
                     save_session_with_unique_reference(session)
 

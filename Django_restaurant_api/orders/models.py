@@ -226,9 +226,15 @@ class CheckoutSession(models.Model):
     session_id = ShortUUIDField(unique=True, length=35, alphabet=ALPHABET, prefix='ses')
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, null=True, related_name='restaurant_session', db_index=True)
     telegram_user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, null=True, related_name='telegram_session', db_index=True)
-    dine_session = models.ForeignKey(DineInOTPSession, on_delete=models.CASCADE, null=True, blank=True, related_name='dine_session', db_index=True)
+    dine_session = models.OneToOneField(
+        'restaurants.DineInOTPSession',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='checkout_session', # ✅ Singular, not "checkout_sessions"
+        db_index=True
+    )
     waiter_for_payment = models.BigIntegerField(null=True, blank=True, db_index=True)
-
 
     transaction_reference = models.CharField(max_length=100, unique=True, null=True, blank=True)
     transaction_type = models.CharField(max_length=100, choices=TRANSACTION_TYPE, null=True)
@@ -277,9 +283,9 @@ class CheckoutSession(models.Model):
 
         # This line starts a list of database constraints.
         # A constraint is a rule the database must obey.
-        
         constraints = [
-            # ✅ Allow: One active dine_in + One active delivery
+            
+            # ✅ Still keep: One active checkout session per user per mode (for delivery)
             models.UniqueConstraint(
                 fields=["restaurant", "telegram_user", "service_mode"],
                 condition=models.Q(is_active=True),
