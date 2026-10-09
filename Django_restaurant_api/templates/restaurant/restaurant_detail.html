@@ -1636,6 +1636,7 @@
 
       const res = await axios.post('/api/check-session/', {
         telegram_id: this.telegramId,
+        session_id: this.sessionId,
         restaurant_id: restaurantId
       });
 

@@ -1,16 +1,27 @@
-{% extends 'useradmin/base.html' %}
+{% extends "useradmin/base.html" %}
 {% load static %}
 {% load humanize %}
 
 {% block content %}
 
 <div class="px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-    
+
     <!-- ==================== PAGE HEADER ==================== -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-            <h1 class="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">Order #{{ order.session_id|slice:":12" }}</h1>
-            <p class="text-xs sm:text-sm text-gray-500 mt-0.5">{{ order.date_created|date:"d M, Y · g:i A" }} · {{ batches|length }} batch{{ batches|length|pluralize:"es" }}</p>
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-indigo-100 flex items-center justify-center">
+                <span class="text-xl sm:text-2xl font-bold text-indigo-700">
+                    {{ dine_session.table_number|default:"—" }}
+                </span>
+            </div>
+            <div>
+                <h1 class="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">
+                    Table {{ dine_session.table_number|default:"—" }}
+                </h1>
+                <p class="text-xs sm:text-sm text-gray-500 mt-0.5">
+                    Session #{{ order.session_id|slice:":8" }} · Opened {{ order.date_created|timesince }} ago
+                </p>
+            </div>
         </div>
         <a href="{% url 'useradmin:dashboard-dine_in-orders' %}" 
            class="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1">
@@ -34,89 +45,174 @@
                 <span class="text-sm font-medium text-gray-700">Platform:</span>
                 <span class="text-xs font-medium text-gray-600 bg-gray-50 px-3 py-1 rounded-full">{{ order.platform|title|default:"—" }}</span>
                 
-                <span class="text-sm font-medium text-gray-700">Payment Method:</span>
+                <span class="text-sm font-medium text-gray-700">Method:</span>
                 <span class="text-xs font-medium text-gray-600 bg-gray-50 px-3 py-1 rounded-full">{{ order.transaction_type|title|default:"—" }}</span>
-                
-                {% if order.table_number %}
+
+                {% if dine_session %}
                 <span class="text-gray-300">|</span>
-                <span class="text-sm font-medium text-gray-700">Table:</span>
-                <span class="text-xs font-medium text-gray-600 bg-gray-50 px-3 py-1 rounded-full">Table {{ order.table_number }}</span>
+                <span class="text-sm font-medium text-gray-700">Guests:</span>
+                <span class="text-xs font-medium text-gray-600 bg-gray-50 px-3 py-1 rounded-full">
+                    👥 {{ participant_count|add:1 }} (incl. host)
+                </span>
                 {% endif %}
             </div>
         </div>
     </div>
 
-    <!-- ==================== CUSTOMER + ORDER INFO ==================== -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-        
-        <!-- Customer -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
-            <h3 class="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <span class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
+    <!-- ==================== KPI CARDS ==================== -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+
+        <!-- Host -->
+        <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between mb-3">
+                <span class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+                    <i class="fas fa-crown text-amber-600"></i>
+                </span>
+                <span class="text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Host</span>
+            </div>
+            <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Table Host</p>
+            <p class="text-base font-bold text-gray-900 mt-1 truncate">
+                {{ host.first_name|default:host.username|default:"—" }}
+            </p>
+        </div>
+
+        <!-- Participants -->
+        <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between mb-3">
+                <span class="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                    <i class="fas fa-users text-indigo-600"></i>
+                </span>
+            </div>
+            <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Guests Joined</p>
+            <p class="text-base font-bold text-gray-900 mt-1">{{ participant_count|default:0 }}</p>
+        </div>
+
+        <!-- Items -->
+        <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between mb-3">
+                <span class="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center">
+                    <i class="fas fa-utensils text-purple-600"></i>
+                </span>
+            </div>
+            <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Total Items</p>
+            <p class="text-base font-bold text-gray-900 mt-1">{{ items_count|default:0 }}</p>
+        </div>
+
+        <!-- Grand Total -->
+        <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between mb-3">
+                <span class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+                    <i class="fas fa-coins text-emerald-600"></i>
+                </span>
+            </div>
+            <p class="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Bill Total</p>
+            <p class="text-base font-bold text-gray-900 mt-1">₦{{ grand_total|default:0|intcomma }}</p>
+        </div>
+
+    </div>
+
+    <!-- ==================== PEOPLE AT THIS TABLE ==================== -->
+    {% if dine_session %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="px-4 sm:px-6 py-3 border-b border-gray-100 bg-gray-50/50">
+            <h3 class="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <i class="fas fa-users text-indigo-600"></i>
+                People at Table {{ dine_session.table_number }}
+            </h3>
+        </div>
+        <div class="divide-y divide-gray-50">
+
+            <!-- Host -->
+            {% if host %}
+            <div class="px-4 sm:px-6 py-3 flex items-center gap-3">
+                <span class="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                    <i class="fas fa-crown text-amber-600"></i>
+                </span>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                        {{ host.first_name|default:host.username }}
+                        <span class="text-[10px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">HOST</span>
+                    </p>
+                    <p class="text-xs text-gray-500">
+                        {% if host.username %}@{{ host.username }}{% endif %}
+                        {% if host.whatsapp_id %}· WhatsApp{% endif %}
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Participants -->
+            {% for participant in participants %}
+            <div class="px-4 sm:px-6 py-3 flex items-center gap-3">
+                <span class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
                     <i class="fas fa-user text-indigo-600 text-sm"></i>
                 </span>
-                Customer
-            </h3>
-            <div class="space-y-2 text-sm">
-                <p><span class="text-gray-500">Name:</span> <span class="font-medium">{{ order.telegram_user.first_name|default:"Guest" }} {{ order.telegram_user.last_name|default:"" }}</span></p>
-                {% if order.telegram_user.username %}
-                <p><span class="text-gray-500">Username:</span> <span class="font-medium">@{{ order.telegram_user.username }}</span></p>
-                {% endif %}
-                {% if order.table_number %}
-                <p><span class="text-gray-500">Table:</span> <span class="font-medium">Table {{ order.table_number }}</span></p>
-                {% endif %}
-                {% if order.room_number %}
-                <p><span class="text-gray-500">Room:</span> <span class="font-medium">{{ order.room_number }}</span></p>
-                {% endif %}
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-gray-900 flex items-center gap-2">
+                        {{ participant.user.first_name|default:participant.user.username }}
+                        <span class="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">✅ Accepted</span>
+                    </p>
+                    <p class="text-xs text-gray-500">
+                        Joined {{ participant.resolved_at|timesince }} ago
+                    </p>
+                </div>
             </div>
-        </div>
+            {% empty %}
+            <div class="px-4 sm:px-6 py-6 text-center text-sm text-gray-400">
+                No guests have joined yet
+            </div>
+            {% endfor %}
 
-        <!-- Order Info -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
-            <h3 class="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <span class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
-                    <i class="fas fa-receipt text-amber-600 text-sm"></i>
-                </span>
-                Order Info
-            </h3>
-            <div class="space-y-2 text-sm">
-                <p><span class="text-gray-500">Order ID:</span> <span class="font-medium font-mono">#{{ order.session_id|slice:":12" }}</span></p>
-                <p>
-                    <span class="text-gray-500">Type:</span> 
-                    <span class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">Dine-in</span>
-                </p>
-                {% if restaurant.business_type == 'restaurant' and order.dine_session %}
-                    <p>
-                        <span class="text-gray-500">Waiter:</span> 
-                        <span class="font-medium">@{{ order.dine_session.waiter_username|default:"Unknown" }}</span>
-                    </p>
-                    {% if order.dine_session.waiter_telegram_id %}
-                    <p>
-                        <a href="{% if order.dine_session.waiter_username %}https://t.me/{{ order.dine_session.waiter_username }}{% else %}tg://user?id={{ order.dine_session.waiter_telegram_id }}{% endif %}" 
-                            target="_blank"
-                            class="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-sky-500 hover:bg-sky-600 px-3 py-1.5 rounded-lg transition-colors">
-                                <i class="fab fa-telegram-plane"></i> Chat with Waiter
-                        </a>    
-                    </p>
-                    {% endif %}
-                {% endif %}
-                <p><span class="text-gray-500">Order Batches:</span> <span class="font-medium">{{ batches|length }}</span></p>
-                <p><span class="text-gray-500">Date:</span> <span class="font-medium">{{ order.date_created|date:"d M, Y · g:i A" }}</span></p>
-            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ==================== ORDER INFO ==================== -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
+        <h3 class="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+            <span class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+                <i class="fas fa-receipt text-amber-600 text-sm"></i>
+            </span>
+            Order Info
+        </h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <p><span class="text-gray-500">Order ID:</span> <span class="font-medium font-mono">#{{ order.session_id|slice:":12" }}</span></p>
+            <p><span class="text-gray-500">Type:</span> <span class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">Dine-in</span></p>
+            <p><span class="text-gray-500">Order Batches:</span> <span class="font-medium">{{ batches|length }}</span></p>
+            <p><span class="text-gray-500">Date:</span> <span class="font-medium">{{ order.date_created|date:"d M, Y · g:i A" }}</span></p>
+
+            {% if restaurant.business_type == 'restaurant' and order.dine_session %}
+            <p><span class="text-gray-500">Waiter:</span> <span class="font-medium">@{{ order.dine_session.waiter_username|default:"Unknown" }}</span></p>
+            {% if order.dine_session.waiter_telegram_id %}
+            <p>
+                <a href="{% if order.dine_session.waiter_username %}https://t.me/{{ order.dine_session.waiter_username }}{% else %}tg://user?id={{ order.dine_session.waiter_telegram_id }}{% endif %}" 
+                   target="_blank"
+                   class="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-sky-500 hover:bg-sky-600 px-3 py-1.5 rounded-lg transition-colors">
+                    <i class="fab fa-telegram-plane"></i> Chat with Waiter
+                </a>
+            </p>
+            {% endif %}
+            {% endif %}
         </div>
     </div>
 
-    <!-- ==================== BATCHES ==================== -->
+    <!-- ==================== BATCHES (grouped by user) ==================== -->
     {% for batch in batches %}
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        
+        <!-- Batch Header with User Name -->
         <div class="px-4 sm:px-6 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gray-50/50">
             <div class="flex items-center gap-3">
-                <span class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
-                    <i class="fas fa-receipt text-indigo-600 text-xs"></i>
+                <span class="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                    <i class="fas fa-user text-indigo-600 text-sm"></i>
                 </span>
                 <div>
-                    <h3 class="text-sm font-bold text-gray-900">Batch #{{ batch.bid }}</h3>
-                    <p class="text-[10px] text-gray-500">{{ batch.items|length }} item{{ batch.items|length|pluralize }} · ₦{{ batch.total_price|intcomma }}</p>
+                    <h3 class="text-sm font-bold text-gray-900">
+                        {{ batch.user.first_name|default:batch.user.username|default:"Guest" }}
+                    </h3>
+                    <p class="text-[10px] text-gray-500">
+                        Batch #{{ batch.bid }} · {{ batch.items|length }} item{{ batch.items|length|pluralize }} · ₦{{ batch.total_price|intcomma }}
+                    </p>
                 </div>
             </div>
             <div class="flex items-center gap-2 flex-wrap">
@@ -128,7 +224,7 @@
                 {% if batch.notified_kitchen %}
                     <span class="text-[10px] font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">Kitchen Notified</span>
                 {% endif %}
-                
+
                 <!-- Kitchen Status Update -->
                 <form method="POST" action="{% url 'useradmin:order-change-status' bid=batch.bid %}" class="flex items-center gap-1.5">
                     {% csrf_token %}
@@ -186,6 +282,7 @@
             </div>
             {% endfor %}
         </div>
+
     </div>
     {% endfor %}
 
@@ -217,6 +314,6 @@
         </div>
     </div>
 
-    </div>
+</div>
 
 {% endblock %}

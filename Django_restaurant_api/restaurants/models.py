@@ -643,7 +643,6 @@ class DineInOTPSession(models.Model):
 
     )
 
-    
     # Core fields
     session_id = ShortUUIDField(max_length=255, unique=True, db_index=True)
 

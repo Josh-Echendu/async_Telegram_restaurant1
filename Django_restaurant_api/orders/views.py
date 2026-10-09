@@ -1158,6 +1158,7 @@ class CheckSessionAPIView(APIView):
 
     def post(self, request):
         telegram_id = request.data.get("telegram_id")
+        session_id = request.data.get("session_id")
         restaurant_id = request.data.get("restaurant_id")
 
         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
@@ -1182,7 +1183,8 @@ class CheckSessionAPIView(APIView):
 
         # “Find an active session where payment has started for this user and this restaurant”
         session = CheckoutSession.objects.filter(
-            telegram_user=user,
+            # telegram_user=user,
+            session_id=session_id,
             restaurant=restaurant,
             is_active=True,
             service_mode='dine_in',

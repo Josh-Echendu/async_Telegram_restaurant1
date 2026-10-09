@@ -69,7 +69,20 @@ async def waiter_generate_code(update: Update, context: ContextTypes.DEFAULT_TYP
     if not table_number.isdigit():
         await update.message.reply_text("❌ Table number must be a number.")
         return 
+
+    restaurant_max_table = int(user_session.get('max_tables'))
     
+    if restaurant_max_table is None:
+        await update.message.reply_text("❌ Restaurant has no tables.")
+        return 
+
+    
+    if table_number < 1 or int(table_number) > restaurant_max_table:
+        await update.message.reply_text(
+            f"❌ Invalid table number. Please choose a table between 1 and {restaurant_max_table}."
+        )
+        return
+
     chat_id = update.effective_chat.id
 
     payload_kitchen = {
@@ -117,6 +130,7 @@ async def waiter_generate_code(update: Update, context: ContextTypes.DEFAULT_TYP
                     await update.message.reply_text("❌ Network error. Please try again.")
                 else:
                     await asyncio.sleep(1)
+
 
 
 async def update_batch_table(batch_id, status, restaurant_id, query=None, max_retries=3):

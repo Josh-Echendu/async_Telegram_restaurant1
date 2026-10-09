@@ -369,18 +369,50 @@ from django.core.paginator import Paginator
 def dine_in_orders(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
     
+    batch_total_subquery = (
+        OrderBatch.objects
+        .filter(checkout_session=OuterRef('pk'))
+        .values('checkout_session')
+        .annotate(total=Sum('total_price'))
+        .values('total')
+    )
+
+    # item_count_subquery = (
+    #     OrderBatchItem.objects
+    #     .filter(batch__checkout_session=OuterRef('pk'))
+    #     .values('batch__checkout_session')
+    #     .annotate(c=Count('id'))
+    #     .values('c')
+    # )
+
     sessions = (
         CheckoutSession.objects
-        .select_related('restaurant', 'telegram_user')
+        .select_related(
+            'restaurant',
+            'telegram_user',
+            'dine_session', 
+            'dine_session__user'
+        )
         .filter(restaurant=restaurant, service_mode='dine_in')
-        .prefetch_related('session_batches__items__product')
+        .prefetch_related(
+            'session_batches__items__product', # ✅ Children of checkout
+            # 'dine_session__participant' # ✅ participants of dineotpsession
+            )
         .annotate(
-            total_batch_price=Sum('session_batches__total_price'),
+            total_batch_price=Subquery(batch_total_subquery),
+            # item_count=Subquery(item_count_subquery),
+            item_count=Count('session_batches__items', distinct=True),
+            participant_count=Count(
+                'dine_session__participants',
+                filter=Q(dine_session__participants__status='accepted'),
+                distinct=True
+            ),  # ✅ Aggregate in DB
         )
         .order_by('-date_created')
     )
 
-    
+
+
     if restaurant.business_type == 'hotel':
         sessions = sessions.filter(payment_status='paid')
     
@@ -433,6 +465,8 @@ def dine_in_orders(request, restaurant_id=None):
 
     today = date.today()
     yesterday = today - timedelta(days=1)
+
+
     
     context = {
         'orders': orders,
@@ -519,6 +553,8 @@ def delivery_orders(request, restaurant_id=None):
 
     today = date.today()
     yesterday = today - timedelta(days=1)
+
+
     
     context = {
         'orders': orders,
@@ -538,23 +574,36 @@ def delivery_orders(request, restaurant_id=None):
 
     return render(request, 'useradmin/delivery_orders.html', context)
 
+
+
 @admin_required
 def dine_in_order_details(request, session_id, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
     
     session = get_object_or_404(
         CheckoutSession.objects
-        .select_related('telegram_user', 'restaurant', 'dine_session')
-        .prefetch_related('session_batches__items__product')
+        .select_related('telegram_user', 'restaurant', 'dine_session', 'dine_session__user')
+        .prefetch_related(
+            'session_batches__items__product',
+            'session_batches__telegram_user',
+            'dine_session__participants__user',
+        )
         .annotate(
-            total_batch_price=Sum('session_batches__total_price')
+            total_batch_price=Sum('session_batches__total_price'),
         ),
         session_id=session_id,
         restaurant=restaurant,
         service_mode='dine_in'
     )
-
-    print("total_batch_priceQWE: ", session.total_batch_price)
+    
+    # ✅ Dine session context
+    dine_session = session.dine_session
+    host = dine_session.user if dine_session else None
+    participants = (
+        dine_session.participants.filter(status='accepted').select_related('user')
+        if dine_session else []
+    )
+    participant_count = participants.count() if dine_session else 0
     
     subtotal = session.total_batch_price or 0
     
@@ -570,19 +619,17 @@ def dine_in_order_details(request, session_id, restaurant_id=None):
             })
         batches.append({
             'bid': batch.bid,
+            'user': batch.telegram_user,        # ✅ ADD user
             'items': items,
             'total_price': batch.total_price,
             'status': batch.status,
             'payment_status': batch.payment_status,
             'notified_kitchen': batch.notified_kitchen,
             'notified_user': batch.notified_user,
-            'bank_charges': session.bank_fee,
-            'subtotal': subtotal
         })
     
-    print("batches: ", batches)
+    items_count = sum(len(b['items']) for b in batches)
     
-    # Calculate grand total (subtotal + VAT + bank fee)
     vat_amount = session.vat_amount or 0
     bank_fee = session.bank_fee or 0
     grand_total = subtotal + vat_amount + bank_fee
@@ -590,12 +637,20 @@ def dine_in_order_details(request, session_id, restaurant_id=None):
     context = {
         'order': session,
         'batches': batches,
-        'subtotal': subtotal,  # ✅ Add this
-        'vat_amount': vat_amount,  # ✅ Already there
-        'grand_total': grand_total,  # ✅ Add this
-        'bank_fee': bank_fee,  # ✅ Add this
+        'subtotal': subtotal,
+        'vat_amount': vat_amount,
+        'grand_total': grand_total,
+        'bank_fee': bank_fee,
+        
+        # ✅ NEW
+        'dine_session': dine_session,
+        'host': host,
+        'participants': participants,
+        'items_count': items_count,
+        'participant_count': participant_count,
     }
     return render(request, 'useradmin/dine_in_order_details.html', context)
+
 
 
 @admin_required
