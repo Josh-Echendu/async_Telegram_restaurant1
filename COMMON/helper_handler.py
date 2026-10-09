@@ -36,11 +36,6 @@ async def close_client():
 
 
 async def _request_with_retry(method: str, url: str, **kwargs):
-    """
-    Make an HTTP request with exponential backoff retry.
-    Returns the Response object.
-    """
-    
     config = await _get_config()
     max_retries = config["MAX_RETRIES"]
     backoff = config["RETRY_BACKOFF_FACTOR"]
@@ -51,41 +46,34 @@ async def _request_with_retry(method: str, url: str, **kwargs):
     for attempt in range(max_retries + 1):
         try:
             response = await client.request(method=method, url=url, **kwargs)
-            response.raise_for_status()
+            
+            # ✅ Only retry on 5xx (transient server errors)
+            if response.status_code >= 500:
+                response.raise_for_status()
             
             logger.info(
-                "API request to %s succeeded (attempt %d/%d)",
-                url,
-                attempt + 1,
-                max_retries + 1
+                "API request to %s succeeded (attempt %d/%d) - status %d",
+                url, attempt + 1, max_retries + 1, response.status_code
             )
             return response, True
             
-
         except Exception as e:
             last_exception = e
             
             if attempt < max_retries:
                 wait = backoff * (2 ** attempt)
-                
-                # ✅ Fix: Don't try to access e.response.data if it doesn't exist
                 error_msg = str(e)
                 if hasattr(e, 'response') and hasattr(e.response, 'text'):
                     error_msg = f"{e} - Response: {e.response.text[:1000]}"
                 
                 logger.warning(
                     "Request to %s failed (attempt %d/%d): %s. Retrying in %.1fs",
-                    url,
-                    attempt + 1,
-                    max_retries + 1,
-                    error_msg,
-                    wait
+                    url, attempt + 1, max_retries + 1, error_msg, wait
                 )
                 await asyncio.sleep(wait)
             else:
                 logger.exception(
                     "Request to %s failed after %d attempts.",
-                    url,
-                    max_retries + 1
+                    url, max_retries + 1
                 )
                 return None, False

@@ -137,7 +137,6 @@ class GenerateOTPForTableAPIView(APIView):
     """
     Step 2: Waiter generates OTP for a table
     POST /api/dine-in/generate-otp/
-    Called by PTB when waiter types /gencode 5
     """
 
     def post(self, request):
@@ -149,31 +148,78 @@ class GenerateOTPForTableAPIView(APIView):
         if not all([waiter_username, waiter_telegram_id, restaurant_id, table_number]):
             return Response({
                 "error": "Missing required fields"
-            }, status=status.HTTP_400_BAD_REQUEST
-        )
-        
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
 
-        session = DineInOTPSession.create_session(
+        now = timezone.now()
+
+        # 🔥 CHECK 1: Is this table actively occupied?
+        is_verified = DineInOTPSession.objects.filter(
             restaurant=restaurant,
             table_number=table_number,
-            waiter_telegram_id=waiter_telegram_id,
-            waiter_username=waiter_username,
-        )
+            status='verified',
+        ).exists()
 
-        # Generate OTP()
-        otp = session.generate_otp()
+        if is_verified:
+            return Response({
+                "success": False,
+                "error": f"Table {table_number} is currently occupied. Please wait for the session to finish.",
+                "code": "TABLE_IN_USE"
+            }, status=status.HTTP_409_CONFLICT)
+
+        # 🔥 CHECK 2: Is there a live pending OTP?
+        has_active_otp = DineInOTPSession.objects.filter(
+            restaurant=restaurant,
+            table_number=table_number,
+            status='pending',
+            otp_expires_at__gt=now,
+        ).exists()
+
+        if has_active_otp:
+            return Response({
+                "success": False,
+                "error": f"Table {table_number} already has an active OTP. Please use it or wait for expiry.",
+                "code": "ACTIVE_OTP_EXISTS"
+            }, status=status.HTTP_409_CONFLICT)
+
+        # ✅ CLEANUP: Mark all expired pending sessions as 'expired'
+        with transaction.atomic():
+            expired_count = DineInOTPSession.objects.filter(
+                restaurant=restaurant,
+                table_number=table_number,
+                status='pending',
+                otp_expires_at__lt=now,
+            ).update(status='expired')
+
+            if expired_count > 0:
+                logger.info(
+                    f"Cleaned up {expired_count} expired OTP session(s) "
+                    f"for Table {table_number} at {restaurant.name}"
+                )
+
+            # ✅ Now create the fresh session
+            session = DineInOTPSession.create_session(
+                restaurant=restaurant,
+                table_number=table_number,
+                waiter_telegram_id=waiter_telegram_id,
+                waiter_username=waiter_username,
+            )
+
+            otp = session.generate_otp()
 
         logger.info(f"OTP generated for Table {table_number} by waiter {waiter_telegram_id}")
 
         return Response({
             "success": True,
-            "session_id": session.session_id,
+            # "session_id": session.session_id,
             "otp_code": otp,
-            "expires_in": 60,  # 1 minutes in seconds
-            "waiter_usernamr": session.waiter_username or "waiter",  # For PTB to send message
+            "expires_in": 60,
+            "waiter_username": session.waiter_username or "waiter",
             "message": f"OTP {otp} generated for Table {table_number}"
         }, status=201)
+
+    
 
 
 class VerifyOTPAPIView(APIView):

@@ -54,25 +54,52 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- REGISTER USER ---
     registration = await telegram_registration(telegram_id=user_id, first_name=first_name, username=username, restaurant_id=restaurant_id)
+    
+    if not registration or not registration.get("ok"):
+        if registration and not registration.get("recoverable"):
+            
+            # Permanent failure — don't retry, notify user
+            logger.error(f"Registration failed permanently: {registration.get('error')}")
+            await update.message.reply_text(
+                f"❌ Network error, please Try again."
+            )
+            return
+        
+        # Recoverable — raise to trigger ARQ retry
+        raise Exception("Registration temporarily failed, will retry")
 
-    if not registration:
-        raise Exception("Failed to register User")  # Direct raise - ARQ retries automatically!
- 
+
     # Get the payload after "start="
     payload = context.args[0] if context.args else None
     print("start payload: ", payload)
-    
+        
     if payload and payload.startswith("join_"):
         session_token = payload.replace("join_", "")
         
-        # Just call and check - raise if fails
-        response, success = await handle_join_session(update, context, session_token)
+        join_result = await handle_join_session(update, context, session_token)
         
-        if not success:
-            raise Exception("Failed to join session")  # Direct raise - ARQ retries automatically!
+        if not join_result.get("ok"):
+            if join_result.get("recoverable"):
+                raise Exception(f"Join failed: {join_result.get('error')}")
+            else:
+                logger.error(f"Join failed permanently: {join_result.get('error')}")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        "😔 <b>We couldn't connect you to the table.</b>\n\n"
+                        "The link may have expired, or the table is no longer active.\n\n"
+                        "👉 Please ask the host to share a fresh link, or scan the QR code again."
+                    ),
+                    parse_mode='HTML'
+                )
+                return
         
-        await redis_client.set(f"user_session_token:{restaurant_id}:{user_id}",  session_token, ex=86400)
-
+        # Save session token to Redis
+        await redis_client.set(
+            f"user_session_token:{restaurant_id}:{user_id}",
+            session_token,
+            ex=86400
+        )
 
     
     # --- BUSINESS-SPECIFIC KEYBOARD ---
@@ -163,32 +190,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
-async def telegram_registration(telegram_id, first_name, username, restaurant_id, max_retries=5):
+
+
+async def telegram_registration(telegram_id, first_name, username, restaurant_id):
     """
-    Register a user from Telegram in the system.
-    
-    Args:
-        telegram_id: User's Telegram ID
-        first_name: User's first name
-        username: User's username
-        restaurant_id: Restaurant ID
-        max_retries: Maximum number of retry attempts (used by _request_with_retry)
-    
+    Register a user from Telegram.
     Returns:
-        dict: Response data from the API, or None if all attempts fail
+        {"ok": True, "data": {...}}                       → success
+        {"ok": False, "recoverable": True, "error": ...}  → retry
+        {"ok": False, "recoverable": False, "error": ...} → fail immediately
     """
-    
-    # Prepare the payload
     payload = {
         "telegram_id": int(telegram_id),
         "first_name": str(first_name),
         "username": str(username),
         "restaurant_id": str(restaurant_id)
     }
-    
-    # Override the default retry settings for this specific call
-    # You can either modify the global config or pass custom settings
-    # Here we'll use the global config but you can also set it per call
     
     url = "http://web:8000/userauths/register_user/restaurant/telegram/"
     headers = {
@@ -197,23 +214,49 @@ async def telegram_registration(telegram_id, first_name, username, restaurant_id
     }
     
     try:
-        # Use _request_with_retry with POST method
         response, success = await _request_with_retry(
             method="POST",
             url=url,
             json=payload,
             headers=headers,
-            timeout=30.0  # You can pass additional kwargs
+            timeout=30.0
         )
         
-        if not success:
-            return None
+        # Network / 5xx failure — retry is reasonable
+        if not success or response is None:
+            logger.warning("Registration network/5xx failure for telegram_id=%s", telegram_id)
+            return {"ok": False, "recoverable": True, "error": "Network error"}
         
-        # _request_with_retry already raises_for_status, so we can parse JSON
-        response_data = response.json()
-        logger.info("User registration successful: %s", response_data)
-        return response_data
+        # Parse response body
+        try:
+            data = response.json()
+        except Exception:
+            data = {}
         
+        # 400 = bad input — retry is pointless
+        if response.status_code == 400:
+            logger.error(
+                "Registration 400 (bad data) for telegram_id=%s: %s",
+                telegram_id, data
+            )
+            return {"ok": False, "recoverable": False, "error": data.get("error", "Bad request")}
+        
+        # 2xx = success
+        if 200 <= response.status_code < 300:
+            logger.info("User registration successful: %s", data)
+            return {"ok": True, "data": data}
+        
+        # Other 4xx — treat as permanent
+        logger.error(
+            "Registration %d for telegram_id=%s: %s",
+            response.status_code, telegram_id, data
+        )
+        return {
+            "ok": False,
+            "recoverable": False,
+            "error": data.get("error", f"API returned {response.status_code}")
+        }
+    
     except Exception as e:
-        logger.exception("Failed to register user after all retry attempts: %s", e)
-        return None
+        logger.exception("Registration exception for telegram_id=%s", telegram_id)
+        return {"ok": False, "recoverable": True, "error": str(e)}

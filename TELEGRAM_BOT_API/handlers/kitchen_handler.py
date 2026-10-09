@@ -1,7 +1,8 @@
 from TELEGRAM_BOT_API.core.config import *
-from TELEGRAM_BOT_API.core.config import get_user_session, save_user_session
+from TELEGRAM_BOT_API.core.config import get_user_session, save_user_session, _request_with_retry
 import json
 from typing import Optional, Dict, Any
+
 
 
 
@@ -92,44 +93,68 @@ async def waiter_generate_code(update: Update, context: ContextTypes.DEFAULT_TYP
         "table_number": int(table_number),
     }
     logger.info("payload_kitchen: %s", payload_kitchen)
-    
-    max_retries = 3
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        for attempt in range(1, max_retries + 1):        
-            try:    
-                response = await client.post(
-                    "http://web:8000/restaurants/dine-in/generate-otp/",
-                    json=payload_kitchen,
-                )
 
-                if response.status_code == 201:
-                    data = response.json()
-                    otp_code = data.get('otp_code')
-                    formatted_otp = f"{otp_code[:2]}-{otp_code[2:4]}-{otp_code[4:6]}"
-                    expires_in = data.get('expires_in', 60)
+    response, success = await _request_with_retry(
+        method="POST",
+        url=f"http://web:8000/restaurants/dine-in/generate-otp/",
+        json=payload_kitchen,
+    )
 
-                    await update.message.reply_text(
-                        f"✅ OTP generated for Table {table_number}\n\n"
-                        f"Code: `{formatted_otp}`\n"
-                        f"Valid for {expires_in} seconds\n\n"
-                        f"Tell this code to the customer.",
-                        parse_mode='Markdown'
-                    )
-                    return
+    # ✅ Guard against network/5xx failure
+    if not success or response is None:
+        await update.message.reply_text("❌ Network error. Please try again.")
+        return
 
-            except httpx.HTTPStatusError as e:
-                logger.exception(f"HTTP error on attempt {attempt}: {e.response.status_code} - {e.response.text}")
-                if attempt == max_retries:
-                    await update.message.reply_text(f"❌ Failed to generate OTP after {max_retries} attempts.")
-                else:
-                    await asyncio.sleep(1)
-                    
-            except (httpx.RequestError, ValueError) as e:
-                logger.exception(f"Request error on attempt {attempt}: {e}")
-                if attempt == max_retries:
-                    await update.message.reply_text("❌ Network error. Please try again.")
-                else:
-                    await asyncio.sleep(1)
+    # Safe to parse
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
+
+    # ========== SUCCESS ==========
+    if response.status_code == 201:
+        otp_code = data.get('otp_code', '')
+        formatted_otp = f"{otp_code[:2]}-{otp_code[2:4]}-{otp_code[4:6]}"
+        expires_in = data.get('expires_in', 60)
+
+        await update.message.reply_text(
+            f"✅ OTP generated for Table {table_number}\n\n"
+            f"Code: `{formatted_otp}`\n"
+            f"Valid for {expires_in} seconds\n\n"
+            f"Tell this code to the customer.",
+            parse_mode='Markdown'
+        )
+        return
+
+    # ========== TABLE IN USE / CONFLICT ==========
+    if response.status_code == 409:
+        code = data.get('code', '')
+        error_msg = data.get('error', 'Table is not available.')
+
+        if code == 'TABLE_IN_USE':
+            await update.message.reply_text(
+                f"🚫 *Table {table_number} is occupied*\n\n{error_msg}",
+                parse_mode='Markdown'
+            )
+        elif code == 'ACTIVE_OTP_EXISTS':
+            await update.message.reply_text(
+                f"⏳ *Table {table_number} already has an active OTP*\n\n{error_msg}",
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text(f"⚠️ {error_msg}", parse_mode='Markdown')
+        return
+
+    # ========== BAD REQUEST ==========
+    if response.status_code == 400:
+        error_msg = data.get('error', 'Missing required fields.')
+        await update.message.reply_text(f"⚠️ {error_msg}")
+        return
+
+    # ========== FALLBACK ==========
+    await update.message.reply_text(
+        f"❌ Failed to generate OTP. Please try again."
+    )
 
 
 

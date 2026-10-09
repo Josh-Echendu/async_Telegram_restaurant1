@@ -609,7 +609,7 @@ def dine_in_order_details(request, session_id, restaurant_id=None):
     
     batches = []
     for batch in session.session_batches.all():
-        items = []
+        items = [] 
         for item in batch.items.all():
             items.append({
                 'product': item.product,
