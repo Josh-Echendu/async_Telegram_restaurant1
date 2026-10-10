@@ -4,17 +4,18 @@ import uuid
 from TELEGRAM_BOT_API.core.config import *
 from TELEGRAM_BOT_API.utils.cart_utils import *
 from TELEGRAM_BOT_API.utils.kitchen_utils import *
-from FACEBOOK_BOT_API.core.config import _request_with_retry
+from TELEGRAM_BOT_API.core.config import _request_with_retry
+
 
 
 tg_user_data = {}
 
+
+
 async def handle_join_session(update, context, session_token):
-    
     user_session = await get_user_session(update.effective_chat.id)
     restaurant_id = user_session.get('current_rid')
     idempotency_key = str(uuid.uuid4())
-
 
     payload = {
         "platform": "telegram",
@@ -26,15 +27,39 @@ async def handle_join_session(update, context, session_token):
 
     response, success = await _request_with_retry(
         method="POST",
-        url=f"http://web:8000/restaurants/dine-in/request-join/",  # ✅ Full URL
-        json=payload, 
+        url="http://web:8000/restaurants/dine-in/request-join/",
+        json=payload,
         headers={"X-INTERNAL-API-KEY": INTERNAL_API_KEY}
     )
-    
-    if not success:
-        raise Exception(f"Failed to join session: {response}") from None
-    
-    return response, success
+
+    # Network/5xx failure — recoverable
+    if not success or response is None:
+        return {"ok": False, "recoverable": True, "error": "Network error"}
+
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
+
+    # Success
+    if 200 <= response.status_code < 300:
+        return {"ok": True, "data": data}
+
+    # 409 conflict (already requested/declined) — recoverable? Usually NOT
+    if response.status_code == 409:
+        return {"ok": False, "recoverable": False, "error": data.get("error", "Conflict")}
+
+    # 400 bad request — permanent
+    if response.status_code == 400:
+        return {"ok": False, "recoverable": False, "error": data.get("error", "Bad request")}
+
+    # Other 4xx — permanent
+    if 400 <= response.status_code < 500:
+        return {"ok": False, "recoverable": False, "error": data.get("error", f"API returned {response.status_code}")}
+
+    # Fallback
+    return {"ok": False, "recoverable": True, "error": f"Unexpected status {response.status_code}"}
+
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):

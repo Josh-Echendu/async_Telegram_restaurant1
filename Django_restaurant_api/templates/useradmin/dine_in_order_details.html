@@ -167,6 +167,43 @@
     </div>
     {% endif %}
 
+    <!-- ==================== DECLINED USERS WITH ORDERS ==================== -->
+    <!-- {% if declined_participants %}
+    <div class="bg-white rounded-2xl shadow-sm border border-red-100 overflow-hidden">
+        <div class="px-4 sm:px-6 py-3 border-b border-red-100 bg-red-50/50">
+            <h3 class="text-sm font-bold text-red-900 flex items-center gap-2">
+                <i class="fas fa-user-slash text-red-600"></i>
+                Declined Users with Orders
+            </h3>
+        </div>
+        <div class="divide-y divide-gray-50">
+
+            {% for item in declined_participants %}
+            <div class="px-4 sm:px-6 py-3 flex items-center gap-3">
+                <span class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                    <i class="fas fa-user text-red-600 text-sm"></i>
+                </span>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
+                        {{ item.user.first_name|default:item.user.username }}
+                        <span class="text-[10px] font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
+                            ❌ Declined
+                        </span>
+                    </p>
+                    <p class="text-xs text-gray-500 mt-0.5">
+                        Declined {{ item.resolved_at|timesince }} ago ·
+                        <span class="font-semibold text-red-600">
+                            ordered ₦{{ item.total|intcomma }}
+                        </span>
+                    </p>
+                </div>
+            </div>
+            {% endfor %}
+
+        </div>
+    </div>
+    {% endif %} -->
+
     <!-- ==================== ORDER INFO ==================== -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">
         <h3 class="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
@@ -196,95 +233,268 @@
         </div>
     </div>
 
-    <!-- ==================== BATCHES (grouped by user) ==================== -->
-    {% for batch in batches %}
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        
-        <!-- Batch Header with User Name -->
-        <div class="px-4 sm:px-6 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gray-50/50">
-            <div class="flex items-center gap-3">
-                <span class="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
-                    <i class="fas fa-user text-indigo-600 text-sm"></i>
-                </span>
-                <div>
-                    <h3 class="text-sm font-bold text-gray-900">
-                        {{ batch.user.first_name|default:batch.user.username|default:"Guest" }}
-                    </h3>
-                    <p class="text-[10px] text-gray-500">
-                        Batch #{{ batch.bid }} · {{ batch.items|length }} item{{ batch.items|length|pluralize }} · ₦{{ batch.total_price|intcomma }}
-                    </p>
-                </div>
-            </div>
-            <div class="flex items-center gap-2 flex-wrap">
-                {% if batch.payment_status == 'paid' %}
-                    <span class="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">Paid</span>
-                {% else %}
-                    <span class="text-[10px] font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-full">Unpaid</span>
-                {% endif %}
-                {% if batch.notified_kitchen %}
-                    <span class="text-[10px] font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">Kitchen Notified</span>
-                {% endif %}
+    <!-- ==================== BATCHES (TABBED BY USER) ==================== -->
+    {% regroup batches by user.id as user_groups %}
 
-                <!-- Kitchen Status Update -->
-                <form method="POST" action="{% url 'useradmin:order-change-status' bid=batch.bid %}" class="flex items-center gap-1.5">
-                    {% csrf_token %}
-                    <select name="status" class="text-[10px] border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none">
-                        <option value="pending" {% if batch.status == 'pending' %}selected{% endif %}>Pending</option>
-                        <option value="processing" {% if batch.status == 'processing' %}selected{% endif %}>Processing</option>
-                        <option value="delivered" {% if batch.status == 'delivered' %}selected{% endif %}>Delivered</option>
-                    </select>
-                    <button type="submit" class="text-[10px] px-2.5 py-1.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-                        Update
-                    </button>
-                </form>
+    <div x-data="{ activeUser: 'all' }">
+
+        <!-- ===== TAB BAR ===== -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4 mb-4">
+            <div class="flex items-center gap-2 overflow-x-auto no-scrollbar">
+
+                <!-- ALL TAB -->
+                <button
+                    type="button"
+                    @click="activeUser = 'all'"
+                    :class="activeUser === 'all'
+                        ? 'bg-indigo-600 text-white shadow-md'
+                        : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'"
+                    class="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap">
+                    <i class="fas fa-layer-group text-[10px]"></i>
+                    All
+                    <span class="text-[10px] opacity-75">· {{ batches|length }} batch{{ batches|length|pluralize:"es" }}</span>
+                </button>
+
+
+                <!-- PER-USER TABS (one per unique user) -->
+                {% for group in user_groups %}
+                    {% with group.list.0.user as u %}
+                    
+                    {% if u.id in declined_user_ids %}
+                        <!-- ❌ DECLINED TAB (greyed, dashed border, slash icon) -->
+                        <button
+                            type="button"
+                            @click="activeUser = '{{ u.id }}'"
+                            :class="activeUser === '{{ u.id }}'
+                                ? 'bg-gray-700 text-white shadow-md border-2 border-dashed border-red-400'
+                                : 'bg-gray-50 text-gray-500 border-2 border-dashed border-gray-300 hover:bg-gray-100'"
+                            class="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap opacity-80">
+                            <i class="fas fa-user-slash text-[10px]"></i>
+                            {{ u.first_name|default:u.username|default:"Guest" }}
+                            <span class="text-[9px] opacity-75">(declined)</span>
+                        </button>
+                    {% else %}
+                        <!-- ✅ ACTIVE TAB (normal) -->
+                        <button
+                            type="button"
+                            @click="activeUser = '{{ u.id }}'"
+                            :class="activeUser === '{{ u.id }}'
+                                ? 'bg-indigo-600 text-white shadow-md'
+                                : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'"
+                            class="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium transition-all whitespace-nowrap">
+
+                            {% if u.id == host.id %}
+                                <i class="fas fa-crown text-[10px]" :class="activeUser === '{{ u.id }}' ? 'text-amber-300' : 'text-amber-500'"></i>
+                            {% else %}
+                                <i class="fas fa-user text-[10px]"></i>
+                            {% endif %}
+
+                            {{ u.first_name|default:u.username|default:"Guest" }}
+                        </button>
+                    {% endif %}
+
+                    {% endwith %}
+                {% endfor %}
+                    
+
             </div>
         </div>
-        
-        <!-- Desktop Table -->
-        <div class="hidden md:block overflow-x-auto">
-            <table class="w-full">
-                <thead>
-                    <tr class="bg-gray-50">
-                        <th class="text-left px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Product</th>
-                        <th class="text-left px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Price</th>
-                        <th class="text-left px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
-                        <th class="text-right px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-50">
+
+        <!-- ===== CONTENT PANELS ===== -->
+
+        <!-- ALL PANEL: show every batch -->
+        <div x-show="activeUser === 'all'" x-transition.opacity class="space-y-4">
+            {% for batch in batches %}
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                
+                <!-- Batch Header -->
+                <div class="px-4 sm:px-6 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gray-50/50">
+                    <div class="flex items-center gap-3">
+                        <span class="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                            <i class="fas fa-user text-indigo-600 text-sm"></i>
+                        </span>
+                        <div>
+                            <h3 class="text-sm font-bold text-gray-900">
+                                {{ batch.user.first_name|default:batch.user.username|default:"Guest" }}
+                                {% if batch.user.id == host.id %}
+                                    <span class="text-[10px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full ml-1">HOST</span>
+                                {% endif %}
+                            </h3>
+                            <p class="text-[10px] text-gray-500">
+                                Batch #{{ batch.bid }} · {{ batch.items|length }} item{{ batch.items|length|pluralize }} · ₦{{ batch.total_price|intcomma }}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        {% if batch.payment_status == 'paid' %}
+                            <span class="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">Paid</span>
+                        {% else %}
+                            <span class="text-[10px] font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-full">Unpaid</span>
+                        {% endif %}
+                        {% if batch.notified_kitchen %}
+                            <span class="text-[10px] font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">Kitchen Notified</span>
+                        {% endif %}
+
+                        <form method="POST" action="{% url 'useradmin:order-change-status' bid=batch.bid %}" class="flex items-center gap-1.5">
+                            {% csrf_token %}
+                            <select name="status" class="text-[10px] border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 outline-none">
+                                <option value="pending" {% if batch.status == 'pending' %}selected{% endif %}>Pending</option>
+                                <option value="processing" {% if batch.status == 'processing' %}selected{% endif %}>Processing</option>
+                                <option value="delivered" {% if batch.status == 'delivered' %}selected{% endif %}>Delivered</option>
+                            </select>
+                            <button type="submit" class="text-[10px] px-2.5 py-1.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+                                Update
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Desktop Table -->
+                <div class="hidden md:block overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="text-left px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Product</th>
+                                <th class="text-left px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Price</th>
+                                <th class="text-left px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
+                                <th class="text-right px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-50">
+                            {% for item in batch.items %}
+                            <tr>
+                                <td class="px-6 py-3">
+                                    <div class="flex items-center gap-3">
+                                        <img src="{{ item.product.image.url }}" class="w-8 h-8 rounded-lg object-cover bg-gray-100" alt="{{ item.product.title }}" />
+                                        <span class="text-sm font-medium text-gray-900">{{ item.product.title }}</span>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-3 text-sm text-gray-700">₦{{ item.price|intcomma }}</td>
+                                <td class="px-6 py-3 text-sm text-gray-700">{{ item.quantity }}</td>
+                                <td class="px-6 py-3 text-sm font-semibold text-gray-900 text-right">₦{{ item.multiply_price|intcomma }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Mobile Cards -->
+                <div class="md:hidden divide-y divide-gray-50">
                     {% for item in batch.items %}
-                    <tr>
-                        <td class="px-6 py-3">
-                            <div class="flex items-center gap-3">
-                                <img src="{{ item.product.image.url }}" class="w-8 h-8 rounded-lg object-cover bg-gray-100" alt="{{ item.product.title }}" />
-                                <span class="text-sm font-medium text-gray-900">{{ item.product.title }}</span>
-                            </div>
-                        </td>
-                        <td class="px-6 py-3 text-sm text-gray-700">₦{{ item.price|intcomma }}</td>
-                        <td class="px-6 py-3 text-sm text-gray-700">{{ item.quantity }}</td>
-                        <td class="px-6 py-3 text-sm font-semibold text-gray-900 text-right">₦{{ item.multiply_price|intcomma }}</td>
-                    </tr>
+                    <div class="p-3 flex items-center gap-3">
+                        <img src="{{ item.product.image.url }}" class="w-10 h-10 rounded-lg object-cover bg-gray-100 flex-shrink-0" alt="{{ item.product.title }}" />
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-900 truncate">{{ item.product.title }}</p>
+                            <p class="text-xs text-gray-500">{{ item.quantity }} × ₦{{ item.price|intcomma }}</p>
+                        </div>
+                        <span class="text-sm font-bold text-gray-900">₦{{ item.multiply_price|intcomma }}</span>
+                    </div>
                     {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Mobile Cards -->
-        <div class="md:hidden divide-y divide-gray-50">
-            {% for item in batch.items %}
-            <div class="p-3 flex items-center gap-3">
-                <img src="{{ item.product.image.url }}" class="w-10 h-10 rounded-lg object-cover bg-gray-100 flex-shrink-0" alt="{{ item.product.title }}" />
-                <div class="flex-1 min-w-0">
-                    <p class="text-sm font-medium text-gray-900 truncate">{{ item.product.title }}</p>
-                    <p class="text-xs text-gray-500">{{ item.quantity }} × ₦{{ item.price|intcomma }}</p>
                 </div>
-                <span class="text-sm font-bold text-gray-900">₦{{ item.multiply_price|intcomma }}</span>
+
             </div>
             {% endfor %}
         </div>
 
+        <!-- PER-USER PANELS (one per unique user, showing all their batches) -->
+        {% for group in user_groups %}
+            {% with group.list.0.user as u %}
+            <div x-show="activeUser === '{{ u.id }}'" x-transition.opacity class="space-y-4">
+
+                {% for batch in group.list %}
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+
+                    <div class="px-4 sm:px-6 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gray-50/50">
+                        <div class="flex items-center gap-3">
+                            <span class="w-10 h-10 rounded-lg flex items-center justify-center {% if u.id == host.id %}bg-amber-100{% else %}bg-indigo-100{% endif %}">
+                                {% if u.id == host.id %}
+                                    <i class="fas fa-crown text-amber-600 text-sm"></i>
+                                {% else %}
+                                    <i class="fas fa-user text-indigo-600 text-sm"></i>
+                                {% endif %}
+                            </span>
+                            <div>
+                                <h3 class="text-sm font-bold text-gray-900">
+                                    {{ u.first_name|default:u.username|default:"Guest" }}
+                                    {% if u.id == host.id %}
+                                        <span class="text-[10px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full ml-1">HOST</span>
+                                    {% endif %}
+                                </h3>
+                                <p class="text-[10px] text-gray-500">
+                                    Batch #{{ batch.bid }} · {{ batch.items|length }} item{{ batch.items|length|pluralize }} · ₦{{ batch.total_price|intcomma }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            {% if batch.payment_status == 'paid' %}
+                                <span class="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">Paid</span>
+                            {% else %}
+                                <span class="text-[10px] font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-full">Unpaid</span>
+                            {% endif %}
+
+                            <form method="POST" action="{% url 'useradmin:order-change-status' bid=batch.bid %}" class="flex items-center gap-1.5">
+                                {% csrf_token %}
+                                <select name="status" class="text-[10px] border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 outline-none">
+                                    <option value="pending" {% if batch.status == 'pending' %}selected{% endif %}>Pending</option>
+                                    <option value="processing" {% if batch.status == 'processing' %}selected{% endif %}>Processing</option>
+                                    <option value="delivered" {% if batch.status == 'delivered' %}selected{% endif %}>Delivered</option>
+                                </select>
+                                <button type="submit" class="text-[10px] px-2.5 py-1.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+                                    Update
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="hidden md:block overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="bg-gray-50">
+                                    <th class="text-left px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Product</th>
+                                    <th class="text-left px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Price</th>
+                                    <th class="text-left px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</th>
+                                    <th class="text-right px-6 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-50">
+                                {% for item in batch.items %}
+                                <tr>
+                                    <td class="px-6 py-3">
+                                        <div class="flex items-center gap-3">
+                                            <img src="{{ item.product.image.url }}" class="w-8 h-8 rounded-lg object-cover bg-gray-100" alt="{{ item.product.title }}" />
+                                            <span class="text-sm font-medium text-gray-900">{{ item.product.title }}</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-3 text-sm text-gray-700">₦{{ item.price|intcomma }}</td>
+                                    <td class="px-6 py-3 text-sm text-gray-700">{{ item.quantity }}</td>
+                                    <td class="px-6 py-3 text-sm font-semibold text-gray-900 text-right">₦{{ item.multiply_price|intcomma }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="md:hidden divide-y divide-gray-50">
+                        {% for item in batch.items %}
+                        <div class="p-3 flex items-center gap-3">
+                            <img src="{{ item.product.image.url }}" class="w-10 h-10 rounded-lg object-cover bg-gray-100 flex-shrink-0" alt="{{ item.product.title }}" />
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-900 truncate">{{ item.product.title }}</p>
+                                <p class="text-xs text-gray-500">{{ item.quantity }} × ₦{{ item.price|intcomma }}</p>
+                            </div>
+                            <span class="text-sm font-bold text-gray-900">₦{{ item.multiply_price|intcomma }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                </div>
+                {% endfor %}
+
+            </div>
+            {% endwith %}
+        {% endfor %}
+
     </div>
-    {% endfor %}
 
     <!-- ==================== OVERALL TOTALS ==================== -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5">

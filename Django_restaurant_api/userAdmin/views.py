@@ -486,6 +486,9 @@ def dine_in_orders(request, restaurant_id=None):
     return render(request, 'useradmin/dine_in_orders.html', context)
 
 
+
+
+
 @admin_required
 def delivery_orders(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
@@ -604,7 +607,23 @@ def dine_in_order_details(request, session_id, restaurant_id=None):
         if dine_session else []
     )
     participant_count = participants.count() if dine_session else 0
-    
+
+    declined_participants = []
+    if dine_session:
+        for p in dine_session.participants.filter(status='declined').select_related('user'):
+            total = (
+                session.session_batches
+                .filter(telegram_user=p.user)
+                .aggregate(t=Sum('total_price'))['t'] or 0
+            )
+            if total > 0:
+                declined_participants.append({
+                    'user': p.user,
+                    'resolved_at': p.resolved_at,
+                    'total': total,
+                })
+
+    declined_user_ids = [item['user'].id for item in declined_participants]
     subtotal = session.total_batch_price or 0
     
     batches = []
@@ -646,6 +665,8 @@ def dine_in_order_details(request, session_id, restaurant_id=None):
         'dine_session': dine_session,
         'host': host,
         'participants': participants,
+        'declined_participants': declined_participants,
+        'declined_user_ids': declined_user_ids,
         'items_count': items_count,
         'participant_count': participant_count,
     }

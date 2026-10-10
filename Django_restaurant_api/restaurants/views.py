@@ -578,6 +578,9 @@ request_to_join_table_api_view = RequestJoinTableAPIView.as_view()
 # Table 3	Sandra	2 joined	5 items	₦15,000	🟡 Awaiting Payment	View
 # Table 7	Tunde	0 joined	3 items	₦8,000	🟢 Paid	View
 
+
+
+
 class RespondToJoinRequestAPIView(APIView):
     """
     POST /api/dine-in/respond-join-request/
@@ -589,75 +592,120 @@ class RespondToJoinRequestAPIView(APIView):
         host_user_id = request.data.get('host_user_id')
         participant_id = request.data.get('participant_id')
         action = (request.data.get('action') or "").lower()
-        platform = (request.data.get('platform') or "").lower()  # fixed: was reading 'action'
+        platform = (request.data.get('platform') or "").lower()
 
+        # ========== VALIDATION ==========
         if not all([host_user_id, participant_id, action]):
-            return Response({"error": "Missing required fields"}, status=400)
+            return Response({
+                "success": False,
+                "error": "Missing required fields",
+                "code": "MISSING_FIELDS"
+            }, status=400)
 
+        if platform not in ('telegram', 'whatsapp'):
+            return Response({
+                "success": False,
+                "error": "Invalid platform",
+                "code": "INVALID_PLATFORM"
+            }, status=400)
+
+        if action not in ('accept', 'decline'):
+            return Response({
+                "success": False,
+                "error": "Invalid action",
+                "code": "INVALID_ACTION"
+            }, status=400)
+
+        # ========== FIND PARTICIPANT ==========
         try:
-            with transaction.atomic():
-                participant = get_object_or_404(
-                    DineInSessionParticipant.objects.select_for_update().select_related('session', 'user'),
-                    id=participant_id,
-                    status='pending',
+            participant = DineInSessionParticipant.objects.select_for_update().select_related(
+                'session', 'session__user', 'user'
+            ).filter(
+                id=participant_id,
+            ).first()
+        except Exception as e:
+            logger.exception(f"Error fetching participant: {e}")
+            return Response({
+                "success": False,
+                "error": "Server error",
+                "code": "SERVER_ERROR"
+            }, status=500)
+
+        if not participant:
+            return Response({
+                "success": False,
+                "error": "Request not found",
+                "code": "NOT_FOUND"
+            }, status=404)
+
+        # ========== CHECK STATUS ==========
+        if participant.status != 'pending':
+            return Response({
+                "success": False,
+                "error": f"Request already {participant.status}",
+                "code": "ALREADY_RESOLVED",
+                "status": participant.status
+            }, status=409)
+
+        session = participant.session
+
+        # ========== VERIFY HOST ==========
+        is_host = False
+        if platform == 'telegram':
+            is_host = session.user.telegram_id == int(host_user_id)
+        elif platform == 'whatsapp':
+            is_host = session.user.whatsapp_id == str(host_user_id)
+
+        if not is_host:
+            logger.warning(f"Non-host user {host_user_id} tried to respond to request {participant_id}")
+            return Response({
+                "success": False,
+                "error": "Only the host can respond to this request",
+                "code": "NOT_HOST"
+            }, status=403)
+
+        # ========== APPLY ACTION ==========
+        try:
+            if action == 'accept':
+                participant.accept()
+                redis_client.set(
+                    f"join:{participant.id}",
+                    json.dumps({
+                        "status": "accepted",
+                        "session_id": session.session_id,
+                        "table_number": session.table_number,
+                    }),
+                    ex=86400
                 )
-                session = participant.session
 
-                # check only the field relevant to this platform, not both
-                is_host = False
-                if platform == 'telegram':
-                    is_host = session.user.telegram_id == int(host_user_id)
-                elif platform == 'whatsapp':
-                    is_host = session.user.whatsapp_id == str(host_user_id)
-                else:
-                    return Response({"error": "Invalid platform"}, status=400)
+            elif action == 'decline':
+                participant.decline()
+                redis_client.set(
+                    f"join:{participant.id}",
+                    json.dumps({
+                        "status": "declined",
+                        "session_id": None,
+                        "table_number": session.table_number,
+                    }),
+                    ex=86400
+                )
 
-                if not is_host:
-                    logger.info("Only the host can respond to this request")
-                    return Response({"error": "Only the host can respond to this request"}, status=403)
-
-
-                if action == 'accept':
-                    
-                    participant.accept()
-
-                    redis_client.set(
-                        f"join:{participant.id}",
-                        json.dumps({
-                            "status": "accepted",
-                            "session_id": session.session_id,
-                            "table_number": session.table_number,
-                        }),
-                        ex=86400
-                    )
-
-                elif action == 'decline':
-                    
-                    participant.decline()
-                    
-                    redis_client.set(
-                        f"join:{participant.id}",
-                        json.dumps({
-                            "status": "declined",
-                            "session_id": None,
-                            "table_number": session.table_number,
-                        }),
-                        ex=86400
-                    )
-                else:
-                    return Response({"error": "Invalid action"}, status=400)
-
-        except Exception:
-            return Response({"error": "Server error"}, status=500)
+        except Exception as e:
+            logger.exception(f"Error applying action: {e}")
+            return Response({
+                "success": False,
+                "error": "Server error",
+                "code": "SERVER_ERROR"
+            }, status=500)
 
         return Response({
             "success": True,
             "status": participant.status,
             "user": participant.user.username or participant.user.telegram_id,
-        })
-        
-respond_to_join_api_view = RespondToJoinRequestAPIView.as_view()
+        }, status=200)
 
+
+respond_to_join_api_view = RespondToJoinRequestAPIView.as_view()
 
 
 

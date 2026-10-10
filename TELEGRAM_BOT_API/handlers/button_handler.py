@@ -416,28 +416,84 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
     elif data.startswith('join_'):
-
-        data_list = data.split('_') # spilt into ["join", "accept/decline", "participant_id"]    
-        action = data_list[1] # extracts the action either accept or decline
-        participant_id = data_list[-1] # extract the last item of the list i.e the participant_id
+        data_list = data.split('_')
+        action = data_list[1]
+        participant_id = data_list[-1]
         logger.info("join_ data: %s %s %s", data, action, participant_id)
 
         platform = 'telegram'
         host_user_id = update.effective_user.id
 
-        response, success = await respond_to_join_request(action=action, participant_id=participant_id,
-            platform=platform, host_user_id=host_user_id
+        result = await respond_to_join_request(
+            action=action,
+            participant_id=participant_id,
+            platform=platform,
+            host_user_id=host_user_id
         )
 
-        if not success:
-            raise Exception(f"Failed to respond to join request: {response}")
+        # ========== HANDLE RESULT ==========
+        if not result.get("ok"):
+            code = result.get("code", "")
+            error_msg = result.get("error", "Something went wrong.")
+            
+            # Recoverable (network/5xx) → retry via ARQ
+            if result.get("recoverable"):
+                raise Exception(f"Retrying: {error_msg}")
+
+            # Permanent errors — friendly messages
+            if code == "ALREADY_RESOLVED":
+                status = result.get("data", {}).get("status", "resolved")
+                await query.answer(
+                    text=f"⚠️ This request was already {status}.",
+                    show_alert=True
+                )
+                return
+
+            if code == "NOT_HOST":
+                await query.answer(
+                    text="🔒 Only the host can respond to this request.",
+                    show_alert=True
+                )
+                return
+
+            if code == "NOT_FOUND":
+                await query.answer(
+                    text="🔍 This request is no longer available.",
+                    show_alert=True
+                )
+                return
+
+            # Fallback
+            await query.answer(
+                text=f"❌ {error_msg}",
+                show_alert=True
+            )
+            return
+
+        # ========== SUCCESS ==========
+        logger.info(f"Successfully {action}ed the request from participant={participant_id}")
+
+        # Answer the callback query (removes the loading spinner)
+        success_text = "✅ Accepted!" if action == "accept" else "❌ Declined."
+        await query.answer(text=success_text)
+
+        # # Optionally edit the original message to remove buttons
+        # try:
+        #     user_display = result["data"].get("user", "User")
+        #     await query.edit_message_text(
+        #         text=(
+        #             f"<b>{user_display}</b> has been "
+        #             f"{'✅ accepted' if action == 'accept' else '❌ declined'} "
+        #             f"to join Table {result['data'].get('table_number', '—')}."
+        #         ),
+        #         parse_mode='HTML'
+        #     )
+        # except Exception as e:
+        #     logger.warning(f"Could not edit message: {e}")
+
         
-        logger.info(f"successfully {action}ed the request from participant= {participant_id}")
-
-
 
 async def respond_to_join_request(action, participant_id, platform, host_user_id):
-
     payload = {
         "action": action,
         "participant_id": participant_id,
@@ -445,12 +501,42 @@ async def respond_to_join_request(action, participant_id, platform, host_user_id
         "host_user_id": host_user_id
     }
 
-    return await _request_with_retry(
+    response, success = await _request_with_retry(
         method="POST",
-        url=f"http://web:8000/restaurants/dine-in/respond-join/",  # ✅ Full URL
-        json=payload 
+        url="http://web:8000/restaurants/dine-in/respond-join/",
+        json=payload
     )
-    
+
+    # Network / 5xx failure
+    if not success or response is None:
+        return {
+            "ok": False,
+            "recoverable": True,
+            "error": "Network error. Please try again.",
+            "code": "NETWORK_ERROR"
+        }
+
+    # Parse response body
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
+
+    # Success
+    if 200 <= response.status_code < 300:
+        return {
+            "ok": True,
+            "data": data
+        }
+
+    # Any 4xx — permanent error
+    return {
+        "ok": False,
+        "recoverable": False,
+        "error": data.get("error", f"Failed to {action} request."),
+        "code": data.get("code", "UNKNOWN"),
+        "data": data,   # ✅ pass through the full response body
+    }
 
 async def is_delivery_available(update):
     user_session = await get_user_session(update.effective_user.id)

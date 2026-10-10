@@ -2,6 +2,8 @@ import pytz
 from datetime import datetime, timezone
 from cachetools import TTLCache
 from TELEGRAM_BOT_API.core.config import *
+from TELEGRAM_BOT_API.core.config import _request_with_retry
+
 
 
 # TTL: Time to Live, “How long something stays in memory before it disappears” i.e it last for 300 seconds (5 minutes)
@@ -58,31 +60,50 @@ async def get_restaurant(rid: str):
 
     # 🔥 Not in cache or cache was cleared - fetch from DRF
     async with lock:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                res = await client.get(
-                    f"{DRF_URL}/restaurants/internal/telegram/{rid}/",
-                    headers={"X-INTERNAL-API-KEY": INTERNAL_API_KEY}
-                )
+        response, success = await _request_with_retry(
+            method="GET",
+            url=f"{DRF_URL}/restaurants/internal/telegram/{rid}/",
+            headers={"X-INTERNAL-API-KEY": INTERNAL_API_KEY}
+        )
 
-                if res.status_code != 200:
-                    logger.info(f"DRF returned {res.status_code} for restaurant {rid}")
-                    return None
+        # Network / 5xx failure
+        if not success or response is None:
+            logger.error(f"Failed to fetch restaurant {rid} — network/server error")
+            return None
 
-                data = res.json()
-                
-                # Store in cache with timestamp (UTC time)
-                cache[rid] = data
-                
-                # Get current UTC time (London time) for timestamp
-                now_utc = datetime.now(timezone.utc)
-                cache[f"{rid}_timestamp"] = now_utc
-                
-                logger.info(f"Fetched fresh data for restaurant {rid}: open_time={data.get('open_time')}, close_time={data.get('close_time')}, is_closed={data.get('is_closed')}")
-                
-                return data
+        # Parse response body
+        try:
+            data = response.json()
+        except Exception:
+            logger.exception(f"Failed to parse JSON for restaurant {rid}")
+            return None
 
-            except httpx.RequestError as e:
-                logger.exception(f"DRF request failed for {rid}: {e}")
-                return None
+        # Success
+        if response.status_code == 200:
+            # Store in cache with timestamp (UTC time)
+            cache[rid] = data
+            cache[f"{rid}_timestamp"] = datetime.now(timezone.utc)
+
+            logger.info(
+                f"Fetched fresh data for restaurant {rid}: "
+                f"open_time={data.get('open_time')}, "
+                f"close_time={data.get('close_time')}, "
+                f"is_closed={data.get('is_closed')}"
+            )
+            return data
+
+        # 404 = restaurant not found
+        if response.status_code == 404:
+            logger.info(f"Restaurant {rid} not found in DRF")
+            return None
+
+        # Other 4xx — log and return
+        logger.warning(
+            f"DRF returned {response.status_code} for restaurant {rid}: "
+            f"{data.get('error', 'unknown error')}"
+        )
+        return None
                 
+
+
+        
