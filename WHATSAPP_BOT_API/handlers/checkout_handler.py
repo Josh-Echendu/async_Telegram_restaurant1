@@ -96,11 +96,12 @@ async def api_get_user_order_batches(btn, max_retries=3):
     user_id = btn.from_user.wa_id
     user_session = await get_user_session(user_id)
     platform = "whatsapp"
+    restaurant_id = await user_session.get("current_rid")
 
     # 🔍 Get session_id from Redis
     try:    
         session_data = json.loads(
-            await redis_client.get(f"whatsapp_dine_user_session:{user_id}")
+            await redis_client.get(f"whatsapp_dine_user_session:{restaurant_id}:{user_id}")
         )
         logger.info(f"handle session data: {session_data}")
         session_id = session_data.get("session_id")
@@ -183,7 +184,7 @@ async def handle_pos_cash_payment(btn, payment_type, max_retries=3):
     try:
         
         session_data = json.loads(
-            await redis_client.get(f"whatsapp_dine_user_session:{user_id}")
+            await redis_client.get(f"whatsapp_dine_user_session:{restaurant_id}:{user_id}")
         )
         logger.info(f"handle session data for handle_pos_cash_payment: {session_data}")
         session_id = session_data.get("session_id")
@@ -241,7 +242,10 @@ async def bank_transfer(client, btn):
     
     user_id = btn.from_user.wa_id
 
-    redis_key = f"whatsapp_dine_user_session:{user_id}"
+    user_session = await get_user_session(user_id)
+    restaurant_id = user_session.get("current_rid")
+
+    redis_key = f"whatsapp_dine_user_session:{restaurant_id}:{user_id}"
     session_data = await redis_client.get(redis_key)
 
     if not session_data:

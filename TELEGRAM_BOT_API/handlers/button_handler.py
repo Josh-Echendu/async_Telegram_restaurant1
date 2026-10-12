@@ -126,17 +126,19 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # ✅ Get session_id from Redis (WITH AWAIT + JSON parse)
         customer_platform = (payment_data.get('customer_platform') or "").lower()
+        restaurant_id = payment_data.get('restaurant_id')
 
         if customer_platform == 'telegram':
-            redis_key = f"telegram_dine_user_session:{customer_user_id}"
+            redis_key = f"telegram_dine_user_session:{restaurant_id}:{customer_user_id}"
         
         elif customer_platform == 'whatsapp': 
-            redis_key = f"whatsapp_dine_user_session:{customer_user_id}"
+            redis_key = f"whatsapp_dine_user_session:{restaurant_id}:{customer_user_id}"
         
         else:
             logger.error(
                 "Unknown customer platform '%s' for payment %s",
                 customer_platform,
+                restaurant_id,
                 payment_key,
             )
 
@@ -278,7 +280,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "bank_transfer":
         user_id = update.effective_user.id
         
-        redis_key = f"telegram_dine_user_session:{user_id}"
+        redis_key = f"telegram_dine_user_session:{restaurant_id}:{user_id}"
         data = await redis_client.get(redis_key)
         
         if not data:
@@ -326,6 +328,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kitchen_chat_id = response.get('kitchen_chat_id')
         waiter_telegram_id = response.get('waiter_telegram_id')
         waiter_username = response.get('waiter_username')
+        restaurant_id = response.get('restaurant_id', 'N/A')
         
         emoji = "💵" if payment_type == "cash" else "💳"
         method = "collect cash" if payment_type == "cash" else "with a POS machine"
@@ -375,6 +378,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             'kitchen_chat_id': kitchen_chat_id,
                             "customer_platform": "telegram",
                             "customer_user_id": customer_user_id,
+                            "restaurant_id": restaurant_id 
                         })
                     )
 

@@ -953,10 +953,10 @@ class OrderBatchListCreateAPIView(APIView):
                 redis_client = redis.Redis.from_url(settings.REDIS_URL)
 
                 if platform == 'telegram':
-                    redis_key = f"telegram_dine_user_session:{user.telegram_id}"
+                    redis_key = f"telegram_dine_user_session:{restaurant.rid}:{user.telegram_id}"
                 elif platform == 'whatsapp':
-                    redis_key = f"whatsapp_dine_user_session:{user.whatsapp_id}"
-                
+                    redis_key = f"whatsapp_dine_user_session:{restaurant.rid}:{user.whatsapp_id}"
+                                
                 data = json.dumps({
                     "session_id": session.session_id,
                     "restaurant_id": restaurant.rid,
@@ -1654,155 +1654,156 @@ class UpdateBatchStatusAPIView(APIView):
 update_batch_status_api_view = UpdateBatchStatusAPIView.as_view()
 
 
-
 class OrderBatchesListView(APIView):
 
     def get(self, request, *args, **kwargs):
 
         session_id = kwargs.get('session_id', None)
         restaurant_id = kwargs.get('restaurant_id', None)
-        platform = kwargs.get('platform', None)
 
         # 🔐 INTERNAL SECURITY
         api_key = request.headers.get("X-INTERNAL-API-KEY")
         if api_key != settings.INTERNAL_API_KEY:
             return Response({"error": "unauthorized"}, status=403)
-            
+
         # 1. Get restaurant
         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
 
-        # 2. Get session from database (not Redis)
+        # 2. Get session from database
         session = (
             CheckoutSession.objects
-            .select_related("restaurant")
+            .select_related('restaurant', 'telegram_user', 'dine_session', 'dine_session__user')
             .filter(
-                session_id=session_id, 
-                payment_status='unpaid', 
-                restaurant=restaurant, 
-                is_active=True, 
-                platform=platform,
-                service_mode='dine_in'
+                session_id=session_id,
+                payment_status='unpaid',
+                restaurant=restaurant,
+                is_active=True,
+                service_mode='dine_in',
             )
-
-            # 1️⃣ session_batches: Load all OrderBatch objects connected to the session. 2️⃣ items: Inside each batch, load its OrderItems.
-            # 3️⃣ product For each item, load the Product details.
             .prefetch_related(
-                "session_batches__items__product" # “Load the session, its batches, the items in those batches, and the products for those items in advance so the database isn’t queried repeatedly.”
+                'session_batches__items__product',
+                'session_batches__telegram_user',
+                'dine_session__participanFts__user',
             )
-            .order_by('-date_created')            
+            .order_by('-date_created')
             .first()
         )
-        print("session batch: ", session)
 
         if not session:
             return Response({
                 "found": False,
                 "error": "Session not found",
-                "message": "You have no active session, please order some items."
+                "message": "You have no active session, please order some items.",
             }, status=404)
 
-        data = []
-        for order in session.session_batches.all():
+        # ✅ Dine session context
+        dine_session = session.dine_session
+        host = dine_session.user if dine_session else None
+
+        participants = (
+            dine_session.participants.filter(status='accepted').select_related('user')
+            if dine_session else []
+        )
+        participant_count = participants.count() if dine_session else 0
+
+        # ✅ Declined participants with orders
+        declined_participants = []
+        if dine_session:
+            for p in dine_session.participants.filter(status='declined').select_related('user'):
+                total = (
+                    session.session_batches
+                    .filter(telegram_user=p.user)
+                    .aggregate(t=Sum('total_price'))['t'] or 0
+                )
+                if total > 0:
+                    declined_participants.append({
+                        'user_id': p.user.id,
+                        'first_name': p.user.first_name or p.user.username or 'Guest',
+                        'username': p.user.username,
+                        'resolved_at': p.resolved_at.isoformat() if p.resolved_at else None,
+                        'total': float(total),
+                    })
+
+        # ✅ Subtotal & totals
+        subtotal = (
+            session.session_batches
+            .aggregate(t=Sum('total_price'))['t'] or 0
+        )
+
+        # ✅ Batches (flat list — grouped by user via regroup on frontend)
+        batches = []
+        for batch in session.session_batches.all():
             items = [
                 {
-                    "quantity": item.quantity,
-                    "price": int(item.price),
-                    "product_title": item.product.title
+                    'product_id': item.product.pid,
+                    'product_title': item.product.title,
+                    'price': float(item.price),
+                    'quantity': item.quantity,
+                    'multiply_price': float(item.price * item.quantity),
                 }
-                for item in order.items.all()
+                for item in batch.items.all()
             ]
-            data.append({
-                "bid": order.bid,
-                "total_price": order.total_price,
-                "vat": session.vat_amount,
-                "items": items,
-                "restaurant": session.restaurant.name
+            batches.append({
+                'bid': batch.bid,
+                'user_first_name': (
+                    batch.telegram_user.first_name
+                    or batch.telegram_user.username
+                    or 'Guest'
+                ) if batch.telegram_user else 'Guest',
+                'user_username': batch.telegram_user.username if batch.telegram_user else None,
+                'is_host': batch.telegram_user == host if batch.telegram_user else False,
+                'items': items,
+                'item_count': len(items),
+                'total_price': float(batch.total_price),
             })
 
-        return Response(data)
-    
+        items_count = sum(b['item_count'] for b in batches)
+
+        return Response({
+            "found": True,
+            "session_id": session.session_id,
+
+            # Dine session info
+            "dine_session": {
+                "table_number": dine_session.table_number if dine_session else None,
+                "session_id": dine_session.session_id if dine_session else None,
+                "waiter_username": dine_session.waiter_username if dine_session else None,
+                "waiter_telegram_id": dine_session.waiter_telegram_id if dine_session else None,
+            } if dine_session else None,
+
+            # Host
+            "host": {
+                "user_id": host.id,
+                "first_name": host.first_name or host.username or 'Host',
+                "username": host.username,
+            } if host else None,
+
+            # accepted Participants
+            "participants": [
+                {
+                    "user_id": p.user.id,
+                    "first_name": p.user.first_name or p.user.username or 'Guest',
+                    "username": p.user.username,
+                    "resolved_at": p.resolved_at.isoformat() if p.resolved_at else None,
+                }
+                for p in participants
+            ],
+            "participant_count": participant_count,
+
+            # Declined users with orders
+            "declined_participants": declined_participants,
+
+            # Orders
+            "batches": batches,
+            "items_count": items_count,
+
+            # Bill totals
+            "subtotal": float(subtotal),
+            "message": "Session loaded successfully.",
+        }, status=200)
+
+
 batch_list_api_view = OrderBatchesListView.as_view()
-
-
-# class OrderBatchesListView(APIView):
-
-#     def get(self, request, *args, **kwargs):
-#         user_id = kwargs.get('user_id', None)
-#         restaurant_id = kwargs.get('restaurant_id', None)
-#         platform = (kwargs.get('platform') or "").lower()
-
-#         if not user_id or restaurant_id is None or platform is None:
-#             return Response({"error": "Missing telegram_id or whatsapp_id or restaurant_id or platform in path"}, status=400)
-
-#         if platform not in ['telegram', 'whatsapp']:
-#             return Response({"error": "Invalid platform. Must be 'telegram' or 'whatsapp'"}, status=400)
-
-#         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
-
-#         if platform == 'telegram':
-#             user = get_object_or_404(TelegramUser, telegram_id=user_id) # request.user is set by TelegramAuthentication to be the telegram_id
-#             print("telegram user: ", user)
-
-#         if platform == 'whatsapp':
-#             user = get_object_or_404(TelegramUser, whatsapp_id=user_id) # request.user is set by TelegramAuthentication to be the whatsapp_id
-#             print("whatsapp user: ", user)
-
-#         membership_exists = RestaurantMembership.objects.filter(
-#             user=user,
-#             restaurant=restaurant
-#         ).exists()
-        
-#         if not membership_exists:
-#             return Response(
-#                 {"error": "User not linked to this restaurant"},
-#                 status=404
-#             )
-
-#         # session_batches → all OrderBatch
-#         # items → all OrderItem
-#         # product → all Product
-#         session = (
-#             CheckoutSession.objects
-#             .select_related("restaurant")
-#             .filter(telegram_user=user, restaurant=restaurant, is_active=True, service_mode='dine_in')
-#             # 1️⃣ session_batches: Load all OrderBatch objects connected to the session. 2️⃣ items: Inside each batch, load its OrderItems.
-#             # 3️⃣ product For each item, load the Product details.
-#             .prefetch_related(
-#                 "session_batches__items__product" # “Load the session, its batches, the items in those batches, and the products for those items in advance so the database isn’t queried repeatedly.”
-#             )
-#             .order_by('-date_created')            
-#             .first()
-#         )
-#         print("session batch: ", session)
-
-#         if not session:
-#             return Response({
-#                 "found": False,
-#                 "error": "Session not found",
-#                 "message": "You have no active session, please order some items."
-#             }, status=404)
-
-#         data = []
-#         for order in session.session_batches.all():
-#             items = [
-#                 {
-#                     "quantity": item.quantity,
-#                     "price": int(item.price),
-#                     "product_title": item.product.title
-#                 }
-#                 for item in order.items.all()
-#             ]
-#             data.append({
-#                 "bid": order.bid,
-#                 "total_price": order.total_price,
-#                 "vat": session.vat_amount,
-#                 "items": items,
-#                 "restaurant": session.restaurant.name
-#             })
-
-#         return Response(data)
-    
-# batch_list_api_view = OrderBatchesListView.as_view()
 
 
 

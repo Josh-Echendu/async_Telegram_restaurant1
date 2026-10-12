@@ -196,22 +196,26 @@ async def update_batch_table(batch_id, status, restaurant_id, query=None, max_re
             await asyncio.sleep(1)
             
             
+
+
+
 async def api_get_user_order_batches(update, max_retries=3):
     platform = "telegram"
 
     # 🔍 Get session_id from Redis
     try:
         user_id = update.effective_user.id
+        user_session = await get_user_session(user_id)
+        restaurant_id = user_session.get('current_rid')
 
-        session_data = json.loads(
-            await redis_client.get(f"telegram_dine_user_session:{user_id}")
-        )
+        raw = await redis_client.get(f"telegram_dine_user_session:{restaurant_id}:{user_id}")
+        session_data = json.loads(raw) if raw else {}
         session_id = session_data.get("session_id")
-        restaurant_id = session_data.get("restaurant_id")
 
     except Exception:
         session_id = None
 
+    # No session → permanent failure
     if not session_id:
         await update.message.reply_text(
             "❌ <b>No Active Session Found</b>\n\n"
@@ -219,49 +223,50 @@ async def api_get_user_order_batches(update, max_retries=3):
             "🍽️ Please add some items to your cart first.",
             parse_mode="HTML",
         )
-        return None
+        return {"ok": False, "recoverable": False, "error": "No session_id"}
 
     url = f"http://web:8000/api/user_batch_list/{session_id}/{restaurant_id}/{platform}/"
 
-    for attempt in range(1, max_retries + 1):
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.get(url, headers={"Content-Type": "application/json", "X-INTERNAL-API-KEY": INTERNAL_API_KEY})
+    response, success = await _request_with_retry(
+        method="GET",
+        url=url,
+        headers={
+            "Content-Type": "application/json",
+            "X-INTERNAL-API-KEY": INTERNAL_API_KEY,
+        },
+        timeout=30.0,
+    )
 
-                resp.raise_for_status()
+    # ❌ Network / 5xx — recoverable
+    if not success or response is None:
+        return {"ok": False, "recoverable": True, "error": "Network error"}
 
-                data = resp.json()
-                if resp.status_code in (200, 201):
-                    return data
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
 
-                logger.warning(f"Unexpected response {resp.status_code} → {data}")
-                return None
+    # ✅ Success
+    if 200 <= response.status_code < 300:
+        return {"ok": True, "recoverable": False, "data": data}
 
-        except httpx.HTTPStatusError as e:
+    # if session not found
+    if data.get('found') == False:
+        await update.message.reply_text(
+            "You have no active session. Please order some items."
+        )
+        return {"ok": False, "recoverable": False, "error": data.get("error", "Session not found")}
 
-            # Handle 404 separately
-            if e.response.status_code == 404:
-                try:
-                    data = e.response.json()
-                    if data.get("error", "").lower() == "session not found":
-                        await update.message.reply_text(
-                            "You have no active session. Please order some items."
-                        )
-                        return None
-                except ValueError:
-                    logger.exception("Invalid JSON returned for 404 response")
-                    return None
-            logger.warning(f"Attempt {attempt} failed: {e}")
+    # 400 — bad request (permanent)
+    if response.status_code == 400:
+        return {"ok": False, "recoverable": False, "error": data.get("error", "Bad request")}
 
-        except (httpx.RequestError, ValueError, Exception) as e:
-            logger.exception(f"Attempt {attempt} failed: {e}")
+    # Other 4xx — permanent
+    if 400 <= response.status_code < 500:
+        return {"ok": False, "recoverable": False, "error": data.get("error", f"API returned {response.status_code}")}
 
-        if attempt < max_retries:
-            await asyncio.sleep(1)
-
-    logger.error(f"All {max_retries} attempts failed to get order batches from DB.")
-    return None
-
+    # Fallback — recoverable (5xx or unexpected)
+    return {"ok": False, "recoverable": True, "error": f"Unexpected status {response.status_code}"}
 
 
 async def handle_pos_cash_payment(update, payment_type, max_retries=3):
@@ -277,7 +282,7 @@ async def handle_pos_cash_payment(update, payment_type, max_retries=3):
 
     # 🔍 Get session_id from Redis
     try:
-        session_data = json.loads(await redis_client.get(f"telegram_dine_user_session:{user_id}"))
+        session_data = json.loads(await redis_client.get(f"telegram_dine_user_session:{restaurant_id}:{user_id}"))
         logger.info("handle session data: %s", session_data)
         session_id = session_data.get('session_id')
     except:

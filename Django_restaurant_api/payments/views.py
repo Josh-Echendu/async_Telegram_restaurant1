@@ -130,9 +130,9 @@ class VPayWebhookAPIView(APIView):
 
                 # Remove the user's active session from Redis
                 if session.platform == 'telegram':
-                    redis_key = f"telegram_dine_user_session:{session.telegram_user.telegram_id}"
+                    redis_key = f"telegram_dine_user_session:{session.restaurant.rid}:{session.telegram_user.telegram_id}"
                 elif session.platform == 'whatsapp':
-                    redis_key = f"whatsapp_dine_user_session:{session.telegram_user.whatsapp_id}"
+                    redis_key = f"whatsapp_dine_user_session:{session.restaurant.rid}:{session.telegram_user.whatsapp_id}"
                 else:
                     redis_key = None
 
@@ -579,6 +579,7 @@ class HandlePaymentSelection(APIView):
         data = {
             "session_id": session.session_id,
             "table_number": last_order.dine_in_table_number,
+            "restaurant_id": session.restaurant.rid,
             "total": final_amount,
             "vat": session.vat_amount,
             "grand_total": math.ceil(final_amount + session.vat_amount),
