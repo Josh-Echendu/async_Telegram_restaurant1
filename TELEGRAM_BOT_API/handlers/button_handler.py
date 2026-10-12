@@ -416,9 +416,9 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
     elif data.startswith('join_'):
-        data_list = data.split('_')
-        action = data_list[1]
-        participant_id = data_list[-1]
+        data_list = data.split('_')  # spilt into ["join", "accept/decline", "participant_id"]    
+        action = data_list[1] # extracts the action either accept or decline
+        participant_id = data_list[-1]  # extract the last item of the list i.e the participant_id
         logger.info("join_ data: %s %s %s", data, action, participant_id)
 
         platform = 'telegram'
@@ -537,6 +537,7 @@ async def respond_to_join_request(action, participant_id, platform, host_user_id
         "code": data.get("code", "UNKNOWN"),
         "data": data,   # ✅ pass through the full response body
     }
+
 
 async def is_delivery_available(update):
     user_session = await get_user_session(update.effective_user.id)

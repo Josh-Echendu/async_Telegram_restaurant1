@@ -1,28 +1,86 @@
 from typing import Optional, Dict, Any
+import uuid
 from WHATSAPP_BOT_API.core.config import *
 from WHATSAPP_BOT_API.core.config import _request_with_retry
 
 
-async def handle_join_session(msg, session_token):
-    
-    user_id = msg.from_user.wa_id
 
-    user_session = await get_user_session(msg.from_user.wa_id)
-    restaurant_id = user_session.get('current_rid')
+async def handle_join_session(msg, session_token):
+    user_id = msg.from_user.wa_id
+    user_session = await get_user_session(user_id)
+    restaurant_id = user_session.get("current_rid")
+
+    idempotency_key = str(uuid.uuid4())
 
     payload = {
         "platform": "whatsapp",
         "user_id": user_id,
         "session_token": session_token,
-        "restaurant_id": restaurant_id
+        "restaurant_id": restaurant_id,
+        "idempotency_key": idempotency_key,
     }
 
-    return await _request_with_retry(
+    response, success = await _request_with_retry(
         method="POST",
-        url=f"http://web:8000/restaurants/dine-in/request-join/",  # ✅ Full URL
-        json=payload, 
-        headers={"X-INTERNAL-API-KEY": INTERNAL_API_KEY}
+        url="http://web:8000/restaurants/dine-in/request-join/",
+        json=payload,
+        headers={"X-INTERNAL-API-KEY": INTERNAL_API_KEY},
     )
+
+    # Network/5xx failure — recoverable
+    if not success or response is None:
+        return {
+            "ok": False,
+            "recoverable": True,
+            "error": "Network error",
+        }
+
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
+
+    # Success
+    if 200 <= response.status_code < 300:
+        return {
+            "ok": True,
+            "data": data,
+        }
+
+    # Conflict — permanent
+    if response.status_code == 409:
+        return {
+            "ok": False,
+            "recoverable": False,
+            "error": data.get("error", "Conflict"),
+        }
+
+    # Bad request — permanent
+    if response.status_code == 400:
+        return {
+            "ok": False,
+            "recoverable": False,
+            "error": data.get("error", "Bad request"),
+        }
+
+    # Other 4xx — permanent
+    if 400 <= response.status_code < 500:
+        return {
+            "ok": False,
+            "recoverable": False,
+            "error": data.get(
+                "error",
+                f"API returned {response.status_code}",
+            ),
+        }
+
+    # Other unexpected status — recoverable
+    return {
+        "ok": False,
+        "recoverable": True,
+        "error": f"Unexpected status {response.status_code}",
+    }
+
 
 
 # =========================
@@ -79,22 +137,74 @@ async def start_handler(client: WhatsApp, msg: Message):
     if not registration:
         raise Exception("Failed to register User")  # Direct raise - ARQ retries automatically!
  
-    
+    registration = await whatsapp_registration(
+        whatsapp_id=user_id,
+        first_name=first_name,
+        username=username,
+        phone_number=user_phone,
+        restaurant_id=restaurant_id,
+    )
+
+    if not registration or not registration.get("ok"):
+        if registration and not registration.get("recoverable"):
+            
+            # Permanent failure — don't retry, notify user
+            logger.error(
+                "Registration failed permanently: %s",
+                registration.get("error"),
+            )
+
+            await msg.reply_text(
+                f"❌ Network error, please Try again."
+            )
+            return
+
+        # Recoverable — raise to trigger ARQ retry
+        raise Exception(
+            f"Registration temporarily failed: "
+            f"{registration.get('error') if registration else 'Unknown error'}"
+        )
+
+
+
+    # Handle incoming WhatsApp join payload
     if msg.text and msg.text.startswith("join_"):
-        session_token = msg.text[5:]  # Remove "join_"
-        response, success = await handle_join_session(msg, session_token)
-        
-        if not success:
-            raise Exception("Failed to join session")  # Direct raise - ARQ retries automatically!
-        
-        await redis_client.set(f"user_session_token:{restaurant_id}:{user_id}",  session_token, ex=86400)
-    
+        session_token = msg.text[5:]
+
+        join_result = await handle_join_session(msg, session_token)
+
+        if not join_result.get("ok"):
+            if join_result.get("recoverable"):
+                # Allow your task queue to retry the operation.
+                raise Exception(
+                    f"Join failed: {join_result.get('error')}"
+                )
+
+            logger.error(
+                "Join failed permanently: %s",
+                join_result.get("error"),
+            )
+
+            await msg.reply_text(
+                "😔 We couldn't connect you to the table.\n\n"
+                "The link may have expired, or the table is no longer active.\n\n"
+                "👉 Please ask the host to share a fresh link, "
+                "or scan the QR code again."
+            )
+            return
+
+        # Store the token only after a successful join request.
+        await redis_client.set(
+            f"user_session_token:{restaurant_id}:{user_id}",
+            session_token,
+            ex=86400,
+        )
     
     # --- BUSINESS-SPECIFIC BUTTONS ---
 
-        # =========================
-        # 🧩 WhatsApp Interactive Buttons (CORRECT FORMAT)
-        # =========================
+    # =========================
+    # 🧩 WhatsApp Interactive Buttons (CORRECT FORMAT)
+    # =========================
         
     buttons=None
     if business_type == "restaurant":
@@ -203,64 +313,137 @@ async def start_handler(client: WhatsApp, msg: Message):
 # 📝 REGISTRATION FUNCTION (Converted from telegram_registration)
 # ============================================
 async def whatsapp_registration(
-    whatsapp_id: str,      # Changed from telegram_id
-    first_name: str,
-    username: str,
-    phone_number: str,     # Added this field
-    restaurant_id: str,
-    max_retries: int = 5
+    whatsapp_id,
+    first_name,
+    username,
+    phone_number,
+    restaurant_id,
 ):
     """
-    Converts your telegram_registration function
-    Same logic, just adapted for WhatsApp user data
+    Register a user from WhatsApp.
+
+    Returns:
+        {"ok": True, "data": {...}}
+            -> Success
+
+        {"ok": False, "recoverable": True, "error": "..."}
+            -> Retry through ARQ
+
+        {"ok": False, "recoverable": False, "error": "..."}
+            -> Permanent failure
     """
-    
+
     payload = {
-        "whatsapp_id": str(whatsapp_id),      # Changed field name
+        "whatsapp_id": str(whatsapp_id),
         "first_name": str(first_name),
-        "username": str(username),
-        "phone_number": str(phone_number),    # Added this field
-        "restaurant_id": str(restaurant_id)
+        "username": str(username or ""),
+        "phone_number": str(phone_number or ""),
+        "restaurant_id": str(restaurant_id),
     }
-    
-    logger.info(f"📝 Registering user: {payload}")
-    
-    for attempt in range(1, max_retries + 1):
+
+    url = (
+        "http://web:8000/"
+        "userauths/register_user/restaurant/whatsapp/"
+    )
+
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        response, success = await _request_with_retry(
+            method="POST",
+            url=url,
+            json=payload,
+            headers=headers,
+            timeout=30.0,
+        )
+
+        # Network / 5xx failure — recoverable
+        if not success or response is None:
+            logger.warning(
+                "Registration network/5xx failure for whatsapp_id=%s",
+                whatsapp_id,
+            )
+
+            return {
+                "ok": False,
+                "recoverable": True,
+                "error": "Network error",
+            }
+
+        # Parse response body
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"http://web:8000/userauths/register_user/restaurant/whatsapp/",  # Changed endpoint
-                    headers={"Accept": "application/json"},
-                    json=payload
-                )
-                response.raise_for_status()
-                logger.info(f"✅ User registration successful: {response.json()}")
-                return response.json()
-                
-        except httpx.HTTPStatusError as e:
-            # Try to get error details
-            try:
-                error_data = e.response.json()
-                logger.info(f"❌ User registration error: {error_data}")
-            except:
-                logger.info(f"❌ HTTP error {e.response.status_code}: {e.response.text}")
-                
-            logger.warning(f"Attempt {attempt}/{max_retries} failed: {e}")
-            
-            if attempt == max_retries:
-                logger.error(f"All {max_retries} attempts failed")
-                return None
-                
-            await asyncio.sleep(2 ** attempt)  # Exponential backoff: 2, 4, 8 seconds
-            
-        except httpx.RequestError as e:
-            logger.warning(f"🌐 Network error on attempt {attempt}: {e}")
-            logger.warning(f"Attempt {attempt} failed: {e}")
-            
-            if attempt == max_retries:
-                logger.error(f"All {max_retries} attempts failed")
-                return None
-                
-            await asyncio.sleep(2 ** attempt)
-    
-    return None
+            data = response.json()
+        except Exception:
+            data = {}
+
+        # 2xx — success
+        if 200 <= response.status_code < 300:
+            logger.info(
+                "WhatsApp user registration successful: %s",
+                whatsapp_id,
+            )
+
+            return {
+                "ok": True,
+                "data": data,
+            }
+
+        # 400 — permanent bad input
+        if response.status_code == 400:
+            logger.error(
+                "Registration 400 for whatsapp_id=%s: %s",
+                whatsapp_id,
+                data,
+            )
+
+            return {
+                "ok": False,
+                "recoverable": False,
+                "error": data.get("error", "Bad request"),
+            }
+
+        # Other 4xx — permanent failure
+        if 400 <= response.status_code < 500:
+            logger.error(
+                "Registration %s for whatsapp_id=%s: %s",
+                response.status_code,
+                whatsapp_id,
+                data,
+            )
+
+            return {
+                "ok": False,
+                "recoverable": False,
+                "error": data.get(
+                    "error",
+                    f"API returned {response.status_code}",
+                ),
+            }
+
+        # Other unexpected statuses — recoverable
+        logger.warning(
+            "Unexpected registration status %s for whatsapp_id=%s",
+            response.status_code,
+            whatsapp_id,
+        )
+
+        return {
+            "ok": False,
+            "recoverable": True,
+            "error": f"Unexpected status {response.status_code}",
+        }
+
+    except Exception as e:
+        logger.exception(
+            "Registration exception for whatsapp_id=%s",
+            whatsapp_id,
+        )
+
+        return {
+            "ok": False,
+            "recoverable": True,
+            "error": str(e),
+        }

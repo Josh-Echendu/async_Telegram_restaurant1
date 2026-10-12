@@ -71,6 +71,9 @@ async def waiter_generate_code(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❌ Table number must be a number.")
         return 
 
+    # ✅ Convert to int
+    table_number = int(table_number)
+
     restaurant_max_table = int(user_session.get('max_tables'))
     
     if restaurant_max_table is None:
@@ -78,9 +81,10 @@ async def waiter_generate_code(update: Update, context: ContextTypes.DEFAULT_TYP
         return 
 
     
-    if table_number < 1 or int(table_number) > restaurant_max_table:
+    # Now the comparison works: int vs int
+    if table_number < 1 or table_number > restaurant_max_table:
         await update.message.reply_text(
-            f"❌ Invalid table number. Please choose a table between 1 and {restaurant_max_table}."
+            f"❌ Invalid table number. Must be between 1 and {restaurant_max_table}."
         )
         return
 

@@ -20,6 +20,7 @@ from .forms import AddProductForm, AddCategoryForm
 from .decorators import admin_required
 from django.views.decorators.http import require_POST
 from django.utils import timezone
+
 from django.core.exceptions import PermissionDenied
 from restaurants.models import Restaurant, RestaurantDeliveryOpeningHours
 from django.views.decorators.http import require_POST
@@ -121,6 +122,19 @@ def dashboard(request, restaurant_id=None):
 
     print("monthly_revenue: ", monthly_revenue)
 
+    dine_in_count = CheckoutSession.objects.filter(
+        restaurant=restaurant,
+        service_mode='dine_in',
+        date_created__date=today,
+    ).count()
+
+    delivery_count = CheckoutSession.objects.filter(
+        restaurant=restaurant,
+        service_mode='delivery',
+        payment_status='paid',
+        date_created__date=today,
+    ).count()
+
     context = {
         "revenue": revenue.quantize(Decimal('0.01')),
         "monthly_revenue": monthly_revenue.quantize(Decimal('0.01')),
@@ -130,7 +144,9 @@ def dashboard(request, restaurant_id=None):
         "latest_orders": latest_orders,
         "restaurant_id": restaurant_id,
         "restaurant": restaurant,
-        "support": settings.SUPPORT_USERNAME
+        "support": settings.SUPPORT_USERNAME,
+        "dine_in_count": dine_in_count,
+        "delivery_count": delivery_count
     }
 
     return render(request, "useradmin/dashboard.html", context)
@@ -459,7 +475,7 @@ def dine_in_orders(request, restaurant_id=None):
     total_revenue = stats['total_revenue'] or 0
 
     total_vat_price=sessions.aggregate(vat=Sum('vat_amount'))['vat'] or 0
-    paginator = Paginator(sessions, 20)
+    paginator = Paginator(sessions, 2)
     page = request.GET.get('page')
     orders = paginator.get_page(page)
 
@@ -550,7 +566,7 @@ def delivery_orders(request, restaurant_id=None):
     
 
     total_vat_price=sessions.aggregate(vat=Sum('vat_amount'))['vat'] or 0
-    paginator = Paginator(sessions, 20)
+    paginator = Paginator(sessions, 2)
     page = request.GET.get('page')
     orders = paginator.get_page(page)
 
@@ -824,7 +840,7 @@ def update_operations_settings(request, restaurant_id=None):
 
     service_mode = request.POST.get('service_mode')
     delivery_fee = request.POST.get('delivery_fee')
-    max_tables = request.POST.get('max_tables')
+    max_tables = int(request.POST.get('max_tables')) if request.POST.get('max_tables') else None
     vendor_type = request.POST.get('vendor_type')
     
     if service_mode not in ['dine_in', 'delivery', 'both']:

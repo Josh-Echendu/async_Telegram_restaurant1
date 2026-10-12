@@ -71,17 +71,61 @@ async def handle_order_buttons(client: WhatsApp, btn: CallbackButton):
         platform = 'whatsapp'
         host_user_id = btn.from_user.wa_id
 
-        response, success = await respond_to_join_request(action=action, participant_id=participant_id,
+        result = await respond_to_join_request(action=action, participant_id=participant_id,
             platform=platform, host_user_id=host_user_id
         )
 
-        if not success:
-            raise Exception(f"Failed to respond to join request: {response}")
-        
-        logger.info(f"successfully {action}ed the request from participant= {participant_id}")
+        # ========== HANDLE RESULT ==========
+        if not result.get("ok"):
+            code = result.get("code", "")
+            error_msg = result.get("error", "Something went wrong.")
 
-    
-    
+            # Recoverable (network/5xx) → retry via ARQ
+            if result.get("recoverable"):
+                raise Exception(f"Retrying: {error_msg}")
+
+            # Permanent errors — friendly messages
+            if code == "ALREADY_RESOLVED":
+                status = result.get("data", {}).get("status", "resolved")
+
+                await btn.reply_text(
+                    f"⚠️ This request was already {status}."
+                )
+                return
+
+            if code == "NOT_HOST":
+                await btn.reply_text(
+                    "🔒 Only the host can respond to this request."
+                )
+                return
+
+            if code == "NOT_FOUND":
+                await btn.reply_text(
+                    "🔍 This request is no longer available."
+                )
+                return
+
+            # Fallback
+            await btn.reply_text(f"❌ {error_msg}")
+            return
+
+
+        # ========== SUCCESS ==========
+
+        logger.info(
+            "Successfully %sed the request from participant=%s",
+            action,
+            participant_id,
+        )
+
+        success_text = (
+            "✅ Join request accepted!"
+            if action == "accept"
+            else "❌ Join request declined."
+        )
+
+        await btn.reply_text(success_text)
+
     
     elif data in ["pay_cash", "pay_pos"]:
 
@@ -169,20 +213,88 @@ async def handle_order_buttons(client: WhatsApp, btn: CallbackButton):
 
 
 
-async def respond_to_join_request(action, participant_id, platform, host_user_id):
-
+async def respond_to_join_request(
+    action,
+    participant_id,
+    platform,
+    host_user_id,
+):
     payload = {
         "action": action,
         "participant_id": participant_id,
         "platform": platform,
-        "host_user_id": host_user_id
+        "host_user_id": host_user_id,
     }
 
-    return await _request_with_retry(
-        method="POST",
-        url=f"http://web:8000/restaurants/dine-in/respond-join/",  # ✅ Full URL
-        json=payload 
-    )
+    try:
+        response, success = await _request_with_retry(
+            method="POST",
+            url="http://web:8000/restaurants/dine-in/respond-join/",
+            json=payload,
+            headers={"X-INTERNAL-API-KEY": INTERNAL_API_KEY},
+        )
+
+        # Network / 5xx failure — recoverable
+        if not success or response is None:
+            return {
+                "ok": False,
+                "recoverable": True,
+                "error": "Network error. Please try again.",
+                "code": "NETWORK_ERROR",
+            }
+
+        # Parse response body
+        try:
+            data = response.json()
+        except Exception:
+            data = {}
+
+        # Success
+        if 200 <= response.status_code < 300:
+            return {
+                "ok": True,
+                "data": data,
+            }
+
+        # Any 4xx — permanent failure
+        if 400 <= response.status_code < 500:
+            return {
+                "ok": False,
+                "recoverable": False,
+                "error": data.get(
+                    "error",
+                    f"Failed to {action} request.",
+                ),
+                "code": data.get("code", "UNKNOWN"),
+                "data": data,
+            }
+
+        # Unexpected status — recoverable
+        return {
+            "ok": False,
+            "recoverable": True,
+            "error": data.get(
+                "error",
+                f"Unexpected status {response.status_code}",
+            ),
+            "code": data.get("code", "UNKNOWN"),
+            "data": data,
+        }
+
+    except Exception as e:
+        logger.exception(
+            "Failed to %s join request for participant %s",
+            action,
+            participant_id,
+        )
+
+        return {
+            "ok": False,
+            "recoverable": True,
+            "error": str(e),
+            "code": "REQUEST_EXCEPTION",
+        }
+
 
 
 # Helper functions you need to adapt:
@@ -258,6 +370,7 @@ async def is_delivery_available_whatsapp(update: CallbackButton | Message):
 
 
 async def menu_keyboard_whatsapp(client: WhatsApp, clb: CallbackButton | Message):
+    
     # Use .wa_id for consistency
     user_id = clb.from_user.wa_id
     user_session = await get_user_session(user_id)
@@ -273,9 +386,15 @@ async def menu_keyboard_whatsapp(client: WhatsApp, clb: CallbackButton | Message
         user_service_mode=user_service_mode, 
     )
 
+    # ✅ Check if user came via join link
+    has_join_session = await redis_client.get(f"user_session_token:{restaurant_id}:{user_id}")
+    print("has_join_session:", has_join_session)
+
+    if has_join_session:
+        WEB_APP_URL = f"{WEB_APP_URL}?join=true"
+
     # WhatsApp Reality: You can't "Edit" the previous message.
     # We send a NEW message with the link.
-    
     body_text = (
         "🍟 *Check out our Menu!* 🍟\n\n"
         "Click the link below to view our meals and place your order:\n"
@@ -288,6 +407,8 @@ async def menu_keyboard_whatsapp(client: WhatsApp, clb: CallbackButton | Message
         text=body_text,
         preview_url=True
     )
+
+
 
 async def whatsapp_init_session(restaurant_id: str, user_id: str, platform: str, user_service_mode: str = None):
     # This is where you can initialize any session variables if needed

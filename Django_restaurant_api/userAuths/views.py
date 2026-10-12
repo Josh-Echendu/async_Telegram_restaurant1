@@ -208,6 +208,7 @@ class CreateAuthTokenAPIView(APIView):
         user_id = request.data.get("user_id")
         platform = request.data.get("platform")
         restaurant_id = request.data.get("restaurant_id")
+
         
         if not all([user_id, platform, restaurant_id]):
             return Response(
@@ -338,6 +339,13 @@ def whatsapp_callback_view(request, restaurant_id):
 
     logger.info('Token used successfully for restaurant_id %s', restaurant_id)
     restaurant_menu_url = reverse('orders:restaurant-detail', args=[restaurant_id])
+
+    join = request.GET.get("join", "").lower() == "true"
+    
+    if join:
+        logger.info('User joined via join link for restaurant_id %s', restaurant_id)
+        return redirect(f"{restaurant_menu_url}?join=true")
+    
     return redirect(f"{restaurant_menu_url}")
 
 

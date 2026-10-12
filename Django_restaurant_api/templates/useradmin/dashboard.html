@@ -97,127 +97,57 @@
                 <span class="text-[10px] sm:text-xs font-medium text-gray-700 text-center">Support</span>
             </a>
         </div>
+        
+        <!-- ==================== ORDERS AT A GLANCE ==================== -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
 
-        <!-- ==================== RECENT ORDERS ==================== -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-4 border-b border-gray-100">
-                <div>
-                    <h3 class="text-base sm:text-lg font-bold text-gray-900">Recent Orders</h3>
-                    <p class="text-xs text-gray-500 mt-0.5">{{ total_orders_count }} total orders</p>
+            <!-- Dine-In Card -->
+            {% if restaurant.service_mode == 'dine_in' or restaurant.service_mode == 'both' %}
+            <a href="{% url 'useradmin:dashboard-dine_in-orders' %}" 
+            class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:border-indigo-200 hover:shadow-md transition-all group">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
+                            <i class="fas fa-utensils text-indigo-600 text-lg"></i>
+                        </span>
+                        <div>
+                            <h4 class="text-base font-bold text-gray-900">Dine-In Orders</h4>
+                            <p class="text-xs text-gray-500">Table sessions & orders</p>
+                        </div>
+                    </div>
+                    <i class="fas fa-arrow-right text-gray-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all"></i>
                 </div>
-                <a href="{% if restaurant.service_mode == 'dine_in' or restaurant.service_mode == 'both' %}{% url 'useradmin:dashboard-dine_in-orders' %}{% else %}{% url 'useradmin:dashboard-delivery-orders' %}{% endif %}" 
-                   class="text-xs sm:text-sm text-indigo-600 font-medium hover:text-indigo-800">
-                    View All →
-                </a>
-            </div>
+                <p class="text-2xl font-bold text-gray-900">
+                    {{ dine_in_count|default:0 }}
+                    <span class="text-xs font-normal text-gray-500">sessions today</span>
+                </p>
+            </a>
+            {% endif %}
 
-            <!-- Mobile: Card View -->
-            <div class="block lg:hidden divide-y divide-gray-50">
-                {% for l in latest_orders %}
-                <div class="p-4 space-y-2.5 hover:bg-gray-50/50 transition-colors">
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm font-semibold text-gray-900">#{{ l.session_id|slice:":12" }}</span>
-                        <span class="text-xs text-gray-500">{{ l.date_created|date:"d M, g:i A" }}</span>
+            <!-- Delivery Card -->
+            {% if restaurant.service_mode == 'delivery' or restaurant.service_mode == 'both' %}
+            <a href="{% url 'useradmin:dashboard-delivery-orders' %}" 
+            class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all group">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
+                            <i class="fas fa-truck text-emerald-600 text-lg"></i>
+                        </span>
+                        <div>
+                            <h4 class="text-base font-bold text-gray-900">Delivery Orders</h4>
+                            <p class="text-xs text-gray-500">Paid delivery orders</p>
+                        </div>
                     </div>
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs text-gray-600">{{ l.telegram_user.first_name|default:'Guest' }}</span>
-                        <span class="text-sm font-bold text-gray-900">₦{{ l.expected_amount|default:l.total_batch_price|default:0|intcomma }}</span>
-
-                    </div>
-                    <div class="flex items-center gap-2">
-                        {% if l.service_mode == 'dine_in' %}
-                            <span class="text-[10px] font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">Dine-in</span>
-                        {% else %}
-                            <span class="text-[10px] font-medium text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full">Delivery</span>
-                        {% endif %}
-                        {% if l.payment_status == 'paid' %}
-                            <span class="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">Paid</span>
-                        {% else %}
-                            <span class="text-[10px] font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-full">Unpaid</span>
-                        {% endif %}
-                    </div>
-                    <a href="{% if l.service_mode == 'dine_in' %}{% url 'useradmin:dine-in-order-details' l.session_id %}{% else %}{% url 'useradmin:delivery-order-details' l.session_id %}{% endif %}" 
-                       class="inline-block text-xs font-medium text-indigo-600 hover:text-indigo-800">
-                        View Details →
-                    </a>
+                    <i class="fas fa-arrow-right text-gray-300 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all"></i>
                 </div>
-                {% empty %}
-                <div class="p-8 text-center">
-                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <i class="fas fa-inbox text-gray-400 text-2xl"></i>
-                    </div>
-                    <p class="text-sm text-gray-500">No orders yet</p>
-                    <p class="text-xs text-gray-400 mt-1">Orders will appear here once customers start buying</p>
-                </div>
-                {% endfor %}
-            </div>
+                <p class="text-2xl font-bold text-gray-900">
+                    {{ delivery_count|default:0 }}
+                    <span class="text-xs font-normal text-gray-500">orders today</span>
+                </p>
+            </a>
+            {% endif %}
 
-            <!-- Desktop: Table View -->
-            <div class="hidden lg:block overflow-x-auto">
-                <table class="w-full">
-                    <thead>
-                        <tr class="bg-gray-50">
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Order ID</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
-                            <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Payment</th>
-                            <th class="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-50">
-                        {% for l in latest_orders %}
-                        <tr class="hover:bg-gray-50/50 transition-colors">
-                            <td class="px-6 py-4">
-                                <span class="text-sm font-semibold text-gray-900">#{{ l.session_id|slice:":12" }}</span>
-                            </td>
-                            <td class="px-6 py-4">
-                                <span class="text-sm text-gray-700">{{ l.telegram_user.first_name|default:'Guest' }}</span>
-                            </td>
-                            <td class="px-6 py-4">
-                                {% if l.service_mode == 'dine_in' %}
-                                    <span class="text-xs font-medium text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full">Dine-in</span>
-                                {% else %}
-                                    <span class="text-xs font-medium text-orange-700 bg-orange-50 px-2.5 py-1 rounded-full">Delivery</span>
-                                {% endif %}
-                            </td>
-                            <td class="px-6 py-4">
-                                <span class="text-sm text-gray-500">{{ l.date_created|date:"d M, g:i A" }}</span>
-                            </td>
-                            <td class="px-6 py-4">
-                                <span class="text-sm font-semibold text-gray-900">₦{{ l.expected_amount|default:l.total_batch_price|default:0|intcomma }}</span>
-                            </td>
-                            <td class="px-6 py-4">
-                                {% if l.payment_status == 'paid' %}
-                                    <span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">Paid</span>
-                                {% else %}
-                                    <span class="text-xs font-medium text-red-700 bg-red-50 px-2.5 py-1 rounded-full">Unpaid</span>
-                                {% endif %}
-                            </td>
-                            <td class="px-6 py-4 text-right">
-                                <a href="{% if l.service_mode == 'dine_in' %}{% url 'useradmin:dine-in-order-details' l.session_id %}{% else %}{% url 'useradmin:delivery-order-details' l.session_id %}{% endif %}" 
-                                   class="text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:underline">
-                                    Details →
-                                </a>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="7" class="px-6 py-12 text-center">
-                                <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                    <i class="fas fa-inbox text-gray-400 text-2xl"></i>
-                                </div>
-                                <p class="text-sm text-gray-500">No orders yet</p>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
         </div>
-
         <!-- ==================== BOTTOM GRID ==================== -->
         <!-- <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
             

@@ -618,7 +618,9 @@ class RespondToJoinRequestAPIView(APIView):
 
         # ========== FIND PARTICIPANT ==========
         try:
-            participant = DineInSessionParticipant.objects.select_for_update().select_related(
+            participant = DineInSessionParticipant.objects.select_for_update(
+                of=('self',) # of=('self',)  tells Postgres: "Lock only DineInSessionParticipant — don't try to lock the joined rows."
+            ).select_related(
                 'session', 'session__user', 'user'
             ).filter(
                 id=participant_id,
