@@ -32,78 +32,6 @@ def resturant_image_path(instance, filename):
     resturant_name = instance.name if instance.name else "uncategorized"
     return f"Restaurants Images/{resturant_name}/{filename}"
     
-# class Table(models.Model):
-#     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE)
-#     table_number = models.CharField(max_length=10)
-#     is_active = models.BooleanField(default=True)
-
-
-
-    # | Feature         | Restaurant   | Food Vendor     |
-    # | --------------- | ------------ | -----------     |
-    # | Cooking speed   | Immediate    | Delayed         |
-    # | Orders/delivery |  Instant     | instant/Preorder|
-    # | Dining          | Yes/optional | No              |
-    # | Scheduling      | Not needed   | Required        |
-
-    # | Type       | Dine-in | Instant | Delayed | Scheduling |
-    # | ---------- | -------  | ------- | ------- | ---------- |
-    # | Restaurant | ✅      | ✅       | ❌       | ❌    |
-    # | Vendor     | ❌      | ✅       | ✅       | ✅     
-    # | Hotel      | ✅      | ✅       | ❌       | ❌    
-
-# Then food goes to the wrong room, real guest complains, and your system looks broken.
-
-# ---
-
-# ### The Fix: Double Confirmation
-
-# Make the guest confirm their room number **twice** before they can order.
-
-# **Flow:**
-
-# 1. Guest scans QR → bot opens
-# 2. Bot: *"Please enter your room number:"*
-# 3. Guest types: `305`
-# 4. Bot: *"You entered Room 305. Is this correct? (Yes/No)"*
-# 5. Guest taps **Yes** → proceeds to menu
-# 6. Guest taps **No** → re-enter room number
-
-# ---
-
-# ### Additional Layer: Room Number Display on Payment Screen
-
-# Before they pay, show the room number one more time:
-
-# ```
-# ┌─────────────────────────────┐
-# │       CONFIRM ORDER         │
-# │                             │
-# │  🚪 Room: 305               │
-# │  🍗 Jollof Rice     ₦3,500 │
-# │                             │
-# │  [Pay with Transfer]        │
-# │  [Pay with Card]            │
-# └─────────────────────────────┘
-# ```
-
-# Guest sees `Room 305` and thinks: *"Wait, I'm in 503!"* → they'll correct it before paying.
-
-# ---
-
-# ### Why This Is Enough:
-
-# | Layer | What It Catches |
-# |-------|----------------|
-# | Room number entry | Guest types their room |
-# | Confirmation prompt | "Is 305 correct?" catches typos |
-# | Display before payment | Final visual check before money leaves |
-# | Physical reality | Guest is literally inside the room, they know their room number |
-
-# ---
-
-# If a guest still manages to type the wrong room number after three chances to catch it, that's on them — not your system. But this catches 99% of mistakes.
-
 
 VENDOR_TYPE_CHOICES = (
     ('cooked_food', 'Cooked Food Vendor'),
@@ -559,17 +487,43 @@ class RestaurantDeliveryOpeningHours(models.Model):
         return self.open_time is None or self.close_time is None
 
 
+
 class RestaurantMembership(models.Model):
-    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='users')
-    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='restaurants')
+
+    ROLE_CHOICES = (
+        ('owner', 'Owner'),
+        ('manager', 'Manager'),
+        ('waiter', 'Waiter'),
+        ('customer', 'Customer'),
+    )
+
+    # AdminUser (Google Login) - Nullable for customers
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='memberships', null=True, blank=True)
+    
+    # TelegramUser (Bot) - Nullable for staff
+    customer_user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='customer_memberships', null=True, blank=True)
+        
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='memberships') # Renamed from 'restaurants' to 'memberships' for clarity
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='owner')
 
     is_active = models.BooleanField(default=True)
     date_joined = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        # one user per resturant
-        unique_together = ('user', 'restaurant')
-
+        # ✅ PREVENTS DUPLICATES FOR STAFF
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'restaurant'],
+                condition=Q(user__isnull=False), # Meaning: "For any row where user IS NOT NULL, ensure (user, restaurant) is unique."
+                name='unique_staff_per_restaurant'
+            ),
+            # ✅ PREVENTS DUPLICATES FOR CUSTOMERS
+            models.UniqueConstraint(
+                fields=['customer_user', 'restaurant'],
+                condition=Q(customer_user__isnull=False), # Meaning: "For any row where customer_user IS NOT NULL, ensure (customer_user, restaurant) is unique."
+                name='unique_customer_per_restaurant'
+            )
+        ]
 
     # ASK YOURSELF WHO OWNS WHO FIRST
 

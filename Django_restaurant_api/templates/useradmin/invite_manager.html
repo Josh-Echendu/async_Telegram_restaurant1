@@ -1,0 +1,143 @@
+{% extends "useradmin/base.html" %}
+{% load static %}
+
+{% block title %}Invite Manager{% endblock %}
+
+{% block content %}
+<div class="px-4 sm:px-6 lg:px-8 py-8 max-w-4xl mx-auto space-y-8">
+
+    <!-- ==================== HEADER ==================== -->
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Team Management</h1>
+        <p class="text-sm text-gray-500 mt-1">Invite managers to help you run {{ restaurant.name }}. Waiters are managed directly in your Telegram group.</p>
+    </div>
+
+    <!-- ==================== INVITE LINK CARD ==================== -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" 
+         x-data="{ 
+            copied: false,
+            inviteUrl: '{{ invite_url|default:"" }}',
+            copyToClipboard() {
+                if(!this.inviteUrl) return;
+                navigator.clipboard.writeText(this.inviteUrl).then(() => {
+                    this.copied = true;
+                    setTimeout(() => this.copied = false, 2000);
+                });
+            }
+         }">
+        
+        <!-- Card Header -->
+        <div class="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-purple-50 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                    <i class="fas fa-user-tie text-indigo-600"></i>
+                </div>
+                <div>
+                    <h2 class="text-base font-bold text-gray-900">Manager Invite Link</h2>
+                    <p class="text-xs text-gray-500">Share this link with your manager. They will log in via Telegram.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card Body -->
+        <div class="p-6 space-y-4">
+            {% if invite_url %}
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <div class="flex-1 relative">
+                        <input 
+                            type="text" 
+                            value="{{ invite_url }}" 
+                            readonly 
+                            class="w-full pl-4 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-mono text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                        >
+                        <div class="absolute right-3 top-1/2 -translate-y-1/2">
+                            <i class="fas fa-lock text-gray-400 text-xs"></i>
+                        </div>
+                    </div>
+                    <button 
+                        @click="copyToClipboard()"
+                        :class="copied ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-indigo-600 hover:bg-indigo-700'"
+                        class="px-6 py-3 text-white font-semibold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 min-w-[140px]">
+                        <i class="fas" :class="copied ? 'fa-check' : 'fa-copy'"></i>
+                        <span x-text="copied ? 'Copied!' : 'Copy Link'"></span>
+                    </button>
+                </div>
+                
+                <div class="flex items-start gap-3 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                    <i class="fas fa-clock text-amber-500 mt-0.5"></i>
+                    <p class="text-xs text-amber-700">
+                        This link is valid for <strong>24 hours</strong>. Once your manager clicks it and logs in, they will be added to your team.
+                    </p>
+                </div>
+            {% else %}
+                <div class="text-center py-6">
+                    <div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-link text-gray-400 text-2xl"></i>
+                    </div>
+                    <p class="text-sm text-gray-500 mb-4">You don't have an active invite link.</p>
+                    <form method="POST" action="{% url 'useradmin:invite-manager' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-md transition-all">
+                            <i class="fas fa-plus"></i>
+                            Generate New Invite Link
+                        </button>
+                    </form>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ==================== CURRENT TEAM LIST ==================== -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="px-6 py-5 border-b border-gray-100">
+            <h2 class="text-base font-bold text-gray-900">Active Managers</h2>
+            <p class="text-xs text-gray-500 mt-1">Managers who have access to this restaurant's dashboard.</p>
+        </div>
+
+        <div class="divide-y divide-gray-50">
+            {% for membership in managers %}
+                <div class="px-6 py-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
+                    <div class="flex items-center gap-4">
+                        <!-- Avatar -->
+                        <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                            <i class="fas fa-user-tie text-indigo-600"></i>
+                        </div>
+                        
+                        <!-- Info -->
+                        <div>
+                            <p class="text-sm font-semibold text-gray-900">
+                                {{ membership.user.first_name|default:membership.user.username }}
+                                {% if membership.user.last_name %}{{ membership.user.last_name }}{% endif %}
+                            </p>
+                            <p class="text-xs text-gray-500 flex items-center gap-2">
+                                {% if membership.user.username %}@{{ membership.user.username }}{% endif %}
+                                <span class="w-1 h-1 rounded-full bg-gray-300"></span>
+                                Joined {{ membership.date_joined|timesince }} ago
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Role Badge & Actions -->
+                    <div class="flex items-center gap-3">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full">
+                            {{ membership.role }}
+                        </span>
+                        <button class="text-gray-400 hover:text-red-500 transition-colors" title="Remove Manager">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                </div>
+            {% empty %}
+                <div class="px-6 py-12 text-center">
+                    <div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-users text-gray-400 text-2xl"></i>
+                    </div>
+                    <p class="text-sm font-medium text-gray-500">No managers yet</p>
+                    <p class="text-xs text-gray-400 mt-1">Generate an invite link above to add your first manager.</p>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}

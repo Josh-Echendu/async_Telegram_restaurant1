@@ -16,7 +16,6 @@ from django.conf import settings
 from django.shortcuts import redirect
 from django.http import HttpResponse
 from .models import AuthToken
-from django.conf import settings
 import secrets
 from django.utils import timezone
 from datetime import timedelta
@@ -24,6 +23,14 @@ import json
 from orders.redis_client import redis_client
 from django.urls import reverse
 import logging
+import hashlib
+import hmac
+import time
+from datetime import datetime
+from django.conf import settings
+from django.contrib.auth import login
+from userAuths.models import AdminUser
+
 
 logger = logging.getLogger(__name__)
 
@@ -526,6 +533,101 @@ def whatsapp_error_view(request, restaurant_id):
     
     return render(request, 'restaurant/whatsapp_error.html', context)
 
+from django.views.decorators.clickjacking import xframe_options_exempt
+from django.views.decorators.csrf import csrf_exempt
+
+
+@csrf_exempt
+@xframe_options_exempt
+def telegram_callback(request):
+    """
+    Handles the redirect from the Telegram Login Widget.
+    Verifies HMAC, logs user in, and assigns restaurant membership.
+    """
+    data = request.GET.dict()
+    
+    # ✅ Extract Invite Context from the URL
+    role = data.pop('role', 'manager')
+    restaurant_id = data.pop('restaurant_id', None)
+    
+    received_hash = data.pop('hash', None)
+    
+    if not received_hash:
+        return render(request, 'userauths/admin_login.html', {'error': 'Authentication failed: Missing hash.'})
+
+    # 1. Verify Hash
+    check_string = "\n".join(f"{k}={v}" for k, v in sorted(data.items()))
+    secret_key = hashlib.sha256(settings.TELEGRAM_BOT_TOKEN.encode()).digest()
+    calculated_hash = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
+
+    if not hmac.compare_digest(calculated_hash, received_hash):
+        return render(request, 'userauths/admin_login.html', {'error': 'Authentication failed: Invalid signature.'})
+
+    # 2. Replay Attack Check (15 minutes)
+    auth_date = int(data.get('auth_date', 0))
+    if time.time() - auth_date > 900:
+        return render(request, 'userauths/admin_login.html', {'error': 'Authentication failed: Session expired.'})
+
+    # 3. Extract Data
+    telegram_id = int(data.get('id'))
+    username = data.get('username', f"tg_{telegram_id}")
+    first_name = data.get('first_name', '')
+    last_name = data.get('last_name', '')
+    photo_url = data.get('photo_url', None)
+    auth_datetime = timezone.make_aware(datetime.fromtimestamp(auth_date))
+
+    # 4. Get or Create AdminUser
+    user, created = AdminUser.objects.get_or_create(
+        telegram_id=telegram_id,
+        defaults={
+            'username': username,
+            'first_name': first_name,
+            'last_name': last_name,
+            'photo_url': photo_url,
+            'auth_date': auth_datetime,
+            'is_active': True,
+        }
+    )
+    
+    if not created:
+        user.first_name = first_name
+        user.last_name = last_name
+        user.photo_url = photo_url
+        user.auth_date = auth_datetime
+        user.save()
+
+    # 5. ✅ Create Membership if restaurant_id is provided
+    if restaurant_id:
+        try:
+            restaurant = Restaurant.objects.get(rid=restaurant_id)
+            
+            # Create membership (ensure they don't already have it)
+            RestaurantMembership.objects.get_or_create(
+                user=user,
+                restaurant=restaurant,
+                defaults={'role': role, 'is_active': True}
+            )
+            
+            # Set active restaurant in session so dashboard knows where to route
+            request.session['restaurant_id'] = restaurant.rid
+            
+        except Restaurant.DoesNotExist:
+            return render(request, 'userauths/admin_login.html', {'error': 'The invited restaurant no longer exists.'})
+
+    # 6. Log them in
+    login(request, user)
+    
+    return redirect('useradmin:dashboard', restaurant_id=restaurant_id)
+
+
+from django.shortcuts import render
+
+def manager_login_view(request):
+    """
+    Renders the page with ONLY the Telegram widget.
+    The widget picks up ?role=manager&restaurant_id=xyz from the URL.
+    """
+    return render(request, 'userauths/manager_login.html')
 
 
 def admin_login_view(request, restaurant_id=None):
@@ -545,8 +647,10 @@ def admin_login_view(request, restaurant_id=None):
         else:
             messages.error(request, 'Invalid login credentials. Please try again.')
             return redirect("userauths:admin_login", restaurant_id=restaurant_id)  # ✅ Fixed
-
-    return render(request, 'userauths/admin_login.html')
+    context = {
+        'username': "vibeflow_automation_bot"
+    }
+    return render(request, 'userauths/admin_login.html', context)
 
 
 def admin_logout_view(request, restaurant_id=None):

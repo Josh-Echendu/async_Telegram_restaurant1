@@ -6,7 +6,7 @@ from .views import (change_order_status, categories, add_category,
                     dine_in_order_details, delivery_order_details, pos_config, shop_settings,
                     metaoauthhandshake_api_view, update_account_settings,
                     update_business_settings, update_operations_settings, update_bank_settings,
-                    update_bot_settings, toggle_shop_status
+                    update_bot_settings, toggle_shop_status, invite_manager
                     
 )
 
@@ -37,6 +37,9 @@ urlpatterns = [
 
 
     path("pos-config/", pos_config, name="pos-config"),
+
+    path('invite-manager/', invite_manager, name='invite-manager'),
+
 
     # settings url
     path("shop-settings/", shop_settings, name="shop-settings"),

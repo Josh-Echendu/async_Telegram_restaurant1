@@ -1,0 +1,57 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>Staff Invite - Login</title>
+    <link rel="stylesheet" href="{% static 'style.css' %}">
+    <style>
+        .login-container { display: flex; flex-direction: column; gap: 20px; align-items: center; margin-top: 20px; }
+    </style>
+  </head>
+  <body>
+    <div class="center">
+      <h1>Staff Login</h1>
+      <p style="text-align: center; color: #666; margin-bottom: 20px;">
+          You have been invited to join a restaurant. Please log in with Telegram.
+      </p>
+
+      {% if messages %}
+          {% for message in messages %}
+              <center><h4 style="color: firebrick;">{{message}}</h4></center>
+          {% endfor %}
+      {% endif %}
+        
+      <div class="login-container">
+        <!-- TELEGRAM WIDGET CONTAINER -->
+        <div id="telegram-login-container"></div>
+      </div>
+
+    </div>
+
+    <!-- JAVASCRIPT TO READ INVITE PARAMS & LOAD TELEGRAM WIDGET -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            
+            // Grab role and restaurant_id from the URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const role = urlParams.get('role') || 'manager';
+            const restaurantId = urlParams.get('restaurant_id') || '';
+            
+            // Construct the callback URL
+            const callbackUrl = `/userauths/telegram/callback/?role=${role}&restaurant_id=${restaurantId}`;
+
+            // Create the Telegram widget script
+            const script = document.createElement('script');
+            script.async = true;
+            script.src = "https://telegram.org/js/telegram-widget.js?22";
+            script.setAttribute('data-telegram-login', 'vibeflow_automation_bot'); 
+            script.setAttribute('data-size', 'large');
+            script.setAttribute('data-auth-url', callbackUrl);
+            script.setAttribute('data-request-access', 'write');
+            
+            document.getElementById('telegram-login-container').appendChild(script);
+        });
+    </script>
+  </body>
+</html>

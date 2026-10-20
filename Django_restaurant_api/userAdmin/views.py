@@ -15,14 +15,14 @@ from django.core.cache import cache
 import redis
 from django.conf import settings
 from orders.models import KITCHEN_STATUS_CHOICES, OrderBatch, Product, OrderBatchItem, Category, CheckoutSession
-from userAuths.models import TelegramUser, AdminUser
+from userAuths.models import InviteStaff, TelegramUser, AdminUser
 from .forms import AddProductForm, AddCategoryForm
 from .decorators import admin_required
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 
 from django.core.exceptions import PermissionDenied
-from restaurants.models import Restaurant, RestaurantDeliveryOpeningHours
+from restaurants.models import Restaurant, RestaurantDeliveryOpeningHours, RestaurantMembership
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.http import JsonResponse
@@ -56,6 +56,68 @@ def get_admin_restaurant(request, restaurant_id=None):
         raise PermissionDenied("Not authorized for this restaurant.")
     
     return restaurant
+
+
+
+
+from django.contrib import messages
+from django.utils import timezone
+from datetime import timedelta
+import uuid
+
+@admin_required
+def invite_manager(request, restaurant_id=None):
+    restaurant = get_admin_restaurant(request, restaurant_id)
+
+    # 1. Handle Generate Link Request (POST)
+    if request.method == 'POST':
+        
+        # Delete expired invites to keep DB clean
+        InviteStaff.objects.filter(
+            restaurant=restaurant, 
+            expires_at__lt=timezone.now()
+        ).delete()
+
+        # Create a new invite (Valid for 24 hours)
+        InviteStaff.objects.create(
+            restaurant=restaurant,
+            token=str(uuid.uuid4()),
+            expires_at=timezone.now() + timedelta(hours=24)
+        )
+        
+        messages.success(request, "New invite link generated successfully!")
+        return redirect('useradmin:invite-manager')
+
+    # 2. Get active managers for the list (Using your new constraint logic)
+    managers = RestaurantMembership.objects.filter(
+        restaurant=restaurant,
+        role='manager',
+        user__isnull=False # Only actual AdminUsers (Managers/Owners)
+    ).select_related('user')
+
+    # 3. Check if there is an active (unexpired) invite link
+    active_invite = InviteStaff.objects.filter(
+        restaurant=restaurant,
+        expires_at__gt=timezone.now()
+    ).first()
+
+    invite_url = None
+    if active_invite:
+
+        # Build the full URL
+        domain = request.build_absolute_uri('/')[:-1] 
+
+        # ✅ CRITICAL FIX: Pass restaurant_id and role so the Telegram widget knows where to link them
+        invite_url = f"/userauths/manager_login/?token={active_invite.token}&restaurant_id={restaurant.rid}&role=manager"
+
+    context = {
+        'restaurant': restaurant,
+        'managers': managers,
+        'invite_url': invite_url,
+    }
+    return render(request, 'useradmin/invite_manager.html', context)
+
+
 
 @admin_required
 def dashboard(request, restaurant_id=None):

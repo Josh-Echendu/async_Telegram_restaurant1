@@ -145,6 +145,9 @@ class Product(models.Model):
     weight = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.5'),
         help_text="Weight in kg (optional)")
 
+    # last_stock_updated_by = models.ForeignKey()
+    # last_stock_update_time = models.DateTimeField()
+
     class Meta:
         verbose_name_plural = 'Products'
         ordering = ['-date']

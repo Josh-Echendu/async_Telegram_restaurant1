@@ -217,13 +217,7 @@ async def api_get_user_order_batches(update, max_retries=3):
 
     # No session → permanent failure
     if not session_id:
-        await update.message.reply_text(
-            "❌ <b>No Active Session Found</b>\n\n"
-            "🛒 You don't have an active order session.\n"
-            "🍽️ Please add some items to your cart first.",
-            parse_mode="HTML",
-        )
-        return {"ok": False, "recoverable": False, "error": "No session_id"}
+        return {"ok": False, "recoverable": False, "error": "No session_id", "session_id": None}
 
     url = f"http://web:8000/api/user_batch_list/{session_id}/{restaurant_id}/{platform}/"
 
@@ -251,11 +245,8 @@ async def api_get_user_order_batches(update, max_retries=3):
         return {"ok": True, "recoverable": False, "data": data}
 
     # if session not found
-    if data.get('found') == False:
-        await update.message.reply_text(
-            "You have no active session. Please order some items."
-        )
-        return {"ok": False, "recoverable": False, "error": data.get("error", "Session not found")}
+    if not data.get('found'):
+        return {"ok": False, "recoverable": False, "session_id": None, "error": data.get("error", "Session not found")}
 
     # 400 — bad request (permanent)
     if response.status_code == 400:

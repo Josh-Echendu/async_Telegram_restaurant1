@@ -31,35 +31,79 @@ class UserAccountManager(BaseUserManager):
 
 
 class AdminUser(AbstractBaseUser, PermissionsMixin):
-    restaurant = models.ForeignKey('restaurants.Restaurant', on_delete=models.SET_NULL, null=True, related_name='admin_users')
+    # ❌ REMOVED: restaurant = models.ForeignKey(...) - Let RestaurantMembership handle this.
 
     email = models.EmailField(max_length=200, unique=True)
 
     # Indicates whether this user can log into the Django admin site.
     is_staff = models.BooleanField(default=True)
-
-    # Example: If a staff leaves the restaurant, you can set is_active=False to block login without deleting their account.
     is_active = models.BooleanField(default=True)
-    
-    # Indicates full control over the system.
     is_superuser = models.BooleanField(default=False)
     date_created = models.DateTimeField(auto_now_add=True)
     last_login = models.DateTimeField(blank=True, null=True)
 
-    # connect the  userAccountmanager to the AdminUser model
+    # ==========================================
+    # ✅ NEW: TELEGRAM LOGIN FIELDS
+    # ==========================================
+    telegram_id = models.BigIntegerField(
+        unique=True, 
+        null=True, 
+        blank=True, 
+        db_index=True,
+        help_text="Telegram User ID for Managers"
+    )
+    first_name = models.CharField(max_length=100, blank=True, null=True)
+    last_name = models.CharField(max_length=100, blank=True, null=True)
+    username = models.CharField(max_length=100, blank=True, null=True)
+    photo_url = models.URLField(
+        max_length=500, 
+        null=True, 
+        blank=True,
+        help_text="Profile picture from Telegram"
+    )
+    auth_date = models.DateTimeField(
+        null=True, 
+        blank=True,
+        help_text="Last time the user logged in via Telegram"
+    )
+
     objects = UserAccountManager()
 
     USERNAME_FIELD = 'email'
 
-    # used when creating superuser
-    # REQUIRED_FIELDS = ['']
-
     def get_full_name(self):
-        return self.user_name
-    
-    def __str__(self):
+        # If it's a Telegram manager, use their Telegram name
+        if self.telegram_id and self.first_name:
+            return f"{self.first_name} {self.last_name or ''}".strip()
         return self.email
     
+    def __str__(self):
+        if self.telegram_id:
+            return f"{self.first_name} (Telegram {self.memberships.role})"
+        return self.email
+
+
+import uuid
+from django.utils import timezone
+from datetime import timedelta
+
+class InviteStaff(models.Model):
+    restaurant = models.ForeignKey("restaurants.Restaurant", on_delete=models.CASCADE)
+    token = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    
+    def save(self, *args, **kwargs):
+        if not self.token:
+            self.token = str(uuid.uuid4())
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(hours=24) # 24 hours
+        super().save(*args, **kwargs)
+
+    def is_valid(self):
+        return timezone.now() < self.expires_at
+
+
       
 class TelegramUser(models.Model):
     

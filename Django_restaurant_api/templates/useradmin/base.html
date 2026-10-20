@@ -149,6 +149,24 @@
                 <span>Settings</span>
             </a>
 
+            <a href="{% url 'useradmin:shop-settings' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                <i class="fas fa-gear w-5 text-center"></i>
+                <span>Settings</span>
+            </a>
+
+            <!-- ✅ NEW: MANAGERS LINK -->
+            <a href="{% url 'useradmin:invite-manger' %}" 
+               class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'invite-manager' in request.path %}nav-link-active{% endif %}">
+                <i class="fas fa-users-gear w-5 text-center"></i>
+                <span>Invite Manager</span>
+            </a>
+
+
+            <a href="https://t.me/{{support}}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                <i class="fas fa-circle-question w-5 text-center"></i>
+                <span>Help Center</span>
+            </a>
+
             <a href="https://t.me/{{support}}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                 <i class="fas fa-circle-question w-5 text-center"></i>
                 <span>Help Center</span>

@@ -991,6 +991,7 @@ class OrderBatchListCreateAPIView(APIView):
                 
                 return Response(data, status=status.HTTP_201_CREATED)
         except IntegrityError as e:
+            
             # Race condition: someone else already created it
             batch = get_object_or_404(OrderBatch, telegram_user=user, idempotency_key=idempotency_key, restaurant=restaurant)
             serializer = OrderBatchSerializer(batch)
@@ -1109,6 +1110,7 @@ class OrderBatchListCreateAPIView(APIView):
                     session.save(update_fields=['expected_amount', 'transaction_reference'])
 
             else:
+                
                 # Restaurant dine-in: Reuse active session (postpay, multiple orders)
                 session = CheckoutSession.objects.filter(
                     restaurant=restaurant,
@@ -1683,7 +1685,7 @@ class OrderBatchesListView(APIView):
             .prefetch_related(
                 'session_batches__items__product',
                 'session_batches__telegram_user',
-                'dine_session__participanFts__user',
+                'dine_session__participants__user',
             )
             .order_by('-date_created')
             .first()
@@ -1761,7 +1763,6 @@ class OrderBatchesListView(APIView):
 
         return Response({
             "found": True,
-            "session_id": session.session_id,
 
             # Dine session info
             "dine_session": {
@@ -1773,7 +1774,7 @@ class OrderBatchesListView(APIView):
 
             # Host
             "host": {
-                "user_id": host.id,
+                # "user_id": host.id,
                 "first_name": host.first_name or host.username or 'Host',
                 "username": host.username,
             } if host else None,
@@ -1781,7 +1782,7 @@ class OrderBatchesListView(APIView):
             # accepted Participants
             "participants": [
                 {
-                    "user_id": p.user.id,
+                    # "user_id": p.user.id,
                     "first_name": p.user.first_name or p.user.username or 'Guest',
                     "username": p.user.username,
                     "resolved_at": p.resolved_at.isoformat() if p.resolved_at else None,

@@ -63,7 +63,6 @@ CSRF_TRUSTED_ORIGINS = [
 
 
 # Application definition
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -89,9 +88,14 @@ INSTALLED_APPS = [
     'restaurants',
     'payments',
 
+
     # auth apps
     'allauth',
     'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.telegram',
+
 ]
 
 
@@ -103,6 +107,44 @@ AUTHENTICATION_BACKENDS = [
     # `allauth` specific authentication methods, such as login by email
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
+
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online', # Use online if you don't need background refresh token
+            "prompt": "select_account",  # <--- Add this
+
+        }
+    }
+}
+
+# settings.py
+# This allows the Telegram popup to communicate back to your site
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin-allow-popups"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+
+# Login via email
+ACCOUNT_LOGIN_METHODS = {"email"}
+
+# Your AdminUser has no username field
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+
+# Google-only: no password, no signup form fields
+ACCOUNT_SIGNUP_FIELDS = ["email*"]
+
+# No password at all
+ACCOUNT_PASSWORD_REQUIRED = False
+
+# No email verification flow
+ACCOUNT_EMAIL_VERIFICATION = 'none'
+ACCOUNT_UNIQUE_EMAIL = True
+
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -291,8 +333,10 @@ REST_FRAMEWORK = {
     ),
 }
 
+from django.urls import reverse_lazy
 
 AUTH_USER_MODEL = 'userAuths.AdminUser'
+LOGIN_REDIRECT_URL = reverse_lazy('useradmin:dashboard')
 
 REST_FRAMEWORK = {
     # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',

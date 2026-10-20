@@ -234,6 +234,8 @@ services:
     image: postgres:17-alpine
     container_name: restaurant_db
     restart: unless-stopped
+    ports:
+      - "5432:5432"
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -305,6 +307,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.bot
+      network: host
+
     container_name: telegram_bot
     restart: unless-stopped
     command: ["./entrypoint_bot.sh"]
