@@ -285,29 +285,29 @@ services:
     networks:
       - backend
 
-  celery:
-    build: .
-    container_name: celery_worker
-    restart: unless-stopped
+  # celery:
+  #   build: .
+  #   container_name: celery_worker
+  #   restart: unless-stopped
 
-    command: ["./entrypoint_celery.sh"]
+  #   command: ["./entrypoint_celery.sh"]
 
-    env_file: .env
+  #   env_file: .env
     
-    depends_on:
-      redis:
-        condition: service_started
-      db:
-        condition: service_healthy
+  #   depends_on:
+  #     redis:
+  #       condition: service_started
+  #     db:
+  #       condition: service_healthy
 
-    networks:
-      - backend
+  #   networks:
+  #     - backend
 
   telegram_bot:
     build:
       context: .
       dockerfile: Dockerfile.bot
-      network: host
+      # network: host
 
     container_name: telegram_bot
     restart: unless-stopped
@@ -447,23 +447,23 @@ services:
     networks:
       - backend
 
-  celery-beat:
-    build: .
-    container_name: celery_beat
-    restart: unless-stopped
+  # celery-beat:
+  #   build: .
+  #   container_name: celery_beat
+  #   restart: unless-stopped
 
-    command: celery -A restaurant_api beat --loglevel=info
+  #   command: celery -A restaurant_api beat --loglevel=info
 
-    env_file: .env
+  #   env_file: .env
 
-    depends_on:
-      redis:
-        condition: service_started
-      db:
-        condition: service_healthy
+  #   depends_on:
+  #     redis:
+  #       condition: service_started
+  #     db:
+  #       condition: service_healthy
 
-    networks:
-      - backend
+  #   networks:
+  #     - backend
 
 volumes:
   postgres_data:

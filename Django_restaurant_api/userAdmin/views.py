@@ -47,10 +47,14 @@ def get_admin_restaurant(request, restaurant_id=None):
     if not restaurant_id:
         raise PermissionDenied("No restaurant selected.")
 
+    print("restaurant_id: ", restaurant_id)
     restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
 
-    # 3️⃣ Validate admin ownership
-    if not AdminUser.objects.filter(id=request.user.id, restaurant=restaurant).exists():
+    # 3️⃣ Validate admin ownership via Membership    
+    if not RestaurantMembership.objects.filter(
+        user=request.user, 
+        restaurant=restaurant
+    ).exists():
         messages.error(request, "You are not authorized for this restaurant.")
         request.session.pop('restaurant_id', None)
         raise PermissionDenied("Not authorized for this restaurant.")
@@ -64,51 +68,49 @@ from django.contrib import messages
 from django.utils import timezone
 from datetime import timedelta
 import uuid
+from django.http import JsonResponse
+from django.views.decorators.cache import never_cache
 
+@never_cache
 @admin_required
 def invite_manager(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
 
-    # 1. Handle Generate Link Request (POST)
-    if request.method == 'POST':
-        
-        # Delete expired invites to keep DB clean
-        InviteStaff.objects.filter(
-            restaurant=restaurant, 
-            expires_at__lt=timezone.now()
-        ).delete()
+    # 1. Handle Generate Link (AJAX POST)
+    if request.method == 'POST' and request.headers.get('x-requested-with') == 'XMLHttpRequest':
+       
+        # Delete old links
+        InviteStaff.objects.filter(restaurant=restaurant).delete()
 
-        # Create a new invite (Valid for 24 hours)
-        InviteStaff.objects.create(
+        # Create new link
+        new_invite = InviteStaff.objects.create(
             restaurant=restaurant,
             token=str(uuid.uuid4()),
-            expires_at=timezone.now() + timedelta(hours=24)
+            expires_at=timezone.now() + timedelta(days=7)
         )
         
-        messages.success(request, "New invite link generated successfully!")
-        return redirect('useradmin:invite-manager')
+        # Build the new URL
+        new_url = f"{settings.NGROK_DJANGO}/userauths/manager_login/?token={new_invite.token}&restaurant_id={restaurant.rid}&role=manager"
 
-    # 2. Get active managers for the list (Using your new constraint logic)
+        # Return JSON instead of redirecting
+        return JsonResponse({
+            "success": True,
+            "invite_url": new_url,
+            "message": "New link generated successfully!"
+        })
+
+    # 2. Handle Normal Page Load (GET)
     managers = RestaurantMembership.objects.filter(
-        restaurant=restaurant,
-        role='manager',
-        user__isnull=False # Only actual AdminUsers (Managers/Owners)
+        restaurant=restaurant, role='manager', user__isnull=False
     ).select_related('user')
 
-    # 3. Check if there is an active (unexpired) invite link
     active_invite = InviteStaff.objects.filter(
-        restaurant=restaurant,
-        expires_at__gt=timezone.now()
-    ).first()
+        restaurant=restaurant, expires_at__gt=timezone.now()
+    ).order_by('-created_at').first()
 
     invite_url = None
     if active_invite:
-
-        # Build the full URL
-        domain = request.build_absolute_uri('/')[:-1] 
-
-        # ✅ CRITICAL FIX: Pass restaurant_id and role so the Telegram widget knows where to link them
-        invite_url = f"/userauths/manager_login/?token={active_invite.token}&restaurant_id={restaurant.rid}&role=manager"
+        invite_url = f"{settings.NGROK_DJANGO}/userauths/manager_login/?token={active_invite.token}&restaurant_id={restaurant.rid}&role=manager"
 
     context = {
         'restaurant': restaurant,
@@ -118,6 +120,33 @@ def invite_manager(request, restaurant_id=None):
     return render(request, 'useradmin/invite_manager.html', context)
 
 
+@admin_required
+@require_POST
+def remove_manager(request, membership_id):
+    # Only the owner can remove managers (security check)
+    # (You can adjust this if managers should be able to remove other managers)
+    try:
+
+        # Extract the membership row
+        membership = RestaurantMembership.objects.get(id=membership_id, role='manager')
+        
+        # Verify the person making the request is the owner of this restaurant
+        owner_membership = RestaurantMembership.objects.filter(
+            user=request.user, 
+            restaurant=membership.restaurant, 
+            role='owner'
+        ).exists()
+        
+        if not owner_membership:
+            return JsonResponse({"success": False, "error": "Only the owner can remove managers."}, status=403)
+            
+        membership.delete()
+        return JsonResponse({"success": True})
+        
+    except RestaurantMembership.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Manager not found."}, status=404)
+
+    
 
 @admin_required
 def dashboard(request, restaurant_id=None):
@@ -148,10 +177,10 @@ def dashboard(request, restaurant_id=None):
     all_products = Product.objects.select_related('category').filter(restaurant=restaurant)
 
     # 8️⃣ New customers this month
-    new_customers = TelegramUser.objects.filter(
-        users__restaurant=restaurant,
-        users__is_active=True
-    ).order_by('-date_created')[:10]
+    # new_customers = TelegramUser.objects.filter(
+    #     users__restaurant=restaurant,
+    #     users__is_active=True
+    # ).order_by('-date_created')[:10]
 
     # Latest checkout sessions (not batches)
     latest_orders = (
@@ -202,7 +231,6 @@ def dashboard(request, restaurant_id=None):
         "monthly_revenue": monthly_revenue.quantize(Decimal('0.01')),
         "total_orders_count": total_orders_count,
         "all_products": all_products,
-        "new_customers": new_customers,
         "latest_orders": latest_orders,
         "restaurant_id": restaurant_id,
         "restaurant": restaurant,

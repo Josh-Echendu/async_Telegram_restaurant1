@@ -8,8 +8,8 @@ until pg_isready -h "$DB_HOST" -U "$DB_USER"; do
 done
 
 echo "Running migrations..."
-python manage.py makemigrations --noinput
-python manage.py migrate --noinput
+# python manage.py makemigrations --noinput
+# python manage.py migrate --noinput
 
 echo "Starting Celery worker..."
 exec celery -A restaurant_api worker --loglevel=info --concurrency=5 --max-tasks-per-child=100

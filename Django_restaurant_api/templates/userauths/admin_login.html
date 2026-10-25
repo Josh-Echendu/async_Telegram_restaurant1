@@ -32,7 +32,7 @@
           {% endfor %}
       {% endif %}
         
-      <!-- 1. EMAIL/PASSWORD FORM -->
+      <!-- EMAIL/PASSWORD FORM -->
       <form method="POST" action="">
         {% csrf_token %}
         <div class="txt_field">
@@ -46,17 +46,16 @@
           <label>Password</label>
         </div>
         <input type="submit" value="Login">
-      </form>
+      </form>      
 
       <div class="divider"><span>OR</span></div>
-        
+          
       <div class="login-container">
-        <!-- 2. GOOGLE LOGIN -->
+        <!-- GOOGLE LOGIN -->
         <a href="{% provider_login_url 'google' %}" class="btn-google">
             Sign in with Google (Owners)
         </a>
       </div>
-
     </div>
   </body>
 </html>

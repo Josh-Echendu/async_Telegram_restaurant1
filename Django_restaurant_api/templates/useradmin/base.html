@@ -136,11 +136,11 @@
             </a>
             {% endif %}
 
-            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-400 cursor-not-allowed">
+            <!-- <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-400 cursor-not-allowed">
                 <i class="fas fa-chart-pie w-5 text-center"></i>
                 <span>Statistics</span>
                 <span class="ml-auto text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">Soon</span>
-            </a>
+            </a> -->
 
             <hr class="my-3 border-gray-100" />
 
@@ -149,23 +149,14 @@
                 <span>Settings</span>
             </a>
 
-            <a href="{% url 'useradmin:shop-settings' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                <i class="fas fa-gear w-5 text-center"></i>
-                <span>Settings</span>
-            </a>
 
             <!-- ✅ NEW: MANAGERS LINK -->
-            <a href="{% url 'useradmin:invite-manger' %}" 
+            <a href="{% url 'useradmin:invite-manager' %}" 
                class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'invite-manager' in request.path %}nav-link-active{% endif %}">
                 <i class="fas fa-users-gear w-5 text-center"></i>
                 <span>Invite Manager</span>
             </a>
 
-
-            <a href="https://t.me/{{support}}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                <i class="fas fa-circle-question w-5 text-center"></i>
-                <span>Help Center</span>
-            </a>
 
             <a href="https://t.me/{{support}}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                 <i class="fas fa-circle-question w-5 text-center"></i>

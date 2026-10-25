@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import AdminUser, TelegramUser, AuthToken
+from .models import AdminUser, TelegramUser, AuthToken, InviteStaff
 
 # Register your models here.
 
@@ -18,6 +18,10 @@ class AuthTokenAdmin(admin.ModelAdmin):
     list_display = ('token', 'user_id')
     search_fields = ('token', 'user_id')
 
+class InviteStaffAdmin(admin.ModelAdmin):
+    list_display = ('restaurant', 'created_at', 'expires_at')
+
 admin.site.register(AdminUser)
 admin.site.register(TelegramUser)
 admin.site.register(AuthToken, AuthTokenAdmin)
+admin.site.register(InviteStaff, InviteStaffAdmin)

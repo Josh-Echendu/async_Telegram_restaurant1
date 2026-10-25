@@ -536,39 +536,41 @@ def whatsapp_error_view(request, restaurant_id):
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 
+from django.contrib import messages # Make sure this is imported
 
 @csrf_exempt
 @xframe_options_exempt
 def telegram_callback(request):
-    """
-    Handles the redirect from the Telegram Login Widget.
-    Verifies HMAC, logs user in, and assigns restaurant membership.
-    """
     data = request.GET.dict()
     
-    # ✅ Extract Invite Context from the URL
     role = data.pop('role', 'manager')
     restaurant_id = data.pop('restaurant_id', None)
-    
     received_hash = data.pop('hash', None)
     
+    # 1. Missing Hash
     if not received_hash:
-        return render(request, 'userauths/admin_login.html', {'error': 'Authentication failed: Missing hash.'})
+        messages.error(request, "Authentication failed: Missing hash.")
+        url = reverse('userauths:manager_login')
+        return redirect(f"{url}?role={role}&restaurant_id={restaurant_id}")
 
-    # 1. Verify Hash
+    # 2. Verify Hash
     check_string = "\n".join(f"{k}={v}" for k, v in sorted(data.items()))
     secret_key = hashlib.sha256(settings.TELEGRAM_BOT_TOKEN.encode()).digest()
     calculated_hash = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
 
     if not hmac.compare_digest(calculated_hash, received_hash):
-        return render(request, 'userauths/admin_login.html', {'error': 'Authentication failed: Invalid signature.'})
+        messages.error(request, "Authentication failed: Invalid signature.")
+        url = reverse('userauths:manager_login')
+        return redirect(f"{url}?role={role}&restaurant_id={restaurant_id}")
 
-    # 2. Replay Attack Check (15 minutes)
+    # 3. Replay Attack Check (15 minutes)
     auth_date = int(data.get('auth_date', 0))
-    if time.time() - auth_date > 900:
-        return render(request, 'userauths/admin_login.html', {'error': 'Authentication failed: Session expired.'})
+    if time.time() - auth_date > 120:
+        messages.error(request, "Authentication failed: Session expired. Please log in again.")
+        url = reverse('userauths:manager_login')
+        return redirect(f"{url}?role={role}&restaurant_id={restaurant_id}")
 
-    # 3. Extract Data
+    # 4. Extract Data
     telegram_id = int(data.get('id'))
     username = data.get('username', f"tg_{telegram_id}")
     first_name = data.get('first_name', '')
@@ -576,51 +578,56 @@ def telegram_callback(request):
     photo_url = data.get('photo_url', None)
     auth_datetime = timezone.make_aware(datetime.fromtimestamp(auth_date))
 
-    # 4. Get or Create AdminUser
-    user, created = AdminUser.objects.get_or_create(
-        telegram_id=telegram_id,
-        defaults={
-            'username': username,
-            'first_name': first_name,
-            'last_name': last_name,
-            'photo_url': photo_url,
-            'auth_date': auth_datetime,
-            'is_active': True,
-        }
-    )
+    # 5. Try to find the user first
+    user = AdminUser.objects.filter(telegram_id=telegram_id).first()
     
-    if not created:
+    if not user:
+        # 2. If they don't exist, create them. 
+        # (Django will create them with email='' or None, but we will fix it immediately)
+        user = AdminUser(
+            telegram_id=telegram_id,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+            photo_url=photo_url,
+            auth_date=auth_datetime,
+            is_active=True,
+        )
+        # ✅ FORCE email to be None BEFORE saving
+        user.email = None
+        user.save()
+    else:
+        # 3. Update existing user
+        user.email = None
         user.first_name = first_name
         user.last_name = last_name
         user.photo_url = photo_url
         user.auth_date = auth_datetime
         user.save()
 
-    # 5. ✅ Create Membership if restaurant_id is provided
+    # 6. Create Membership
     if restaurant_id:
         try:
             restaurant = Restaurant.objects.get(rid=restaurant_id)
             
-            # Create membership (ensure they don't already have it)
             RestaurantMembership.objects.get_or_create(
                 user=user,
                 restaurant=restaurant,
                 defaults={'role': role, 'is_active': True}
             )
             
-            # Set active restaurant in session so dashboard knows where to route
             request.session['restaurant_id'] = restaurant.rid
             
         except Restaurant.DoesNotExist:
-            return render(request, 'userauths/admin_login.html', {'error': 'The invited restaurant no longer exists.'})
+            messages.error(request, "The invited restaurant no longer exists.")
+            url = reverse('userauths:manager_login')
+            return redirect(f"{url}?role={role}&restaurant_id={restaurant_id}")
 
-    # 6. Log them in
-    login(request, user)
+    # 7. Log them in
+    login(request, user, backend='django.contrib.auth.backends.ModelBackend')
     
-    return redirect('useradmin:dashboard', restaurant_id=restaurant_id)
+    return redirect('useradmin:dashboard')
 
-
-from django.shortcuts import render
 
 def manager_login_view(request):
     """
@@ -630,29 +637,71 @@ def manager_login_view(request):
     return render(request, 'userauths/manager_login.html')
 
 
-def admin_login_view(request, restaurant_id=None):
+
+from django.contrib.auth.decorators import login_required
+
+
+@login_required
+def create_restaurant_view(request):
+    
+    # If they already have a restaurant, don't let them create another one
+    if RestaurantMembership.objects.filter(user=request.user).exists():
+        return redirect('useradmin:dashboard')
+
+    if request.method == 'POST':
+        restaurant_name = request.POST.get('restaurant_name')
+        business_type = request.POST.get('business_type')
+        service_mode = request.POST.get('service_mode')
+        image = request.FILES.get('image')
+
+
+        if not restaurant_name:
+            messages.error(request, "Restaurant name is required.")
+        else:
+            # 1. Create the Restaurant
+            restaurant = Restaurant.objects.create(
+                name=restaurant_name,
+                business_type=business_type,
+                service_mode=service_mode,
+                image=image,
+                
+                # Add any other required fields here (like address, phone, etc.)
+            )
+
+            # 2. Link the user as the Owner
+            RestaurantMembership.objects.create(
+                user=request.user,
+                restaurant=restaurant,
+                role='owner'
+            )
+
+            messages.success(request, f"Welcome! {restaurant_name} has been created.")
+            return redirect('useradmin:dashboard')
+
+    return render(request, 'userauths/create_restaurant.html')
+
+
+def admin_login_view(request):
+    if request.user.is_authenticated:
+        return redirect('useradmin:dashboard')
+
     if request.method == 'POST':
         email = request.POST.get('email')
         password = request.POST.get('password')
 
         user = authenticate(request, email=email, password=password)
-        print("user: ", user)
         if user is not None and user.is_staff:
-            login(request, user)
-            if restaurant_id:
-                request.session['restaurant_id'] = restaurant_id
-                print("restaurant_id: ", restaurant_id)
-            return redirect("useradmin:dashboard")  # ✅ Dashboard doesn't need restaurant_id in URL
-
+            login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+            return redirect("useradmin:dashboard")
         else:
             messages.error(request, 'Invalid login credentials. Please try again.')
-            return redirect("userauths:admin_login", restaurant_id=restaurant_id)  # ✅ Fixed
-    context = {
-        'username': "vibeflow_automation_bot"
-    }
-    return render(request, 'userauths/admin_login.html', context)
+            return redirect("userauths:admin_login")
+
+    return render(request, 'userauths/admin_login.html')
 
 
+
+# thk_live_RMVtCxksDOYF9Rl6CTo0Y5t2AXmOOgu9msvOYLf99qUb-XNuk1QNPFxgIrMZ4asa
 def admin_logout_view(request, restaurant_id=None):
     from userAdmin.views import get_admin_restaurant
     restaurant_id= get_admin_restaurant(request, restaurant_id)

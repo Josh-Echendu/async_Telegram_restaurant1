@@ -33,7 +33,7 @@ class UserAccountManager(BaseUserManager):
 class AdminUser(AbstractBaseUser, PermissionsMixin):
     # ❌ REMOVED: restaurant = models.ForeignKey(...) - Let RestaurantMembership handle this.
 
-    email = models.EmailField(max_length=200, unique=True)
+    email = models.EmailField(max_length=200, unique=True, null=True, blank=True)
 
     # Indicates whether this user can log into the Django admin site.
     is_staff = models.BooleanField(default=True)
@@ -79,7 +79,7 @@ class AdminUser(AbstractBaseUser, PermissionsMixin):
     
     def __str__(self):
         if self.telegram_id:
-            return f"{self.first_name} (Telegram {self.memberships.role})"
+            return f"{self.first_name}"
         return self.email
 
 
@@ -88,9 +88,9 @@ from django.utils import timezone
 from datetime import timedelta
 
 class InviteStaff(models.Model):
-    restaurant = models.ForeignKey("restaurants.Restaurant", on_delete=models.CASCADE)
+    restaurant = models.ForeignKey("restaurants.Restaurant", on_delete=models.CASCADE, db_index=True)
     token = models.CharField(max_length=64, unique=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     expires_at = models.DateTimeField()
     
     def save(self, *args, **kwargs):
@@ -147,7 +147,7 @@ class AuthToken(models.Model):
     token = models.CharField(max_length=120, unique=True, db_index=True)
     user_id = models.CharField(max_length=100, db_index=True)
     platform = models.CharField(max_length=20, choices=PLATFORM_CHOICES)
-    restaurant = models.ForeignKey("restaurants.Restaurant", on_delete=models.CASCADE)
+    restaurant = models.ForeignKey("restaurants.Restaurant", on_delete=models.CASCADE, db_index=True)
     expires_at = models.DateTimeField(db_index=True)
     is_used = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

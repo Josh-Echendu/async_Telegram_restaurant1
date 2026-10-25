@@ -110,6 +110,7 @@ AUTHENTICATION_BACKENDS = [
 
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
+        'EMAIL_AUTHENTICATION': True,
         'SCOPE': [
             'profile',
             'email',
@@ -157,6 +158,10 @@ MIDDLEWARE = [
 
     # Add the account middleware:
     "allauth.account.middleware.AccountMiddleware",
+
+    # Restaurant onboarding middleware
+    'userAuths.middleware.OwnerOnboardingMiddleware', # ✅ Add this at the bottom
+
 ]
 
 CORS_ALLOWED_ORIGINS = [
