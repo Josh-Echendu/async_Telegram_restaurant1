@@ -17,7 +17,7 @@ from django.conf import settings
 from orders.models import KITCHEN_STATUS_CHOICES, OrderBatch, Product, OrderBatchItem, Category, CheckoutSession
 from userAuths.models import InviteStaff, TelegramUser, AdminUser
 from .forms import AddProductForm, AddCategoryForm
-from .decorators import admin_required
+from .decorators import admin_required, owner_required
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 
@@ -30,40 +30,6 @@ from django.db.models import Count, Q
 import json
 import logging
 import httpx
-
-
-
-logger = logging.getLogger(__name__)
-
-
-def get_admin_restaurant(request, restaurant_id=None):
-
-    # 1️⃣ Get restaurant_id from URL or session
-    if restaurant_id:
-        request.session['restaurant_id'] = restaurant_id
-    else:
-        restaurant_id = request.session.get('restaurant_id')
-
-    if not restaurant_id:
-        raise PermissionDenied("No restaurant selected.")
-
-    print("restaurant_id: ", restaurant_id)
-    restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
-
-    # 3️⃣ Validate admin ownership via Membership    
-    if not RestaurantMembership.objects.filter(
-        user=request.user, 
-        restaurant=restaurant
-    ).exists():
-        messages.error(request, "You are not authorized for this restaurant.")
-        request.session.pop('restaurant_id', None)
-        raise PermissionDenied("Not authorized for this restaurant.")
-    
-    return restaurant
-
-
-
-
 from django.contrib import messages
 from django.utils import timezone
 from datetime import timedelta
@@ -71,8 +37,37 @@ import uuid
 from django.http import JsonResponse
 from django.views.decorators.cache import never_cache
 
+
+
+
+logger = logging.getLogger(__name__)
+
+
+
+def get_admin_restaurant(request, restaurant_id=None):
+    """
+    Production: Get the restaurant attached to the logged-in user.
+    """
+    # 1. Look up the user's active membership in the database
+    membership = RestaurantMembership.objects.filter(
+        user=request.user,
+        is_active=True
+    ).select_related('restaurant').first()
+
+    # 2. If no membership exists, block them
+    if not membership:
+        raise PermissionDenied("You do not have an active restaurant.")
+
+    # 3. Save it to the session (just in case other parts of your code need it)
+    request.session['restaurant_id'] = membership.restaurant.rid
+
+    # 4. Return the restaurant!
+    return membership.restaurant
+
+
 @never_cache
 @admin_required
+@owner_required
 def invite_manager(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
 
@@ -122,6 +117,7 @@ def invite_manager(request, restaurant_id=None):
 
 @admin_required
 @require_POST
+@owner_required
 def remove_manager(request, membership_id):
     # Only the owner can remove managers (security check)
     # (You can adjust this if managers should be able to remove other managers)
@@ -270,6 +266,7 @@ def products(request, restaurant_id=None):
     return render(request, "useradmin/products.html", context)
 
 @admin_required
+@owner_required
 def add_product(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
 
@@ -297,22 +294,40 @@ def edit_product(request, pid, restaurant_id=None):
         restaurant=restaurant
     )
 
+    # Check if the user is a manager
+    is_manager = False
+    membership = RestaurantMembership.objects.filter(user=request.user, restaurant=restaurant).first()
+    if membership and membership.role == 'manager':
+        is_manager = True
+
     if request.method == "POST":
-        form = AddProductForm(
-            request.POST,
-            request.FILES,
-            instance=product,
-            restaurant=restaurant,  # filter category dropdown
-        )
-        if form.is_valid():
-            updated_product = form.save(commit=False)
-            updated_product.restaurant = restaurant
-            updated_product.save()
+        if is_manager:
+            # ✅ MANAGER FLOW: Only update stock status, bypass the form validation
+            new_stock_status = request.POST.get('in_stock') == 'on'
+            product.in_stock = new_stock_status
+            product.save(update_fields=['in_stock'])
+            
+            messages.success(request, "Stock status updated successfully!")
             return redirect("useradmin:dashboard-products")
+        else:
+            # ✅ OWNER FLOW: Process the full form normally
+            form = AddProductForm(
+                request.POST,
+                request.FILES,
+                instance=product,
+                restaurant=restaurant,
+            )
+            if form.is_valid():
+                updated_product = form.save(commit=False)
+                updated_product.restaurant = restaurant
+                updated_product.save()
+                
+                messages.success(request, "Product updated successfully!")
+                return redirect("useradmin:dashboard-products")
     else:
         form = AddProductForm(
             instance=product,
-            restaurant=restaurant,  # filter category dropdown
+            restaurant=restaurant,
         )
 
     return render(
@@ -326,6 +341,7 @@ def edit_product(request, pid, restaurant_id=None):
 
 
 @admin_required
+@owner_required
 def add_category(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
     business_type = restaurant.business_type  # 'restaurant', 'vendor', or 'hotel'
@@ -365,6 +381,7 @@ def categories(request, restaurant_id=None):
 
 
 @admin_required
+@owner_required
 def edit_category(request, cid, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
 
@@ -402,7 +419,8 @@ def edit_category(request, cid, restaurant_id=None):
         }
     )
 
-
+    
+@owner_required
 def delete_category(request, cid, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
     category = get_object_or_404(Category, cid=cid, restaurant=restaurant)
@@ -412,6 +430,7 @@ def delete_category(request, cid, restaurant_id=None):
 
 @admin_required
 @require_POST
+@owner_required
 def delete_product(request, pid, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
     product = get_object_or_404(Product, pid=pid, restaurant=restaurant)
@@ -818,6 +837,7 @@ def delivery_order_details(request, session_id, restaurant_id=None):
 
 
 @admin_required
+@owner_required
 def pos_config(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
     return render(request, 'useradmin/pos_config.html', {'restaurant': restaurant})
@@ -837,8 +857,9 @@ def pos_config(request, restaurant_id=None):
 
 
 @admin_required
+@owner_required
 def shop_settings(request, restaurant_id=None):
-    restaurant = get_admin_restaurant(request, restaurant_id)
+    restaurant = get_admin_restaurant(request)
 
     app_id = settings.META_APP_ID
     app_config = settings.META_CONFIG_ID
@@ -853,6 +874,7 @@ def shop_settings(request, restaurant_id=None):
 
 @admin_required
 @require_POST
+@owner_required
 @transaction.atomic
 def update_account_settings(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
@@ -882,6 +904,7 @@ def update_account_settings(request, restaurant_id=None):
 @require_POST
 @transaction.atomic
 @require_POST
+@owner_required
 def update_business_settings(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
     
@@ -922,6 +945,7 @@ def update_business_settings(request, restaurant_id=None):
     return JsonResponse({'success': True})
 
 @admin_required
+@owner_required
 @require_POST
 @transaction.atomic
 def update_operations_settings(request, restaurant_id=None):
@@ -961,6 +985,7 @@ def update_operations_settings(request, restaurant_id=None):
 @admin_required
 @require_POST
 @transaction.atomic
+@owner_required
 def update_bank_settings(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
     
@@ -984,6 +1009,7 @@ def update_bank_settings(request, restaurant_id=None):
 @admin_required
 @require_POST
 @transaction.atomic
+@owner_required
 def toggle_shop_status(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
     
@@ -997,6 +1023,7 @@ def toggle_shop_status(request, restaurant_id=None):
 @admin_required
 @require_POST
 @transaction.atomic
+@owner_required
 def update_bot_settings(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
     
@@ -1055,6 +1082,7 @@ def update_bot_settings(request, restaurant_id=None):
 class MetaOauthHandshakeView(APIView):
 
     @transaction.atomic
+    @owner_required
     def post(self, request, *args, **kwargs):
         try:
             data = json.loads(request.body)
@@ -1169,6 +1197,7 @@ def change_order_status(request, bid, restaurant_id=None):
 
 @ensure_csrf_cookie
 @admin_required
+@owner_required
 def delivery_hours(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
 
@@ -1207,6 +1236,7 @@ def delivery_hours(request, restaurant_id=None):
 
 @require_POST
 @admin_required
+@owner_required
 def update_delivery_hours(request, restaurant_id=None):
     restaurant = get_admin_restaurant(request, restaurant_id)
     

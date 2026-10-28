@@ -2,14 +2,11 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    
+    # ✅ Tells Python to look in /app for imports
+    PYTHONPATH=/app  
 
 WORKDIR /app
-
-# RUN apt-get update && apt-get install -y --no-install-recommends \
-#     curl \
-#     && rm -rf /var/lib/apt/lists/*
-
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -20,24 +17,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Install dependencies
+# Install dependencies (Adjust path if requirements.txt is inside the folder)
 COPY TELEGRAM_BOT_API/requirements.txt .
-
 RUN uv pip install --system uvicorn
 RUN uv pip install --system --no-cache -r requirements.txt
 
 # Copy shared package
 COPY COMMON /app/COMMON
 
-# Copy Telegram code
-COPY TELEGRAM_BOT_API/ /app/
+# ✅ Copy the Telegram code into its own folder inside /app
+COPY TELEGRAM_BOT_API/ /app/TELEGRAM_BOT_API/
+
+# ✅ Make the entrypoint script executable inside the container
+RUN chmod +x /app/TELEGRAM_BOT_API/entrypoint_bot.sh
 
 EXPOSE 8080
 
-# CMD ["./entrypoint_bot.sh"]
-
-# # Give execution permission to the script inside its actual directory
-# RUN chmod +x /app/TELEGRAM_BOT_API/entrypoint_bot.sh
-
-# # Update CMD to point to the correct path
-# CMD ["/app/TELEGRAM_BOT_API/entrypoint_bot.sh"]
+# ✅ Set the default command
+CMD ["/app/TELEGRAM_BOT_API/entrypoint_bot.sh"]

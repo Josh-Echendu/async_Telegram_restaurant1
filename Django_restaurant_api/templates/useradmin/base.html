@@ -1,4 +1,3 @@
-
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
@@ -20,7 +19,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
@@ -40,7 +38,6 @@
         }
         .nav-link-active i { color: #4338ca; }
 
-        /* ✅ Hide scrollbar for tab bars */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
@@ -59,7 +56,7 @@
         x-transition.opacity
     ></div>
 
-    <!-- Sidebar - fixed on all screen sizes -->
+    <!-- Sidebar -->
     <aside 
         :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
         class="fixed top-0 left-0 z-50 w-64 h-full bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 flex flex-col"
@@ -80,7 +77,6 @@
             </button>
         </div>
 
-
         <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-1">
             <a href="{% url 'useradmin:dashboard' %}" 
             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if request.resolver_match.url_name == 'dashboard' %}nav-link-active{% endif %}">
@@ -94,14 +90,12 @@
                 <span>Products</span>
             </a>
 
-            <!-- ========== CATEGORIES (NEW) ========== -->
             <a href="{% url 'useradmin:dashboard-categories' %}" 
             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'categories' in request.path %}nav-link-active{% endif %}">
                 <i class="fas fa-tags w-5 text-center"></i>
                 <span>Categories</span>
             </a>
 
-            <!-- ========== ORDERS (DINE-IN) ========== -->
             {% if restaurant.service_mode == 'dine_in' or restaurant.service_mode == 'both' %}
             <a href="{% url 'useradmin:dashboard-dine_in-orders' %}" 
             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'orders' in request.path and request.GET.mode == 'dine_in' %}nav-link-active{% endif %}">
@@ -110,7 +104,6 @@
             </a>
             {% endif %}
 
-            <!-- ========== ORDERS (DELIVERY) ========== -->
             {% if restaurant.service_mode == 'delivery' or restaurant.service_mode == 'both' %}
             <a href="{% url 'useradmin:dashboard-delivery-orders' %}" 
             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'orders' in request.path and request.GET.mode == 'delivery' %}nav-link-active{% endif %}">
@@ -119,44 +112,44 @@
             </a>
             {% endif %}
 
-            <!-- ========== DELIVERY HOURS ========== -->
-            {% if restaurant.service_mode == 'delivery' or restaurant.service_mode == 'both' %}
-            <a href="{% url 'useradmin:delivery-hours' %}" 
-                class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'delivery-hours' in request.path %}nav-link-active{% endif %}">
-                    <i class="fas fa-clock w-5 text-center"></i>
-                    <span>Delivery Hours</span>
-            </a>
-            {% endif %}
+            <!-- ✅ SAFE CHECK: Only Owners see Delivery Hours & POS Config -->
+            {% if request.user.is_staff and request.user.memberships.exists %}
+                {% if request.user.memberships.first.role == 'owner' %}
+                    {% if restaurant.service_mode == 'delivery' or restaurant.service_mode == 'both' %}
+                    <a href="{% url 'useradmin:delivery-hours' %}" 
+                        class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'delivery-hours' in request.path %}nav-link-active{% endif %}">
+                            <i class="fas fa-clock w-5 text-center"></i>
+                            <span>Delivery Hours</span>
+                    </a>
+                    {% endif %}
 
-            {% if restaurant.business_type == 'restaurant' and restaurant.service_mode == 'dine_in' or restaurant.service_mode == 'both' %}
-            <a href="{% url 'useradmin:pos-config' %}" 
-            class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'pos-config' in request.path %}nav-link-active{% endif %}">
-                <i class="fas fa-credit-card w-5 text-center"></i>
-                <span>POS Config</span>
-            </a>
+                    {% if restaurant.business_type == 'restaurant' and restaurant.service_mode == 'dine_in' or restaurant.service_mode == 'both' %}
+                    <a href="{% url 'useradmin:pos-config' %}" 
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'pos-config' in request.path %}nav-link-active{% endif %}">
+                        <i class="fas fa-credit-card w-5 text-center"></i>
+                        <span>POS Config</span>
+                    </a>
+                    {% endif %}
+                {% endif %}
             {% endif %}
-
-            <!-- <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-400 cursor-not-allowed">
-                <i class="fas fa-chart-pie w-5 text-center"></i>
-                <span>Statistics</span>
-                <span class="ml-auto text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">Soon</span>
-            </a> -->
 
             <hr class="my-3 border-gray-100" />
 
-            <a href="{% url 'useradmin:shop-settings' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                <i class="fas fa-gear w-5 text-center"></i>
-                <span>Settings</span>
-            </a>
+            <!-- ✅ SAFE CHECK: Only Owners see Settings & Invite Manager -->
+            {% if request.user.is_staff and request.user.memberships.exists %}
+                {% if request.user.memberships.first.role == 'owner' %}
+                <a href="{% url 'useradmin:shop-settings' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                    <i class="fas fa-gear w-5 text-center"></i>
+                    <span>Settings</span>
+                </a>
 
-
-            <!-- ✅ NEW: MANAGERS LINK -->
-            <a href="{% url 'useradmin:invite-manager' %}" 
-               class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'invite-manager' in request.path %}nav-link-active{% endif %}">
-                <i class="fas fa-users-gear w-5 text-center"></i>
-                <span>Invite Manager</span>
-            </a>
-
+                <a href="{% url 'useradmin:invite-manager' %}" 
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors {% if 'invite-manager' in request.path %}nav-link-active{% endif %}">
+                    <i class="fas fa-users-gear w-5 text-center"></i>
+                    <span>Invite Manager</span>
+                </a>
+                {% endif %}
+            {% endif %}
 
             <a href="https://t.me/{{support}}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                 <i class="fas fa-circle-question w-5 text-center"></i>
@@ -208,14 +201,15 @@
 
                     <div class="relative" x-data="{ open: false }">
                         <button @click="open = !open" class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-                            {% if restaurant.image %}
-                                <img src="{{ restaurant.image.url }}" class="w-8 h-8 rounded-full object-cover border-2 border-gray-200" alt="User" />
+                            {% if request.user.photo_url %}
+                                <img src="{{ request.user.photo_url }}" class="w-8 h-8 rounded-full object-cover border-2 border-gray-200" alt="User" />
                             {% else %}
-                                <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center border-2 border-gray-200">
-                                    <i class="fas fa-user text-indigo-600 text-sm"></i>
+                                <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center border-2 border-gray-200 font-bold text-indigo-600 text-sm">
+                                    <!-- ✅ FIXED: default_if_none BEFORE first -->
+                                    {{ request.user.first_name|default_if_none:request.user.username|default_if_none:"U"|first|upper }}
                                 </div>
                             {% endif %}
-                            <span class="hidden sm:inline text-sm font-medium text-gray-700">{{ request.user.first_name|default:'Vendor' }}</span>
+                            <span class="hidden sm:inline text-sm font-medium text-gray-700">{{ request.user.first_name|default:request.user.username|default:'Staff' }}</span>
                             <i class="fas fa-chevron-down text-gray-400 text-xs hidden sm:block"></i>
                         </button>
                         
@@ -226,16 +220,22 @@
                             class="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50"
                             x-transition
                         >
-                            <a href="{% url 'useradmin:shop-settings' %}" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                <i class="fas fa-user w-4"></i> Edit Profile
-                            </a>
-                            <a href="#" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                <i class="fas fa-wallet w-4"></i> Wallet
-                            </a>
-                            <a href="#" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                <i class="fas fa-file-invoice w-4"></i> Billing
-                            </a>
-                            <hr class="my-1 border-gray-100" />
+                            <!-- ✅ SAFE CHECK: Only Owners see Wallet/Billing/Profile -->
+                            {% if request.user.is_staff and request.user.memberships.exists %}
+                                {% if request.user.memberships.first.role == 'owner' %}
+                                <a href="{% url 'useradmin:shop-settings' %}" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                    <i class="fas fa-user w-4"></i> Edit Profile
+                                </a>
+                                <a href="#" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                    <i class="fas fa-wallet w-4"></i> Wallet
+                                </a>
+                                <a href="#" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                    <i class="fas fa-file-invoice w-4"></i> Billing
+                                </a>
+                                <hr class="my-1 border-gray-100" />
+                                {% endif %}
+                            {% endif %}
+                            
                             <a href="{% url 'userauths:admin_logout' %}" class="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50">
                                 <i class="fas fa-right-from-bracket w-4"></i> Logout
                             </a>
@@ -245,16 +245,14 @@
             </div>
         </header>
 
-
         <main class="flex-1">
             {% block content %}{% endblock %}
         </main>
         
-
         <footer class="border-t border-gray-100 px-4 sm:px-6 py-4">
             <div class="flex flex-col sm:flex-row items-center justify-between gap-2">
                 <p class="text-xs text-gray-500">
-                    &copy; <span x-text="new Date().getFullYear()"></span> Fork & Co. All rights reserved.
+                    &copy; <span x-text="new Date().getFullYear()"></span> VibeFlow. All rights reserved.
                 </p>
                 <div class="flex items-center gap-4">
                     <a href="#" class="text-xs text-gray-500 hover:text-gray-700">Privacy</a>
@@ -291,5 +289,4 @@
 
     {% block extra_js %}{% endblock %}
 </body>
-
 </html>

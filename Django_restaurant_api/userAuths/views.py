@@ -82,7 +82,7 @@ class TelegramUserCreateAPIView(APIView):
 
             # 2️⃣ Link USER ↔ RESTAURANT
             RestaurantMembership.objects.get_or_create(
-                user=user,
+                customer_user=user,
                 restaurant=restaurant
             )
             
@@ -168,7 +168,7 @@ class WhatsAppUserCreateAPIView(APIView):
                 )
             
             RestaurantMembership.objects.get_or_create(
-                user=user,
+                customer_user=user,
                 restaurant=restaurant
             )
             
@@ -611,7 +611,7 @@ def telegram_callback(request):
             restaurant = Restaurant.objects.get(rid=restaurant_id)
             
             RestaurantMembership.objects.get_or_create(
-                user=user,
+                customer_user=user,
                 restaurant=restaurant,
                 defaults={'role': role, 'is_active': True}
             )
@@ -644,7 +644,7 @@ from django.contrib.auth.decorators import login_required
 @login_required
 def create_restaurant_view(request):
     
-    # If they already have a restaurant, don't let them create another one
+    # If they already have a restaurant membership, don't let them create another one
     if RestaurantMembership.objects.filter(user=request.user).exists():
         return redirect('useradmin:dashboard')
 
@@ -663,7 +663,7 @@ def create_restaurant_view(request):
                 name=restaurant_name,
                 business_type=business_type,
                 service_mode=service_mode,
-                image=image,
+                # image=image,
                 
                 # Add any other required fields here (like address, phone, etc.)
             )
@@ -702,12 +702,17 @@ def admin_login_view(request):
 
 
 # thk_live_RMVtCxksDOYF9Rl6CTo0Y5t2AXmOOgu9msvOYLf99qUb-XNuk1QNPFxgIrMZ4asa
-def admin_logout_view(request, restaurant_id=None):
-    from userAdmin.views import get_admin_restaurant
-    restaurant_id= get_admin_restaurant(request, restaurant_id)
-    logout(request)
-    return redirect("userauths:admin_login", restaurant_id=restaurant_id)
 
+@login_required
+def admin_logout_view(request):
+
+    logout(request)
+
+    # ✅ Clear the messages list completely
+    from django.contrib.messages import get_messages
+    list(get_messages(request))  # Iterating through them empties the queue
+    
+    return redirect("userauths:admin_login")
 
 
 class TelegramUserListAPIView(ListAPIView):

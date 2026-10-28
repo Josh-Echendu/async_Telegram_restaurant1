@@ -11,8 +11,10 @@ class OwnerOnboardingMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        
+        # 0. Only apply this middleware to authenticated users
         # 1. Only check if the user is logged in
-        if request.user.is_authenticated:
+        if request.user.is_authenticated and request.user.is_staff:
             
             # 2. Ignore static files, admin panel, login, logout, and the onboarding page itself
             ignored_paths = [
@@ -24,15 +26,20 @@ class OwnerOnboardingMiddleware:
                 reverse('userauths:create_restaurant') # We will create this URL
             ]
             
-            if not any(request.path.startswith(path) for path in ignored_paths):
+            # ✅ List comprehension: Returns a list of matching paths (or an empty list)
+            matched_paths = [path for path in ignored_paths if request.path.startswith(path)]
+            
+            # If the list is empty, it means the path was NOT ignored
+            if not matched_paths:
                 
-                # 3. Check if they have a membership
+                # Check if they have a membership
                 has_membership = RestaurantMembership.objects.filter(
                     user=request.user
                 ).exists()
 
-                # 4. If no membership, force them to onboarding
+                # If no membership, force them to onboarding
                 if not has_membership:
                     return redirect('userauths:create_restaurant')
 
+        # If everything is fine, proceed to the next middleware or view
         return self.get_response(request)

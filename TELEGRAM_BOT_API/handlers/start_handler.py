@@ -67,6 +67,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     restaurant_data = await get_user_session(update.effective_chat.id)
     restaurant_id = restaurant_data.get('current_rid')
     restaurant_name = restaurant_data.get('restaurant_name')
+    image = restaurant_data.get('image') # Ensure your session has the image URL
+    print(f"Restaurant Data image: {image}")  # Debugging line
     business_type = (restaurant_data.get('business_type') or "").lower()
     vendor_type = (restaurant_data.get('vendor_type') or "").lower()
     service_mode = (restaurant_data.get('service_mode') or "").lower()
@@ -76,31 +78,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_name = update.effective_chat.first_name
     username = update.effective_user.username
     
-
     # --- REGISTER USER ---
     registration = await telegram_registration(telegram_id=user_id, first_name=first_name, username=username, restaurant_id=restaurant_id)
     
     if not registration or not registration.get("ok"):
         if registration and not registration.get("recoverable"):
-            
-            # Permanent failure — don't retry, notify user
             logger.error(f"Registration failed permanently: {registration.get('error')}")
             await update.message.reply_text(
                 f"❌ Network error, please Try again."
             )
             return
-        
-        # Recoverable — raise to trigger ARQ retry
         raise Exception("Registration temporarily failed, will retry")
-
 
     # Get the payload after "start="
     payload = context.args[0] if context.args else None
-    print("start payload: ", payload)
         
     if payload and payload.startswith("join_"):
         session_token = payload.replace("join_", "")
-        
         join_result = await handle_join_session(update, context, session_token)
         
         if not join_result.get("ok"):
@@ -119,18 +113,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
         
-        # Save session token to Redis
         await redis_client.set(
             f"user_session_token:{restaurant_id}:{user_id}",
             session_token,
             ex=86400
         )
 
-    
     # --- BUSINESS-SPECIFIC KEYBOARD ---
     if business_type == "restaurant":
-        service_mode = (restaurant_data.get('service_mode') or "").lower()
-        
         if service_mode == "delivery":
             keyboard = [
                 ["🍽 Order Food", "📦 Track Order"],
@@ -139,7 +129,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif service_mode in ["dine_in", 'both']:
             keyboard = [
                 ["🍽 Order Food", "📦 Track Order"],
-                ["📞 Contact Staff", "🛍️✅💳 Checkout/Pay"]
+                ["📞 Contact Staff", "🛍️ Checkout/Pay"]
             ]
         else:
             keyboard = [
@@ -173,22 +163,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     messages = {
         "restaurant": {
             "icon": "🍽️",
-            "role": "Your personal restaurant assistant",
-            "features": "🛍 Browse meals\n🛒 View cart\n📦 Track orders\n⚡ Enjoy fast and easy ordering"
+            "role": "Your personal dining assistant",
+            "features": "🛍 Browse delicious meals\n🛒 View your cart\n📦 Track your orders\n⚡ Fast & easy ordering"
         },
         "vendor_goods": {
             "icon": "🛍️",
-            "role": "Your personal store assistant",
-            "features": "🛍️ Browse products\n🛒 Add to cart\n📦 Track orders\n💰 Quick and secure checkout"
+            "role": "Your personal shopping assistant",
+            "features": "🛍️ Browse products\n🛒 Add to cart\n📦 Track orders\n💰 Quick checkout"
         },
         "vendor_cooked_food": {
             "icon": "🍲",
-            "role": "Your personal food vendor assistant",
-            "features": "🍽 Browse meals\n🛒 Place orders\n📦 Track deliveries\n⚡ Fresh and fast service"
+            "role": "Your personal food vendor",
+            "features": "🍽 Browse fresh meals\n🛒 Place orders\n📦 Track deliveries\n⚡ Fresh & fast"
         },
     }
 
-    # Select the right message template
     if business_type == "restaurant":
         msg = messages["restaurant"]
     elif business_type == "vendor" and vendor_type == "goods":
@@ -196,24 +185,67 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif business_type == "vendor" and vendor_type == "cooked_food":
         msg = messages["vendor_cooked_food"]
     else:
-        msg = messages["restaurant"]  # fallback
+        msg = messages["restaurant"]
 
+    # ✅ BEAUTIFUL CAPTION DESIGN
     welcome_text = (
-        f"<b>{msg['icon']} Welcome to {restaurant_name}, <i>{first_name}</i>!</b>\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🤖 {msg['role']}\n\n"
-        "✨ <b>What you can do:</b>\n\n"
-        f"{msg['features']}\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "<i>👇 Choose an option below</i>"
+        f"👋 <b>Hey {first_name}!</b>\n\n"
+        f"Welcome to <b>{restaurant_name}</b> {msg['icon']}\n"
+        f"<i>{msg['role']}</i>\n\n"
+        "➖➖➖➖➖➖➖➖➖➖\n"
+        f"✨ <b>What you can do:</b>\n"
+        f"{msg['features']}\n"
+        "➖➖➖➖➖➖➖➖➖➖\n\n"
+        "👇 <b>Choose an option below to get started:</b>"
     )
 
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=welcome_text,
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
-        parse_mode="HTML"
-    )
+    # ✅ FALLBACK IMAGE (If restaurant has no image)
+    default_image = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=1000&auto=format&fit=crop"
+
+    if image:
+        
+        # ✅ Strip the trailing slash from NGROK and the leading slash from image
+        base_url = NGROK_DJANGO.rstrip('/')
+        image_path = image.lstrip('/')
+        image_url = f"{base_url}/{image_path}"
+
+    else:
+        image_url = default_image
+
+    # ✅ SEND PHOTO WITH CAPTION
+    try:
+
+        import httpx
+        logger.info(f"Downloading image: {image_url}")
+        
+        # 1. Download the image using httpx with the ngrok bypass header
+        async with httpx.AsyncClient() as client:
+            img_response = await client.get(
+                image_url, 
+                headers={"ngrok-skip-browser-warning": "true"},
+                timeout=10.0
+            )
+            img_response.raise_for_status()
+            image_bytes = img_response.content
+
+        logger.info(f"Image downloaded successfully. Size: {len(image_bytes)} bytes")
+
+        await context.bot.send_photo(
+            chat_id=chat_id,
+            photo=image_bytes,
+            caption=welcome_text,
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+    except Exception as e:
+        logger.error(f"Failed to send photo, falling back to text: {e}")
+        # Fallback to text message if image URL fails
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=welcome_text,
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
 
 
 

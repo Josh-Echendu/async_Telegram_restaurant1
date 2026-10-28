@@ -57,6 +57,7 @@ async def handle_telegram_update(ctx, update_data: dict, restaurant: dict):
                 user_session.update({
                     "current_rid": restaurant["rid"],
                     "restaurant_name": restaurant["bot_name"],
+                    "image": restaurant['image'],
                     "business_type": restaurant["business_type"],
                     "service_mode": restaurant["service_mode"],
                     "max_tables": restaurant["max_tables"],

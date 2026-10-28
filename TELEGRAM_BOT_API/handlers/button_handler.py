@@ -611,7 +611,6 @@ async def is_delivery_available(update):
 
 
 async def menu_keyboard(update, query):
-
     # ✅ Use chat_id (matches how session was saved)
     user_session = await get_user_session(update.effective_user.id)
     
@@ -630,10 +629,17 @@ async def menu_keyboard(update, query):
     else:
         WEB_APP_URL = f"{NGROK_DJANGO}/api/menu/{restaurant_id}/?mode={user_service_mode}&platform={platform}"
 
+    # 🎨 Dynamic button text based on service mode (Optional but nice!)
+    button_text = "🛒 Browse Menu & Order"
+    if user_service_mode == "dine_in":
+        button_text = "🍽️ View Dine-in Menu"
+    elif user_service_mode == "delivery":
+        button_text = "🚚 View Delivery Menu"
+
     reply_keyboard = [
         [
             InlineKeyboardButton(
-                text="🍔 Open Menu",
+                text=button_text,
                 web_app=WebAppInfo(url=WEB_APP_URL),
             )
         ]
@@ -641,7 +647,15 @@ async def menu_keyboard(update, query):
 
     markup = InlineKeyboardMarkup(reply_keyboard)
 
+    # ✨ Beautiful, formatted message
+    beautiful_text = (
+        "🍽️ <b>Welcome to our Menu!</b>\n\n"
+        "Explore our delicious offerings, customize your meal, and place your order directly through the app.\n\n"
+        "👇 <i>Tap the button below to get started:</i>"
+    )
+
     await query.edit_message_text(
-        text="📋 Please click the button below to view our menu and place your order:",
-        reply_markup=markup
+        text=beautiful_text,
+        reply_markup=markup,
+        parse_mode="HTML"  # 👈 Crucial for <b> and <i> to work
     )

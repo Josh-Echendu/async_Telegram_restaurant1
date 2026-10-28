@@ -2,7 +2,9 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+
+    # ✅ Tells Python to look in /app
+    PYTHONPATH=/app  
 
 WORKDIR /app
 
@@ -19,9 +21,13 @@ RUN uv pip install --system --no-cache -r requirements.txt
 # Copy shared package
 COPY COMMON /app/COMMON
 
-# Copy WhatsApp code
-COPY WHATSAPP_BOT_API/ /app/
+# ✅ Copy the WhatsApp code into its own folder
+COPY WHATSAPP_BOT_API/ /app/WHATSAPP_BOT_API/
+
+# ✅ Make the entrypoint script executable
+RUN chmod +x /app/WHATSAPP_BOT_API/entrypoint_whatsapp.sh
 
 EXPOSE 8080
 
-CMD ["./entrypoint_whatsapp.sh"]
+# ✅ Run the script
+CMD ["/app/WHATSAPP_BOT_API/entrypoint_whatsapp.sh"]

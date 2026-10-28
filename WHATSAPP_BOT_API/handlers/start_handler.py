@@ -112,11 +112,11 @@ async def start_handler(client: WhatsApp, msg: Message):
     restaurant_data = await get_user_session(user_id)
     restaurant_id = restaurant_data.get("current_rid")
     restaurant_name = restaurant_data.get("restaurant_name")
+    image = restaurant_data.get("image")  # ✅ Extract Image
 
     business_type = (restaurant_data.get('business_type') or "").lower()
     vendor_type = (restaurant_data.get('vendor_type') or "").lower()
     service_mode = (restaurant_data.get('service_mode') or "").lower()
-
 
     first_name = msg.from_user.name or "Customer"
     user_phone = msg.from_user.wa_id
@@ -125,130 +125,89 @@ async def start_handler(client: WhatsApp, msg: Message):
     logger.info(f"🏪 Restaurant Name: {restaurant_name}")
     logger.info(f"👤 User: {first_name} ({user_phone})")
 
-
     # =========================
     # 🧾 USER REGISTRATION
     # =========================
     username = first_name or f"user_{user_id[-4:]}"
 
-    registration = await whatsapp_registration(whatsapp_id=user_id, first_name=first_name,
-        username=username, phone_number=user_phone, restaurant_id=restaurant_id)
-
-    if not registration:
-        raise Exception("Failed to register User")  # Direct raise - ARQ retries automatically!
- 
     registration = await whatsapp_registration(
-        whatsapp_id=user_id,
+        whatsapp_id=user_id, 
         first_name=first_name,
-        username=username,
-        phone_number=user_phone,
-        restaurant_id=restaurant_id,
+        username=username, 
+        phone_number=user_phone, 
+        restaurant_id=restaurant_id
     )
 
     if not registration or not registration.get("ok"):
         if registration and not registration.get("recoverable"):
-            
-            # Permanent failure — don't retry, notify user
-            logger.error(
-                "Registration failed permanently: %s",
-                registration.get("error"),
-            )
-
-            await msg.reply_text(
-                f"❌ Network error, please Try again."
-            )
+            logger.error("Registration failed permanently: %s", registration.get("error"))
+            await msg.reply_text("❌ Network error, please try again.")
             return
 
-        # Recoverable — raise to trigger ARQ retry
-        raise Exception(
-            f"Registration temporarily failed: "
-            f"{registration.get('error') if registration else 'Unknown error'}"
-        )
+        raise Exception(f"Registration temporarily failed: {registration.get('error') if registration else 'Unknown error'}")
 
-
-
-    # Handle incoming WhatsApp join payload
+    # =========================
+    # 🔗 HANDLE JOIN PAYLOAD
+    # =========================
     if msg.text and msg.text.startswith("join_"):
         session_token = msg.text[5:]
-
         join_result = await handle_join_session(msg, session_token)
 
         if not join_result.get("ok"):
             if join_result.get("recoverable"):
-                # Allow your task queue to retry the operation.
-                raise Exception(
-                    f"Join failed: {join_result.get('error')}"
-                )
+                raise Exception(f"Join failed: {join_result.get('error')}")
 
-            logger.error(
-                "Join failed permanently: %s",
-                join_result.get("error"),
-            )
-
+            logger.error("Join failed permanently: %s", join_result.get("error"))
             await msg.reply_text(
                 "😔 We couldn't connect you to the table.\n\n"
                 "The link may have expired, or the table is no longer active.\n\n"
-                "👉 Please ask the host to share a fresh link, "
-                "or scan the QR code again."
+                "👉 Please ask the host to share a fresh link, or scan the QR code again."
             )
             return
 
-        # Store the token only after a successful join request.
         await redis_client.set(
             f"user_session_token:{restaurant_id}:{user_id}",
             session_token,
             ex=86400,
         )
     
-    # --- BUSINESS-SPECIFIC BUTTONS ---
-
     # =========================
-    # 🧩 WhatsApp Interactive Buttons (CORRECT FORMAT)
+    # 🧩 BUSINESS-SPECIFIC BUTTONS
     # =========================
-        
-    buttons=None
+    buttons = None
     if business_type == "restaurant":
-
-        service_mode = (restaurant_data.get("service_mode") or "").lower()
-
         if service_mode == "delivery":
             buttons = [
                 Button(title="🍽 Order Food", callback_data="order_food"),
                 Button(title="📦 Track Order", callback_data="track_order"),
                 Button(title="📞 Contact Staff", callback_data="contact_staff"),
             ]
-
         elif service_mode in ["dine_in", "both"]:
             buttons = [
                 Button(title="🍽 Order Food", callback_data="order_food"),
                 Button(title="📦 Track Order", callback_data="track_order"),
-                # Button(title="📞 Contact Staff", callback_data="contact_staff"),
                 Button(title="🛍️✅💳 Checkout/Pay", callback_data="checkout"),
             ]
 
     elif business_type == "vendor":
-
         if vendor_type == "goods":
             buttons = [
                 Button(title="🛍️ Browse Products", callback_data="browse_products"),
                 Button(title="📦 Track Order", callback_data="track_order"),
                 Button(title="📞 Contact Staff", callback_data="contact_staff"),
             ]
-
         elif vendor_type == "cooked_food":
             buttons = [
                 Button(title="🍽 Order Food", callback_data="order_food"),
                 Button(title="📦 Track Order", callback_data="track_order"),
                 Button(title="📞 Contact Staff", callback_data="contact_staff"),
             ]
-
         else:
             buttons = [
                 Button(title="🛍️ Browse Products", callback_data="browse_products"),
                 Button(title="📦 Track Order", callback_data="track_order"),
                 Button(title="📞 Contact Staff", callback_data="contact_staff"),
             ]
-
     else:
         buttons = [
             Button(title="🍽 Order Food", callback_data="order_food"),
@@ -256,7 +215,9 @@ async def start_handler(client: WhatsApp, msg: Message):
             Button(title="📞 Contact Staff", callback_data="contact_staff"),
         ]
 
-    # --- BEAUTIFUL WELCOME MESSAGES ---
+    # =========================
+    # 🎨 BEAUTIFUL WELCOME MESSAGES
+    # =========================
     messages = {
         "restaurant": {
             "icon": "🍽️",
@@ -275,17 +236,13 @@ async def start_handler(client: WhatsApp, msg: Message):
         }
     }
 
-    # Select the right message template
-    message_template=None
-
+    message_template = messages["restaurant"] # default
     if business_type == "restaurant":
         message_template = messages["restaurant"]
     elif business_type == "vendor" and vendor_type == "goods":
         message_template = messages["vendor_goods"]
     elif business_type == "vendor" and vendor_type == "cooked_food":
         message_template = messages["vendor_cooked_food"]
-    else:
-        message_template = messages["restaurant"]
 
     welcome_text = (
         f"*{message_template['icon']} Welcome to {restaurant_name}, _{first_name}_!* \n\n"
@@ -298,15 +255,61 @@ async def start_handler(client: WhatsApp, msg: Message):
     )
 
     # =========================
-    # 📤 SEND MESSAGE + BUTTONS
+    # 📸 1. SEND IMAGE WITH CAPTION
     # =========================
-    # ✅ SEND MESSAGE WITH BUTTONS (NO RAW GRAPH PAYLOADS)
-    await client.send_message(
-        to=user_id,
-        text=welcome_text,
-        buttons=buttons
-    )
+    if image:
+        try:
+            base_url = NGROK_DJANGO.rstrip('/')
+            image_path = image.lstrip('/')
+            image_url = f"{base_url}/{image_path}"
 
+            import httpx
+            logger.info(f"Downloading image: {image_url}")
+            
+            # 1. Download the image using httpx with the ngrok bypass header
+            async with httpx.AsyncClient() as http_client:
+                img_response = await http_client.get(
+                    image_url, 
+                    headers={"ngrok-skip-browser-warning": "true"},
+                    timeout=10.0
+                )
+                img_response.raise_for_status()
+                image_bytes = img_response.content
+
+            # 2. Send the bytes using the PyWa client
+            await client.send_image(
+                to=user_id,
+                image=image_bytes,
+                caption=welcome_text 
+            )
+        except Exception as e:
+            logger.error(f"Failed to send WhatsApp image: {e}")
+            # ✅ Fallback: Send text with buttons if image fails
+            await client.send_message(
+                to=user_id, 
+                text=welcome_text, 
+                buttons=buttons
+            )
+            return
+    else:
+        # ✅ If no image exists, send the text with buttons
+        await client.send_message(
+            to=user_id, 
+            text=welcome_text, 
+            buttons=buttons
+        )
+        return 
+
+    # =========================
+    # 🔘 2. SEND BUTTONS (Only if image was sent successfully)
+    # =========================
+    # Since the welcome text is already sent, we send a tiny prompt with the buttons
+    if image:
+        await client.send_message(
+            to=user_id,
+            text="👇 *Select an option:*",
+            buttons=buttons
+        )
 
 
 # ============================================

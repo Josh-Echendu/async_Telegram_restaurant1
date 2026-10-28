@@ -227,7 +227,7 @@ class HandlePOSAPIView(APIView):
         restaurant = get_object_or_404(Restaurant, rid=restaurant_id)
 
         membership_exists = RestaurantMembership.objects.filter(
-            user=user,
+            customer_user=user,
             restaurant=restaurant,
         ).exists()
 

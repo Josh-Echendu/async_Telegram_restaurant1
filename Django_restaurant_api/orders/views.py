@@ -808,7 +808,7 @@ class OrderBatchListCreateAPIView(APIView):
             print("whatsapp user: ", user)
 
         membership_exists = RestaurantMembership.objects.filter(
-            user=user,
+            customer_user=user,
             restaurant=restaurant
         ).exists()
 

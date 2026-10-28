@@ -80,6 +80,7 @@ def get_restaurant_internal(request, platform, rid=None):
         "rid": restaurant.rid,
         "bot_token": restaurant.get_bot_token(),  # ✅ REQUIRED
         "bot_name": restaurant.name,
+        "image": restaurant.image.url if restaurant.image else None,
         "webhook_secret_token": str(restaurant.webhook_secret_token),
         "is_bot_active": restaurant.is_bot_active,
         "is_accepting_orders": restaurant.is_accepting_orders,

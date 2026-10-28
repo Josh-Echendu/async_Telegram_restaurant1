@@ -37,7 +37,8 @@
             <!-- ==================== MAIN COLUMN ==================== -->
             <div class="lg:col-span-2 space-y-6">
                 
-                <!-- Basic Info Card -->
+                <!-- ✅ OWNER ONLY: Basic Info Card -->
+                {% if request.user.memberships.first.role == 'owner' %}
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6">
                     <h3 class="text-base sm:text-lg font-bold text-gray-900 mb-5">Basic Information</h3>
                     
@@ -81,32 +82,43 @@
                                        class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-500 cursor-not-allowed">
                             </div>
                         </div>
-
-                        <!-- In Stock Toggle -->
-                        <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-1.5">Stock Status</label>
-                            {{ form.in_stock }}
-                            {% if form.in_stock.errors %}
-                                <p class="text-xs text-red-500 mt-1">{{ form.in_stock.errors.0 }}</p>
-                            {% endif %}
-                        </div>
                     </div>
                 </div>
+                {% endif %}
+
+                <!-- ✅ EVERYONE: Stock Status Card -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6">
+                    <h3 class="text-base sm:text-lg font-bold text-gray-900 mb-5">Inventory Control</h3>
+                    
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">Stock Status</label>
+                        <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                            {{ form.in_stock }}
+                            <span class="text-sm text-gray-700">Mark this product as In Stock</span>
+                        </div>
+                        {% if form.in_stock.errors %}
+                            <p class="text-xs text-red-500 mt-1">{{ form.in_stock.errors.0 }}</p>
+                        {% endif %}
+                        <p class="text-xs text-gray-400 mt-2">Toggle this off if the kitchen runs out of this item.</p>
+                    </div>
+                </div>
+
             </div>
 
             <!-- ==================== SIDEBAR ==================== -->
             <div class="space-y-6">
                 
-                <!-- Media Card -->
+                <!-- ✅ OWNER ONLY: Media Card -->
+                {% if request.user.memberships.first.role == 'owner' %}
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6">
                     <h3 class="text-base sm:text-lg font-bold text-gray-900 mb-4">Product Image</h3>
                     
                     <div class="space-y-4">
                         <!-- Image Preview -->
                         <div id="image-preview-container" class="w-full aspect-square bg-gray-50 rounded-xl flex items-center justify-center border-2 border-dashed border-gray-200 overflow-hidden">
-                            <img id="image-preview" src="#" alt="Preview" 
-                                 class="hidden w-full h-full object-cover rounded-xl" />
-                            <div id="upload-placeholder" class="text-center p-6">
+                            <img id="image-preview" src="{{ product.image.url }}" alt="Preview" 
+                                 class="w-full h-full object-cover rounded-xl" />
+                            <div id="upload-placeholder" class="hidden text-center p-6">
                                 <i class="fas fa-cloud-upload-alt text-gray-300 text-4xl mb-2"></i>
                                 <p class="text-xs text-gray-400">No image selected</p>
                             </div>
@@ -123,8 +135,10 @@
                         <p class="text-[10px] text-gray-400">Recommended: 800x800px. Max 5MB.</p>
                     </div>
                 </div>
+                {% endif %}
 
-                <!-- Category Card -->
+                <!-- ✅ OWNER ONLY: Category Card -->
+                {% if request.user.memberships.first.role == 'owner' %}
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6">
                     <h3 class="text-base sm:text-lg font-bold text-gray-900 mb-4">Category</h3>
                     
@@ -138,11 +152,17 @@
                         {% endif %}
                     </div>
                 </div>
+                {% endif %}
 
-                <!-- Submit Button -->
+                <!-- ✅ EVERYONE: Submit Button -->
                 <button type="submit" 
                         class="w-full py-3 px-4 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 hover:shadow-indigo-300 active:scale-95">
-                    <i class="fas fa-plus text-xs mr-2"></i> Create Product
+                    <i class="fas fa-save text-xs mr-2"></i> 
+                    {% if request.user.memberships.first.role == 'owner' %}
+                        Save Changes
+                    {% else %}
+                        Update Stock Status
+                    {% endif %}
                 </button>
             </div>
         </div>
@@ -155,18 +175,20 @@
     const preview = document.getElementById('image-preview');
     const placeholder = document.getElementById('upload-placeholder');
 
-    fileInput.addEventListener('change', function() {
-        const file = this.files[0];
-        if (file) {
-            preview.src = URL.createObjectURL(file);
-            preview.classList.remove('hidden');
-            placeholder.classList.add('hidden');
-        } else {
-            preview.src = '#';
-            preview.classList.add('hidden');
-            placeholder.classList.remove('hidden');
-        }
-    });
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                preview.src = URL.createObjectURL(file);
+                preview.classList.remove('hidden');
+                placeholder.classList.add('hidden');
+            } else {
+                preview.src = '#';
+                preview.classList.add('hidden');
+                placeholder.classList.remove('hidden');
+            }
+        });
+    }
 </script>
 
 {% endblock %}

@@ -342,6 +342,8 @@ from django.urls import reverse_lazy
 
 AUTH_USER_MODEL = 'userAuths.AdminUser'
 LOGIN_REDIRECT_URL = reverse_lazy('useradmin:dashboard')
+LOGIN_URL = reverse_lazy('userauths:admin_login')
+LOGOUT_REDIRECT_URL = reverse_lazy('userauths:admin_login')
 
 REST_FRAMEWORK = {
     # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',

@@ -367,8 +367,6 @@ async def is_delivery_available_whatsapp(update: CallbackButton | Message):
     return True, "Delivery available"
 
 
-
-
 async def menu_keyboard_whatsapp(client: WhatsApp, clb: CallbackButton | Message):
     
     # Use .wa_id for consistency
